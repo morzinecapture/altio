@@ -6,9 +6,23 @@ import pytest
 import requests
 import os
 
-BASE_URL = os.environ.get('EXPO_PUBLIC_BACKEND_URL', '').rstrip('/')
+# Get BASE_URL from frontend .env or environment
+BASE_URL = os.environ.get('EXPO_PUBLIC_BACKEND_URL', '')
+if not BASE_URL:
+    # Try reading from frontend .env
+    try:
+        with open('/app/frontend/.env', 'r') as f:
+            for line in f:
+                if line.startswith('EXPO_PUBLIC_BACKEND_URL='):
+                    BASE_URL = line.split('=', 1)[1].strip()
+                    break
+    except:
+        pass
+
 if not BASE_URL:
     pytest.skip("EXPO_PUBLIC_BACKEND_URL not set", allow_module_level=True)
+
+BASE_URL = BASE_URL.rstrip('/')
 
 # Test tokens (created in MongoDB)
 OWNER_TOKEN = "test_session_owner_1772220077730"
