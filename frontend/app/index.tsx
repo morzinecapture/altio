@@ -4,9 +4,13 @@ import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as WebBrowser from 'expo-web-browser';
+import * as Linking from 'expo-linking';
 import { COLORS, FONTS, SPACING, RADIUS, SHADOWS } from '../src/theme';
 import { useAuth } from '../src/auth';
 import { exchangeSession } from '../src/api';
+
+const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -14,17 +18,39 @@ export default function LoginScreen() {
   const [processing, setProcessing] = useState(false);
   const hasProcessed = useRef(false);
 
-  // Handle OAuth callback - detect session_id in URL hash
+  // Handle OAuth callback - detect session_id in URL hash (web)
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const hash = window.location.hash;
-    if (hash && hash.includes('session_id=') && !hasProcessed.current) {
-      hasProcessed.current = true;
-      const sessionId = hash.split('session_id=')[1]?.split('&')[0];
-      if (sessionId) {
-        handleAuthCallback(sessionId);
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      const hash = window.location.hash;
+      if (hash && hash.includes('session_id=') && !hasProcessed.current) {
+        hasProcessed.current = true;
+        const sessionId = hash.split('session_id=')[1]?.split('&')[0];
+        if (sessionId) {
+          handleAuthCallback(sessionId);
+        }
       }
     }
+  }, []);
+
+  // Handle deep link for native (Expo Go)
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    const handleUrl = (event: { url: string }) => {
+      const url = event.url;
+      if (url && url.includes('session_id=')) {
+        const sessionId = url.split('session_id=')[1]?.split('&')[0];
+        if (sessionId && !hasProcessed.current) {
+          hasProcessed.current = true;
+          handleAuthCallback(sessionId);
+        }
+      }
+    };
+    const subscription = Linking.addEventListener('url', handleUrl);
+    // Check if app was opened with a URL
+    Linking.getInitialURL().then((url) => {
+      if (url) handleUrl({ url });
+    });
+    return () => subscription.remove();
   }, []);
 
   // Redirect authenticated users
@@ -46,8 +72,8 @@ export default function LoginScreen() {
       const result = await exchangeSession(sessionId);
       await AsyncStorage.setItem('session_token', result.session_token);
       setUser(result.user);
-      // Clean URL hash
-      if (typeof window !== 'undefined') {
+      // Clean URL hash on web
+      if (Platform.OS === 'web' && typeof window !== 'undefined') {
         window.history.replaceState(null, '', window.location.pathname);
       }
     } catch (error) {
@@ -56,11 +82,29 @@ export default function LoginScreen() {
     }
   };
 
-  const handleGoogleLogin = () => {
-    if (typeof window === 'undefined') return;
+  const handleGoogleLogin = async () => {
     // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
-    const redirectUrl = window.location.origin + '/';
-    window.location.href = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
+    if (Platform.OS === 'web') {
+      // Web: direct redirect
+      if (typeof window !== 'undefined') {
+        const redirectUrl = window.location.origin + '/';
+        window.location.href = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
+      }
+    } else {
+      // Native (Expo Go): use WebBrowser with redirect back to app
+      const redirectUrl = Linking.createURL('/');
+      const authUrl = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
+      const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUrl);
+      if (result.type === 'success' && result.url) {
+        const url = result.url;
+        if (url.includes('session_id=')) {
+          const sessionId = url.split('session_id=')[1]?.split('&')[0]?.split('#')[0];
+          if (sessionId) {
+            handleAuthCallback(sessionId);
+          }
+        }
+      }
+    }
   };
 
   if (loading || processing) {
