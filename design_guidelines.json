@@ -1,0 +1,137 @@
+{
+  "brand_identity": {
+    "name": "AlpineService",
+    "theme": "Alpine Utility",
+    "core_values": ["Reliability", "Precision", "Safety", "Efficiency"],
+    "metaphor": "Swiss Army Knife meets Luxury Chalet Concierge"
+  },
+  "palette": {
+    "mode": "light",
+    "background": {
+      "default": "#F4F6FA",
+      "paper": "#FFFFFF",
+      "subtle": "#F1F5F9"
+    },
+    "text": {
+      "primary": "#0F172A",
+      "secondary": "#64748B",
+      "tertiary": "#94A3B8",
+      "inverse": "#FFFFFF"
+    },
+    "brand": {
+      "primary": "#1E293B",
+      "secondary": "#334155",
+      "accent": "#0F172A"
+    },
+    "functional": {
+      "urgency": "#EF4444",
+      "urgency_soft": "#FEE2E2",
+      "success": "#10B981",
+      "success_soft": "#D1FAE5",
+      "warning": "#F59E0B",
+      "warning_soft": "#FEF3C7",
+      "info": "#3B82F6",
+      "info_soft": "#EFF6FF"
+    },
+    "border": {
+      "default": "#E2E8F0",
+      "active": "#CBD5E1"
+    }
+  },
+  "typography": {
+    "font_family": "Plus Jakarta Sans",
+    "scale": {
+      "h1": "text-3xl font-bold tracking-tight text-slate-900",
+      "h2": "text-2xl font-bold tracking-tight text-slate-900",
+      "h3": "text-xl font-semibold text-slate-900",
+      "body": "text-base font-normal text-slate-600 leading-relaxed",
+      "body_small": "text-sm font-medium text-slate-500",
+      "caption": "text-xs font-semibold uppercase tracking-wider text-slate-400"
+    }
+  },
+  "spacing_system": {
+    "base_unit": 4,
+    "container_padding": "p-6",
+    "section_gap": "gap-6",
+    "card_padding": "p-5",
+    "safe_area": "pt-12 pb-8"
+  },
+  "visual_enhancers": {
+    "radius": {
+      "card": "rounded-2xl",
+      "button": "rounded-xl",
+      "chip": "rounded-full"
+    },
+    "shadows": {
+      "card": "shadow-sm shadow-slate-200/50",
+      "float": "shadow-xl shadow-slate-300/50",
+      "urgency": "shadow-lg shadow-red-500/30"
+    },
+    "animations": {
+      "pulse": "animate-pulse",
+      "press": "active:scale-95 transition-transform"
+    }
+  },
+  "components": {
+    "MissionCard": {
+      "bg": "bg-white",
+      "border": "border border-slate-100",
+      "shadow": "shadow-sm",
+      "layout": "flex flex-col gap-3 p-4 rounded-2xl"
+    },
+    "StatusChip": {
+      "base": "px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide",
+      "variants": {
+        "completed": "bg-emerald-100 text-emerald-700",
+        "pending": "bg-amber-100 text-amber-700",
+        "urgent": "bg-red-100 text-red-700",
+        "progress": "bg-sky-100 text-sky-700"
+      }
+    },
+    "UrgencyButton": {
+      "style": "bg-red-500 text-white rounded-full p-4 absolute bottom-8 right-6 shadow-xl shadow-red-500/40 z-50 flex items-center justify-center",
+      "icon_size": 28
+    }
+  },
+  "layout_strategies": {
+    "dashboard_grid": "flex flex-row flex-wrap gap-4",
+    "mobile_container": "flex-1 bg-[#F4F6FA]"
+  },
+  "assets": {
+    "icons": {
+      "library": "Lucide React Native or Expo Vector Icons",
+      "style": "Stroke width 2px, rounded line caps"
+    },
+    "images": {
+      "hero_mountain": {
+        "url": "https://images.unsplash.com/photo-1644783001847-f295459617b6?crop=entropy&cs=srgb&fm=jpg&q=85",
+        "alt": "Snowy French Alps Peaks"
+      },
+      "chalet_interior": {
+        "url": "https://images.unsplash.com/photo-1772143535090-ede0b1d24a6c?crop=entropy&cs=srgb&fm=jpg&q=85",
+        "alt": "Modern Luxury Chalet Living Room"
+      },
+      "service_cleaning": {
+        "url": "https://images.unsplash.com/photo-1573014196346-87ac0314faf5?crop=entropy&cs=srgb&fm=jpg&q=85",
+        "alt": "Housekeeper preparing bed"
+      },
+      "service_repair": {
+        "url": "https://images.pexels.com/photos/8488058/pexels-photo-8488058.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "alt": "Plumber tools close up"
+      },
+      "modern_kitchen": {
+        "url": "https://images.unsplash.com/photo-1769739132671-ac41c439d51e?crop=entropy&cs=srgb&fm=jpg&q=85",
+        "alt": "Modern Clean Kitchen"
+      }
+    }
+  },
+  "instructions_to_main_agent": [
+    "CRITICAL: The environment is React Native Expo. Use 'nativewind' for styling if available. If not, YOU MUST install it or map these Tailwind classes to StyleSheet objects manually.",
+    "Do NOT implement Dark Mode. Hardcode 'light' scheme preference.",
+    "Use 'SafeAreaView' from 'react-native-safe-area-context' for all screen containers.",
+    "For the 'Urgency Button', implement a reanimated pulse effect (using react-native-reanimated) to make it 'breathe'.",
+    "Keep shadows subtle. Android elevation and iOS shadowOffset must be handled carefully. Use the 'elevation-2' or 'elevation-4' utility if nativewind is used.",
+    "Status Chips: Use clear, distinct background colors (emerald-100, amber-100, etc.) to ensure readability in bright outdoor conditions (snow glare context).",
+    "Font: If 'Plus Jakarta Sans' is not loadable via Google Fonts, fallback to system sans-serif (San Francisco/Roboto) but keep the weight hierarchy."
+  ]
+}
