@@ -873,6 +873,18 @@ async def accept_emergency(request_id: str, data: EmergencyAccept, user: dict = 
         f"Un technicien a accepté votre urgence. Frais de déplacement: {owner_total}€. Arrivée estimée: {data.eta_minutes} min."
     )
 
+    # Create in-app notification for owner
+    await db.notifications.insert_one({
+        "notification_id": f"notif_{uuid.uuid4().hex[:12]}",
+        "user_id": emergency["owner_id"],
+        "title": "Technicien trouvé !",
+        "body": f"Un technicien a accepté votre urgence. Frais: {owner_total}€. Arrivée: {data.eta_minutes} min.",
+        "type": "emergency_accepted",
+        "reference_id": request_id,
+        "read": False,
+        "created_at": datetime.now(timezone.utc)
+    })
+
     return {
         "message": "Emergency accepted",
         "displacement_amount": owner_total,  # What owner will pay
