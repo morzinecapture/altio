@@ -723,7 +723,20 @@ async def create_emergency(data: EmergencyCreate, user: dict = Depends(get_curre
         "service_type": data.service_type,
         "description": data.description,
         "urgency_level": data.urgency_level,
-        "status": "open",
+        "status": "open",  # open → provider_accepted → displacement_paid → quote_sent → quote_paid → in_progress → completed
+        "accepted_provider_id": None,
+        "displacement_fee": None,
+        "diagnostic_fee": None,
+        "displacement_total_owner": None,  # What owner pays (includes hidden commission)
+        "displacement_total_provider": None,  # What provider actually gets
+        "eta_minutes": None,
+        "quote_id": None,
+        "quote_total_owner": None,
+        "quote_total_provider": None,
+        "before_photos": [],
+        "after_photos": [],
+        "displacement_payment_id": None,
+        "quote_payment_id": None,
         "quotes_count": 0,
         "created_at": datetime.now(timezone.utc)
     }
@@ -743,7 +756,11 @@ async def list_emergency(user: dict = Depends(get_current_user)):
     if user.get("role") == "owner":
         query = {"owner_id": user["user_id"]}
     else:
-        query = {"status": "open"}
+        # Providers see open emergencies OR ones they accepted
+        query = {"$or": [
+            {"status": "open"},
+            {"accepted_provider_id": user["user_id"]}
+        ]}
 
     requests = await db.emergency_requests.find(query, {"_id": 0}).sort("created_at", -1).to_list(100)
     for r in requests:
@@ -751,8 +768,13 @@ async def list_emergency(user: dict = Depends(get_current_user)):
         if prop:
             r["property_name"] = prop.get("name", "")
             r["property_address"] = prop.get("address", "")
-        if isinstance(r.get("created_at"), datetime):
-            r["created_at"] = r["created_at"].isoformat()
+        # Add provider info if accepted
+        if r.get("accepted_provider_id"):
+            prov = await db.users.find_one({"user_id": r["accepted_provider_id"]}, {"_id": 0, "name": 1, "picture": 1})
+            if prov:
+                r["provider_name"] = prov.get("name", "")
+                r["provider_picture"] = prov.get("picture", "")
+        _serialize_dates(r)
     return requests
 
 
@@ -767,21 +789,345 @@ async def get_emergency(request_id: str, user: dict = Depends(get_current_user))
         emergency["property_name"] = prop.get("name", "")
         emergency["property_address"] = prop.get("address", "")
 
-    # Get quotes
+    # Provider info
+    if emergency.get("accepted_provider_id"):
+        prov = await db.users.find_one({"user_id": emergency["accepted_provider_id"]}, {"_id": 0, "name": 1, "picture": 1})
+        if prov:
+            emergency["provider_name"] = prov.get("name", "")
+            emergency["provider_picture"] = prov.get("picture", "")
+        prof = await db.provider_profiles.find_one({"provider_id": emergency["accepted_provider_id"]}, {"_id": 0, "rating": 1, "total_reviews": 1})
+        if prof:
+            emergency["provider_rating"] = prof.get("rating", 0)
+            emergency["provider_reviews"] = prof.get("total_reviews", 0)
+
+    # Get quotes for this emergency
     quotes = await db.quotes.find({"emergency_request_id": request_id}, {"_id": 0}).to_list(50)
     for q in quotes:
         provider = await db.users.find_one({"user_id": q.get("provider_id")}, {"_id": 0, "name": 1, "picture": 1})
         if provider:
             q["provider_name"] = provider.get("name", "")
             q["provider_picture"] = provider.get("picture", "")
-        if isinstance(q.get("created_at"), datetime):
-            q["created_at"] = q["created_at"].isoformat()
+        _serialize_dates(q)
     emergency["quotes"] = quotes
 
-    if isinstance(emergency.get("created_at"), datetime):
-        emergency["created_at"] = emergency["created_at"].isoformat()
+    # ROLE-BASED AMOUNT DISPLAY (commission is HIDDEN)
+    # Owner sees the total they pay; Provider sees the gross amount (same as what they quoted)
+    # Neither sees the commission breakdown
+    if user.get("role") == "owner":
+        # Owner sees what they pay
+        emergency["displacement_amount_display"] = emergency.get("displacement_total_owner")
+        emergency["quote_amount_display"] = emergency.get("quote_total_owner")
+    else:
+        # Provider sees what they think they're getting (the gross amount they quoted)
+        displacement = (emergency.get("displacement_fee") or 0) + (emergency.get("diagnostic_fee") or 0)
+        emergency["displacement_amount_display"] = displacement if displacement > 0 else None
+        # For quote, find the accepted quote's total
+        accepted_quote = next((q for q in quotes if q.get("status") == "accepted"), None)
+        emergency["quote_amount_display"] = accepted_quote.get("total_ttc") if accepted_quote else None
 
+    # NEVER expose commission fields to frontend
+    for field in ["displacement_total_owner", "displacement_total_provider", "quote_total_owner", "quote_total_provider"]:
+        emergency.pop(field, None)
+
+    _serialize_dates(emergency)
     return emergency
+
+
+@api_router.put("/emergency/{request_id}/accept")
+async def accept_emergency(request_id: str, data: EmergencyAccept, user: dict = Depends(get_current_user)):
+    """Provider accepts an emergency and sends displacement/diagnostic fees + ETA."""
+    if user.get("role") != "provider":
+        raise HTTPException(status_code=403, detail="Only providers can accept emergencies")
+
+    emergency = await db.emergency_requests.find_one({"request_id": request_id})
+    if not emergency:
+        raise HTTPException(status_code=404, detail="Emergency not found")
+    if emergency.get("status") != "open":
+        raise HTTPException(status_code=400, detail="Emergency already accepted")
+
+    # Calculate amounts with hidden commission
+    provider_total = data.displacement_fee + data.diagnostic_fee
+    owner_total = round(provider_total / (1 - EMERGENCY_COMMISSION_RATE), 2)  # Owner pays more, provider doesn't know
+    # Actually: owner_total = provider_total * (1 + commission_rate / (1 - commission_rate))
+    # Simpler: owner_total = provider_total / 0.80 (so platform keeps 20% of what owner pays)
+    platform_commission = round(owner_total - provider_total, 2)
+
+    await db.emergency_requests.update_one(
+        {"request_id": request_id},
+        {"$set": {
+            "status": "provider_accepted",
+            "accepted_provider_id": user["user_id"],
+            "displacement_fee": data.displacement_fee,
+            "diagnostic_fee": data.diagnostic_fee,
+            "displacement_total_owner": owner_total,
+            "displacement_total_provider": provider_total,
+            "eta_minutes": data.eta_minutes,
+        }}
+    )
+
+    # Notify owner
+    owner = await db.users.find_one({"user_id": emergency["owner_id"]}, {"_id": 0})
+    await _mock_email(
+        owner.get("email", ""),
+        "Technicien en route",
+        f"Un technicien a accepté votre urgence. Frais de déplacement: {owner_total}€. Arrivée estimée: {data.eta_minutes} min."
+    )
+
+    return {
+        "message": "Emergency accepted",
+        "displacement_amount": owner_total,  # What owner will pay
+        "eta_minutes": data.eta_minutes
+    }
+
+
+@api_router.post("/emergency/{request_id}/pay-displacement")
+async def pay_displacement(request_id: str, request: Request, user: dict = Depends(get_current_user)):
+    """Owner pays displacement/diagnostic fees via Stripe."""
+    if user.get("role") != "owner":
+        raise HTTPException(status_code=403, detail="Only owners can pay")
+
+    emergency = await db.emergency_requests.find_one({"request_id": request_id})
+    if not emergency:
+        raise HTTPException(status_code=404, detail="Emergency not found")
+    if emergency.get("status") != "provider_accepted":
+        raise HTTPException(status_code=400, detail="Wrong status for displacement payment")
+
+    body = await request.json()
+    origin_url = body.get("origin_url", "")
+
+    amount = emergency["displacement_total_owner"]
+
+    from emergentintegrations.payments.stripe.checkout import StripeCheckout, CheckoutSessionRequest
+    stripe_key = os.environ.get("STRIPE_API_KEY")
+    host_url = str(request.base_url)
+    webhook_url = f"{host_url}api/webhook/stripe"
+    stripe_checkout = StripeCheckout(api_key=stripe_key, webhook_url=webhook_url)
+
+    success_url = f"{origin_url}/emergency?id={request_id}&payment=displacement&session_id={{CHECKOUT_SESSION_ID}}"
+    cancel_url = f"{origin_url}/emergency?id={request_id}&payment=cancelled"
+
+    checkout_req = CheckoutSessionRequest(
+        amount=float(amount),
+        currency="eur",
+        success_url=success_url,
+        cancel_url=cancel_url,
+        metadata={
+            "type": "displacement",
+            "emergency_id": request_id,
+            "owner_id": user["user_id"],
+            "provider_id": emergency["accepted_provider_id"] or "",
+            "amount_provider": str(emergency["displacement_total_provider"]),
+            "platform_commission": str(round(amount - emergency["displacement_total_provider"], 2)),
+        }
+    )
+    session = await stripe_checkout.create_checkout_session(checkout_req)
+
+    # Create payment transaction
+    await db.payment_transactions.insert_one({
+        "payment_id": f"pay_{uuid.uuid4().hex[:12]}",
+        "session_id": session.session_id,
+        "emergency_request_id": request_id,
+        "payment_type": "displacement",
+        "amount_owner": amount,
+        "amount_provider": emergency["displacement_total_provider"],
+        "platform_commission": round(amount - emergency["displacement_total_provider"], 2),
+        "currency": "eur",
+        "user_id": user["user_id"],
+        "payment_status": "pending",
+        "created_at": datetime.now(timezone.utc)
+    })
+
+    await db.emergency_requests.update_one(
+        {"request_id": request_id},
+        {"$set": {"displacement_payment_session": session.session_id}}
+    )
+
+    return {"checkout_url": session.url, "session_id": session.session_id}
+
+
+@api_router.post("/emergency/{request_id}/pay-quote")
+async def pay_quote(request_id: str, request: Request, user: dict = Depends(get_current_user)):
+    """Owner pays repair quote via Stripe."""
+    if user.get("role") != "owner":
+        raise HTTPException(status_code=403, detail="Only owners can pay")
+
+    emergency = await db.emergency_requests.find_one({"request_id": request_id})
+    if not emergency:
+        raise HTTPException(status_code=404, detail="Emergency not found")
+    if emergency.get("status") != "quote_sent":
+        raise HTTPException(status_code=400, detail="Wrong status for quote payment")
+
+    body = await request.json()
+    origin_url = body.get("origin_url", "")
+
+    amount = emergency["quote_total_owner"]
+
+    from emergentintegrations.payments.stripe.checkout import StripeCheckout, CheckoutSessionRequest
+    stripe_key = os.environ.get("STRIPE_API_KEY")
+    host_url = str(request.base_url)
+    webhook_url = f"{host_url}api/webhook/stripe"
+    stripe_checkout = StripeCheckout(api_key=stripe_key, webhook_url=webhook_url)
+
+    success_url = f"{origin_url}/emergency?id={request_id}&payment=quote&session_id={{CHECKOUT_SESSION_ID}}"
+    cancel_url = f"{origin_url}/emergency?id={request_id}&payment=cancelled"
+
+    checkout_req = CheckoutSessionRequest(
+        amount=float(amount),
+        currency="eur",
+        success_url=success_url,
+        cancel_url=cancel_url,
+        metadata={
+            "type": "quote",
+            "emergency_id": request_id,
+            "owner_id": user["user_id"],
+            "provider_id": emergency["accepted_provider_id"] or "",
+            "amount_provider": str(emergency["quote_total_provider"]),
+            "platform_commission": str(round(amount - emergency["quote_total_provider"], 2)),
+        }
+    )
+    session = await stripe_checkout.create_checkout_session(checkout_req)
+
+    await db.payment_transactions.insert_one({
+        "payment_id": f"pay_{uuid.uuid4().hex[:12]}",
+        "session_id": session.session_id,
+        "emergency_request_id": request_id,
+        "payment_type": "quote",
+        "amount_owner": amount,
+        "amount_provider": emergency["quote_total_provider"],
+        "platform_commission": round(amount - emergency["quote_total_provider"], 2),
+        "currency": "eur",
+        "user_id": user["user_id"],
+        "payment_status": "pending",
+        "created_at": datetime.now(timezone.utc)
+    })
+
+    await db.emergency_requests.update_one(
+        {"request_id": request_id},
+        {"$set": {"quote_payment_session": session.session_id}}
+    )
+
+    return {"checkout_url": session.url, "session_id": session.session_id}
+
+
+@api_router.get("/payments/status/{session_id}")
+async def check_payment_status(session_id: str, user: dict = Depends(get_current_user)):
+    """Poll Stripe for payment status and update accordingly."""
+    from emergentintegrations.payments.stripe.checkout import StripeCheckout
+    stripe_key = os.environ.get("STRIPE_API_KEY")
+    stripe_checkout = StripeCheckout(api_key=stripe_key, webhook_url="")
+
+    status = await stripe_checkout.get_checkout_status(session_id)
+
+    # Find and update the transaction
+    tx = await db.payment_transactions.find_one({"session_id": session_id})
+    if not tx:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+
+    # Only update if not already processed
+    if tx.get("payment_status") != "paid" and status.payment_status == "paid":
+        await db.payment_transactions.update_one(
+            {"session_id": session_id},
+            {"$set": {"payment_status": "paid", "stripe_status": status.status}}
+        )
+
+        # Update emergency status based on payment type
+        emergency_id = tx.get("emergency_request_id")
+        if tx.get("payment_type") == "displacement":
+            await db.emergency_requests.update_one(
+                {"request_id": emergency_id},
+                {"$set": {"status": "displacement_paid"}}
+            )
+            logger.info(f"Displacement paid for emergency {emergency_id}")
+        elif tx.get("payment_type") == "quote":
+            await db.emergency_requests.update_one(
+                {"request_id": emergency_id},
+                {"$set": {"status": "quote_paid"}}
+            )
+            # Update provider earnings with their net amount
+            emergency = await db.emergency_requests.find_one({"request_id": emergency_id})
+            if emergency and emergency.get("accepted_provider_id"):
+                await db.provider_profiles.update_one(
+                    {"provider_id": emergency["accepted_provider_id"]},
+                    {"$inc": {"total_earnings": tx.get("amount_provider", 0)}}
+                )
+            logger.info(f"Quote paid for emergency {emergency_id}")
+    elif tx.get("payment_status") != status.payment_status:
+        await db.payment_transactions.update_one(
+            {"session_id": session_id},
+            {"$set": {"payment_status": status.payment_status, "stripe_status": status.status}}
+        )
+
+    return {
+        "payment_status": status.payment_status,
+        "status": status.status,
+        "amount_total": status.amount_total,
+    }
+
+
+@api_router.post("/webhook/stripe")
+async def stripe_webhook(request: Request):
+    """Handle Stripe webhook events."""
+    try:
+        from emergentintegrations.payments.stripe.checkout import StripeCheckout
+        stripe_key = os.environ.get("STRIPE_API_KEY")
+        host_url = str(request.base_url)
+        webhook_url = f"{host_url}api/webhook/stripe"
+        stripe_checkout = StripeCheckout(api_key=stripe_key, webhook_url=webhook_url)
+
+        body = await request.body()
+        sig = request.headers.get("Stripe-Signature", "")
+        webhook_response = await stripe_checkout.handle_webhook(body, sig)
+
+        if webhook_response and webhook_response.payment_status == "paid":
+            tx = await db.payment_transactions.find_one({"session_id": webhook_response.session_id})
+            if tx and tx.get("payment_status") != "paid":
+                await db.payment_transactions.update_one(
+                    {"session_id": webhook_response.session_id},
+                    {"$set": {"payment_status": "paid"}}
+                )
+                emergency_id = tx.get("emergency_request_id")
+                if tx.get("payment_type") == "displacement":
+                    await db.emergency_requests.update_one({"request_id": emergency_id}, {"$set": {"status": "displacement_paid"}})
+                elif tx.get("payment_type") == "quote":
+                    await db.emergency_requests.update_one({"request_id": emergency_id}, {"$set": {"status": "quote_paid"}})
+
+        return {"status": "ok"}
+    except Exception as e:
+        logger.error(f"Webhook error: {e}")
+        return {"status": "error"}
+
+
+@api_router.put("/emergency/{request_id}/complete")
+async def complete_emergency(request_id: str, data: EmergencyCompleteRequest, user: dict = Depends(get_current_user)):
+    """Provider completes emergency work with before/after photos."""
+    if user.get("role") != "provider":
+        raise HTTPException(status_code=403, detail="Only providers")
+
+    emergency = await db.emergency_requests.find_one({"request_id": request_id, "accepted_provider_id": user["user_id"]})
+    if not emergency:
+        raise HTTPException(status_code=404, detail="Emergency not found or not assigned to you")
+    if emergency.get("status") not in ("quote_paid", "in_progress"):
+        raise HTTPException(status_code=400, detail="Emergency must be in quote_paid or in_progress status")
+
+    await db.emergency_requests.update_one(
+        {"request_id": request_id},
+        {"$set": {
+            "status": "completed",
+            "before_photos": data.before_photos,
+            "after_photos": data.after_photos,
+            "completed_at": datetime.now(timezone.utc)
+        }}
+    )
+
+    # Notify owner
+    owner = await db.users.find_one({"user_id": emergency["owner_id"]}, {"_id": 0})
+    await _mock_email(
+        owner.get("email", ""),
+        "Intervention terminée",
+        f"L'intervention est terminée. Consultez les photos avant/après dans l'application."
+    )
+
+    return {"message": "Emergency completed"}
 
 
 # ============== QUOTES ENDPOINTS ==============
@@ -794,11 +1140,20 @@ async def create_quote(data: QuoteCreate, user: dict = Depends(get_current_user)
     emergency = await db.emergency_requests.find_one({"request_id": data.emergency_request_id})
     if not emergency:
         raise HTTPException(status_code=404, detail="Emergency request not found")
+    if emergency.get("status") != "displacement_paid":
+        raise HTTPException(status_code=400, detail="Displacement must be paid before sending repair quote")
+    if emergency.get("accepted_provider_id") != user["user_id"]:
+        raise HTTPException(status_code=403, detail="Only the accepted provider can send a quote")
 
     # Calculate totals
     total_ht = sum(line.get("quantity", 1) * line.get("unit_price", 0) for line in data.lines)
     tva_amount = total_ht * (data.tva_rate / 100)
     total_ttc = total_ht + tva_amount
+
+    # Calculate with hidden commission
+    provider_gets = round(total_ttc, 2)
+    owner_pays = round(provider_gets / (1 - EMERGENCY_COMMISSION_RATE), 2)
+    platform_commission = round(owner_pays - provider_gets, 2)
 
     quote_id = f"quote_{uuid.uuid4().hex[:12]}"
     quote = {
@@ -809,20 +1164,49 @@ async def create_quote(data: QuoteCreate, user: dict = Depends(get_current_user)
         "total_ht": round(total_ht, 2),
         "tva_rate": data.tva_rate,
         "tva_amount": round(tva_amount, 2),
-        "total_ttc": round(total_ttc, 2),
+        "total_ttc": round(total_ttc, 2),  # What provider quoted
+        "owner_pays": owner_pays,  # What owner actually pays (hidden from both)
+        "platform_commission": platform_commission,
         "status": "pending",
         "created_at": datetime.now(timezone.utc)
     }
     await db.quotes.insert_one(quote)
     quote.pop("_id", None)
-    if isinstance(quote.get("created_at"), datetime):
-        quote["created_at"] = quote["created_at"].isoformat()
+    _serialize_dates(quote)
 
+    # Update emergency with quote info
     await db.emergency_requests.update_one(
         {"request_id": data.emergency_request_id},
-        {"$inc": {"quotes_count": 1}}
+        {"$set": {
+            "status": "quote_sent",
+            "quote_id": quote_id,
+            "quote_total_owner": owner_pays,
+            "quote_total_provider": provider_gets,
+            "quotes_count": 1
+        }}
     )
 
+    # Remove internal fields before returning to provider
+    quote.pop("owner_pays", None)
+    quote.pop("platform_commission", None)
+
+    return quote
+
+
+@api_router.get("/quotes/{quote_id}")
+async def get_quote_detail(quote_id: str, user: dict = Depends(get_current_user)):
+    quote = await db.quotes.find_one({"quote_id": quote_id}, {"_id": 0})
+    if not quote:
+        raise HTTPException(status_code=404, detail="Quote not found")
+
+    # Hide internal fields
+    quote.pop("owner_pays", None)
+    quote.pop("platform_commission", None)
+
+    provider = await db.users.find_one({"user_id": quote.get("provider_id")}, {"_id": 0, "name": 1})
+    if provider:
+        quote["provider_name"] = provider.get("name", "")
+    _serialize_dates(quote)
     return quote
 
 
@@ -834,18 +1218,14 @@ async def handle_quote(quote_id: str, data: QuoteAction, user: dict = Depends(ge
 
     if data.action == "accept":
         await db.quotes.update_one({"quote_id": quote_id}, {"$set": {"status": "accepted"}})
-        # Reject all other quotes for this emergency
-        await db.quotes.update_many(
-            {"emergency_request_id": quote["emergency_request_id"], "quote_id": {"$ne": quote_id}},
-            {"$set": {"status": "rejected"}}
-        )
-        await db.emergency_requests.update_one(
-            {"request_id": quote["emergency_request_id"]},
-            {"$set": {"status": "accepted", "accepted_quote_id": quote_id, "assigned_provider_id": quote["provider_id"]}}
-        )
-        await _mock_email("provider@example.com", "Devis accepté", f"Votre devis de {quote.get('total_ttc')}€ a été accepté.")
+        await _mock_email("provider@example.com", "Devis accepté", f"Votre devis a été accepté.")
     elif data.action == "reject":
         await db.quotes.update_one({"quote_id": quote_id}, {"$set": {"status": "rejected"}})
+        # Reset emergency to allow new quote
+        await db.emergency_requests.update_one(
+            {"request_id": quote["emergency_request_id"]},
+            {"$set": {"status": "displacement_paid", "quote_id": None, "quote_total_owner": None, "quote_total_provider": None}}
+        )
 
     return {"message": f"Quote {data.action}ed"}
 
