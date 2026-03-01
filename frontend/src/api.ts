@@ -104,6 +104,21 @@ export const getEmergencies = () => apiCall('/emergency');
 
 export const getEmergency = (id: string) => apiCall(`/emergency/${id}`);
 
+export const acceptEmergency = (id: string, data: any) =>
+  apiCall(`/emergency/${id}/accept`, { method: 'PUT', body: JSON.stringify(data) });
+
+export const payDisplacement = (id: string, originUrl: string) =>
+  apiCall(`/emergency/${id}/pay-displacement`, { method: 'POST', body: JSON.stringify({ origin_url: originUrl }) });
+
+export const payQuote = (id: string, originUrl: string) =>
+  apiCall(`/emergency/${id}/pay-quote`, { method: 'POST', body: JSON.stringify({ origin_url: originUrl }) });
+
+export const completeEmergency = (id: string, data: any) =>
+  apiCall(`/emergency/${id}/complete`, { method: 'PUT', body: JSON.stringify(data) });
+
+export const checkPaymentStatus = (sessionId: string) =>
+  apiCall(`/payments/status/${sessionId}`);
+
 // Quotes
 export const createQuote = (data: any) =>
   apiCall('/quotes', { method: 'POST', body: JSON.stringify(data) });
