@@ -128,7 +128,7 @@ export default function ProviderDashboard() {
         {emergencies.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Urgences en cours</Text>
-            {emergencies.filter((e: any) => e.status === 'open').map((e: any) => (
+            {emergencies.filter((e: any) => e.status === 'open' || e.accepted_provider_id === user?.user_id).map((e: any) => (
               <TouchableOpacity key={e.request_id} style={[styles.missionCard, styles.emergencyCard]} onPress={() => router.push(`/emergency?id=${e.request_id}`)}>
                 <View style={styles.missionTop}>
                   <View style={[styles.chip, { backgroundColor: COLORS.urgencySoft }]}>
@@ -138,10 +138,16 @@ export default function ProviderDashboard() {
                 </View>
                 <Text style={styles.missionTitle}>{e.property_name}</Text>
                 <Text style={styles.missionDesc}>{e.description}</Text>
-                <TouchableOpacity style={[styles.applyBtn, { backgroundColor: COLORS.urgency }]} onPress={() => router.push(`/emergency?id=${e.request_id}`)}>
-                  <Ionicons name="document-text-outline" size={18} color={COLORS.textInverse} />
-                  <Text style={styles.applyText}>Envoyer un devis</Text>
-                </TouchableOpacity>
+                {e.status === 'open' ? (
+                  <TouchableOpacity style={[styles.applyBtn, { backgroundColor: COLORS.urgency }]} onPress={() => router.push(`/emergency?id=${e.request_id}`)}>
+                    <Ionicons name="checkmark-circle-outline" size={18} color={COLORS.textInverse} />
+                    <Text style={styles.applyText}>Accepter & envoyer les frais</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <View style={[styles.chip, { backgroundColor: COLORS.infoSoft, alignSelf: 'flex-start', marginTop: SPACING.sm }]}>
+                    <Text style={[styles.chipText, { color: COLORS.info }]}>{e.status === 'displacement_paid' ? 'Envoyer devis' : e.status}</Text>
+                  </View>
+                )}
               </TouchableOpacity>
             ))}
           </View>
