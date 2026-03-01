@@ -14,16 +14,23 @@ Marketplace de services opérationnels pour propriétaires de locations saisonni
 - **Dashboard**: Vue d'ensemble avec stats (logements, missions, urgences), missions à venir, actions rapides
 - **Gestion logements**: CRUD propriétés, sync iCal Airbnb/Booking, codes d'accès, tarifs fixes
 - **Missions**: Création manuelle, création automatique via iCal check-out, filtrage par statut, gestion des candidatures
-- **Module urgence**: Formulaire urgence avec types de service (plomberie, électricité, etc.), alertes techniciens
-- **Devis in-app**: Réception et validation de devis avec détail lignes, TVA auto
+- **Module urgence avec Stripe**: Flux complet urgence → acceptation prestataire → paiement déplacement (Stripe) → devis → paiement devis (Stripe) → travaux → terminé
+- **Commission cachée 20%**: Ni le propriétaire ni le prestataire ne voient la commission plateforme
 - **Bouton urgence flottant**: Toujours accessible depuis le dashboard
 
 ### Prestataire (Provider)
-- **Dashboard**: Missions disponibles géolocalisées, toggle disponibilité on/off
-- **Candidatures**: Postuler aux missions avec tarif proposé
-- **Mes missions**: Missions assignées avec codes d'accès, démarrer/terminer
-- **Devis urgence**: Formulaire devis avec lignes, calcul TVA auto
+- **Dashboard**: Missions disponibles géolocalisées, toggle disponibilité on/off, urgences en cours
+- **Acceptation urgence**: Frais déplacement + diagnostic + temps estimé d'arrivée
+- **Devis in-app**: Lignes détaillées, calcul TVA auto (uniquement après paiement déplacement)
+- **Complétion**: Marquer intervention terminée avec photos avant/après
 - **Revenus**: Stats (missions complétées, en cours, gains totaux)
+
+### Paiements Stripe
+- **Stripe Checkout** via emergentintegrations (clé test sk_test_emergent)
+- **Commission cachée**: Propriétaire paie montant_prestataire / 0.80 (20% commission)
+- **2 paiements par urgence**: Déplacement + Réparation
+- **Polling statut**: Vérification automatique du paiement après retour de Stripe
+- **Webhook**: Endpoint /api/webhook/stripe pour notifications Stripe
 
 ### Technique
 - **Backend**: FastAPI, MongoDB (12 collections), parsing iCal
