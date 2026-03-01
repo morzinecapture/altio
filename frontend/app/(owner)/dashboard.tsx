@@ -1,47 +1,76 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, RefreshControl } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, RefreshControl, Modal } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, FONTS, SPACING, RADIUS, SHADOWS, STATUS_COLORS, STATUS_LABELS, MISSION_TYPE_LABELS } from '../../src/theme';
+import { COLORS, FONTS, SPACING, RADIUS, SHADOWS, STATUS_COLORS, STATUS_LABELS, MISSION_TYPE_LABELS, SERVICE_TYPE_LABELS } from '../../src/theme';
 import { useAuth } from '../../src/auth';
-import { getOwnerDashboard } from '../../src/api';
+import { getOwnerDashboard, getEmergencies, getNotifications, markNotificationRead } from '../../src/api';
+
+const EMERGENCY_STATUS_LABELS: Record<string, string> = {
+  open: 'En attente de technicien',
+  provider_accepted: 'Paiement requis',
+  displacement_paid: 'Technicien en route',
+  quote_sent: 'Devis à valider',
+  quote_paid: 'Travaux en cours',
+  in_progress: 'Travaux en cours',
+  completed: 'Terminée',
+};
 
 export default function OwnerDashboard() {
   const router = useRouter();
   const { user } = useAuth();
   const [data, setData] = useState<any>(null);
+  const [emergencies, setEmergencies] = useState<any[]>([]);
+  const [notifications, setNotifications] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [showNotifs, setShowNotifs] = useState(false);
 
   const fetchData = async () => {
     try {
-      const result = await getOwnerDashboard();
-      setData(result);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
+      const [dashboard, emerg, notifs] = await Promise.all([
+        getOwnerDashboard(),
+        getEmergencies(),
+        getNotifications(),
+      ]);
+      setData(dashboard);
+      setEmergencies(emerg);
+      setNotifications(notifs);
+    } catch (e) { console.error(e); }
+    finally { setLoading(false); setRefreshing(false); }
   };
 
   useFocusEffect(useCallback(() => { fetchData(); }, []));
 
+  const unreadCount = notifications.filter(n => !n.read).length;
+
+  const handleNotifTap = async (notif: any) => {
+    if (!notif.read) {
+      try { await markNotificationRead(notif.notification_id); } catch {}
+    }
+    setShowNotifs(false);
+    // Navigate based on notification type
+    if (notif.type === 'emergency' || notif.type === 'emergency_accepted') {
+      router.push(`/emergency?id=${notif.reference_id}`);
+    } else if (notif.type === 'mission' || notif.type === 'mission_assigned') {
+      router.push(`/mission/${notif.reference_id}`);
+    }
+    fetchData();
+  };
+
   if (loading) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color={COLORS.brandPrimary} />
-      </View>
-    );
+    return <View style={styles.center}><ActivityIndicator size="large" color={COLORS.brandPrimary} /></View>;
   }
 
   const stats = [
     { label: 'Logements', value: data?.total_properties || 0, icon: 'home-outline', color: COLORS.brandPrimary },
     { label: 'En attente', value: data?.pending_missions || 0, icon: 'time-outline', color: COLORS.warning },
     { label: 'En cours', value: data?.active_missions || 0, icon: 'play-outline', color: COLORS.info },
-    { label: 'Urgences', value: data?.open_emergencies || 0, icon: 'warning-outline', color: COLORS.urgency },
+    { label: 'Urgences', value: emergencies.filter(e => e.status !== 'completed').length, icon: 'warning-outline', color: COLORS.urgency },
   ];
+
+  const activeEmergencies = emergencies.filter(e => e.status !== 'completed');
 
   return (
     <SafeAreaView style={styles.container} testID="owner-dashboard">
@@ -55,8 +84,13 @@ export default function OwnerDashboard() {
             <Text style={styles.greeting}>Bonjour,</Text>
             <Text style={styles.userName}>{user?.name?.split(' ')[0]} 👋</Text>
           </View>
-          <TouchableOpacity testID="notifications-btn" onPress={() => {}} style={styles.notifBtn}>
+          <TouchableOpacity testID="notifications-btn" onPress={() => setShowNotifs(true)} style={styles.notifBtn}>
             <Ionicons name="notifications-outline" size={24} color={COLORS.textPrimary} />
+            {unreadCount > 0 && (
+              <View style={styles.notifBadge}>
+                <Text style={styles.notifBadgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
+              </View>
+            )}
           </TouchableOpacity>
         </View>
 
@@ -72,6 +106,56 @@ export default function OwnerDashboard() {
             </View>
           ))}
         </View>
+
+        {/* Active Emergencies */}
+        {activeEmergencies.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={[styles.sectionTitle, { color: COLORS.urgency }]}>🚨 Urgences en cours</Text>
+            </View>
+            {activeEmergencies.map((e) => {
+              const needsAction = e.status === 'provider_accepted' || e.status === 'quote_sent';
+              return (
+                <TouchableOpacity
+                  key={e.request_id}
+                  testID={`emergency-card-${e.request_id}`}
+                  style={[styles.emergencyCard, needsAction && styles.emergencyCardAction]}
+                  onPress={() => router.push(`/emergency?id=${e.request_id}`)}
+                >
+                  <View style={styles.emergencyTop}>
+                    <View style={[styles.statusChip, { backgroundColor: needsAction ? COLORS.urgencySoft : COLORS.infoSoft }]}>
+                      <Text style={[styles.statusChipText, { color: needsAction ? COLORS.urgency : COLORS.info }]}>
+                        {EMERGENCY_STATUS_LABELS[e.status] || e.status}
+                      </Text>
+                    </View>
+                    <Text style={styles.emergencyType}>{SERVICE_TYPE_LABELS[e.service_type] || e.service_type}</Text>
+                  </View>
+                  <Text style={styles.emergencyProp}>{e.property_name}</Text>
+                  {e.provider_name && (
+                    <View style={styles.providerInfo}>
+                      <Ionicons name="person-outline" size={14} color={COLORS.textTertiary} />
+                      <Text style={styles.providerText}>{e.provider_name}</Text>
+                      {e.eta_minutes && e.status === 'provider_accepted' && (
+                        <>
+                          <Ionicons name="time-outline" size={14} color={COLORS.info} />
+                          <Text style={[styles.providerText, { color: COLORS.info }]}>{e.eta_minutes} min</Text>
+                        </>
+                      )}
+                    </View>
+                  )}
+                  {needsAction && (
+                    <View style={styles.actionNeeded}>
+                      <Ionicons name="arrow-forward-circle" size={18} color={COLORS.urgency} />
+                      <Text style={styles.actionText}>
+                        {e.status === 'provider_accepted' ? 'Payer les frais de déplacement' : 'Valider le devis'}
+                      </Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
 
         {/* Upcoming Missions */}
         <View style={styles.section}>
@@ -114,12 +198,6 @@ export default function OwnerDashboard() {
                     <>
                       <Ionicons name="cash-outline" size={14} color={COLORS.textTertiary} />
                       <Text style={styles.missionDate}>{m.fixed_rate}€</Text>
-                    </>
-                  )}
-                  {m.applications_count > 0 && (
-                    <>
-                      <Ionicons name="people-outline" size={14} color={COLORS.info} />
-                      <Text style={[styles.missionDate, { color: COLORS.info }]}>{m.applications_count} candidature(s)</Text>
                     </>
                   )}
                 </View>
@@ -165,6 +243,55 @@ export default function OwnerDashboard() {
       >
         <Ionicons name="warning" size={28} color={COLORS.textInverse} />
       </TouchableOpacity>
+
+      {/* Notifications Modal */}
+      <Modal visible={showNotifs} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Notifications</Text>
+              <TouchableOpacity onPress={() => setShowNotifs(false)}>
+                <Ionicons name="close" size={24} color={COLORS.textPrimary} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {notifications.length === 0 ? (
+                <View style={styles.emptyNotifs}>
+                  <Ionicons name="notifications-off-outline" size={40} color={COLORS.textTertiary} />
+                  <Text style={styles.emptyText}>Aucune notification</Text>
+                </View>
+              ) : (
+                notifications.map((n) => (
+                  <TouchableOpacity
+                    key={n.notification_id}
+                    testID={`notif-${n.notification_id}`}
+                    style={[styles.notifItem, !n.read && styles.notifItemUnread]}
+                    onPress={() => handleNotifTap(n)}
+                  >
+                    <View style={[styles.notifIcon, {
+                      backgroundColor: n.type?.includes('emergency') ? COLORS.urgencySoft : COLORS.infoSoft
+                    }]}>
+                      <Ionicons
+                        name={n.type?.includes('emergency') ? 'warning-outline' : 'briefcase-outline'}
+                        size={18}
+                        color={n.type?.includes('emergency') ? COLORS.urgency : COLORS.info}
+                      />
+                    </View>
+                    <View style={styles.notifContent}>
+                      <Text style={styles.notifTitle}>{n.title}</Text>
+                      <Text style={styles.notifBody} numberOfLines={2}>{n.body}</Text>
+                      <Text style={styles.notifTime}>
+                        {n.created_at ? new Date(n.created_at).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''}
+                      </Text>
+                    </View>
+                    {!n.read && <View style={styles.unreadDot} />}
+                  </TouchableOpacity>
+                ))
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -176,6 +303,8 @@ const styles = StyleSheet.create({
   greeting: { ...FONTS.bodySmall, color: COLORS.textSecondary },
   userName: { ...FONTS.h2, color: COLORS.textPrimary },
   notifBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: COLORS.paper, justifyContent: 'center', alignItems: 'center', ...SHADOWS.card },
+  notifBadge: { position: 'absolute', top: -2, right: -2, width: 20, height: 20, borderRadius: 10, backgroundColor: COLORS.urgency, justifyContent: 'center', alignItems: 'center' },
+  notifBadgeText: { ...FONTS.caption, color: COLORS.textInverse, fontSize: 10 },
   statsGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: SPACING.xl, gap: SPACING.md, marginTop: SPACING.md },
   statCard: { width: '47%', backgroundColor: COLORS.paper, padding: SPACING.lg, borderRadius: RADIUS.lg, ...SHADOWS.card },
   statIcon: { width: 36, height: 36, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginBottom: SPACING.sm },
@@ -185,6 +314,17 @@ const styles = StyleSheet.create({
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.md },
   sectionTitle: { ...FONTS.h3, color: COLORS.textPrimary },
   seeAll: { ...FONTS.bodySmall, color: COLORS.info },
+  // Emergency cards
+  emergencyCard: { backgroundColor: COLORS.paper, padding: SPACING.lg, borderRadius: RADIUS.lg, marginBottom: SPACING.md, borderLeftWidth: 3, borderLeftColor: COLORS.info, ...SHADOWS.card },
+  emergencyCardAction: { borderLeftColor: COLORS.urgency, backgroundColor: '#FFFBFB' },
+  emergencyTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.sm },
+  emergencyType: { ...FONTS.caption, color: COLORS.textTertiary },
+  emergencyProp: { ...FONTS.h3, color: COLORS.textPrimary, fontSize: 16 },
+  providerInfo: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginTop: SPACING.sm },
+  providerText: { ...FONTS.bodySmall, color: COLORS.textSecondary },
+  actionNeeded: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginTop: SPACING.md, paddingTop: SPACING.md, borderTopWidth: 1, borderTopColor: COLORS.border },
+  actionText: { ...FONTS.bodySmall, color: COLORS.urgency, fontWeight: '600' },
+  // Missions
   emptyCard: { backgroundColor: COLORS.paper, padding: SPACING.xxl, borderRadius: RADIUS.lg, alignItems: 'center', ...SHADOWS.card },
   emptyText: { ...FONTS.body, color: COLORS.textSecondary, marginTop: SPACING.md },
   emptySubtext: { ...FONTS.bodySmall, color: COLORS.textTertiary, textAlign: 'center', marginTop: SPACING.sm },
@@ -196,10 +336,12 @@ const styles = StyleSheet.create({
   missionProperty: { ...FONTS.h3, color: COLORS.textPrimary, marginBottom: SPACING.sm, fontSize: 16 },
   missionMeta: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
   missionDate: { ...FONTS.bodySmall, color: COLORS.textTertiary },
+  // Quick actions
   quickActions: { flexDirection: 'row', gap: SPACING.md, marginTop: SPACING.sm },
   quickAction: { flex: 1, backgroundColor: COLORS.paper, padding: SPACING.lg, borderRadius: RADIUS.lg, alignItems: 'center', ...SHADOWS.card },
   quickActionIcon: { width: 48, height: 48, borderRadius: 14, justifyContent: 'center', alignItems: 'center', marginBottom: SPACING.sm },
   quickActionText: { ...FONTS.bodySmall, color: COLORS.textPrimary, textAlign: 'center', fontSize: 12 },
+  // Emergency FAB
   emergencyFab: {
     position: 'absolute', bottom: 80, right: 20,
     width: 60, height: 60, borderRadius: 30,
@@ -207,4 +349,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center', alignItems: 'center',
     ...SHADOWS.urgency,
   },
+  // Notifications modal
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  modalContent: { backgroundColor: COLORS.paper, borderTopLeftRadius: RADIUS.xl, borderTopRightRadius: RADIUS.xl, padding: SPACING.xl, maxHeight: '80%' },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.lg },
+  modalTitle: { ...FONTS.h2, color: COLORS.textPrimary },
+  emptyNotifs: { alignItems: 'center', paddingVertical: SPACING.xxxl },
+  notifItem: { flexDirection: 'row', alignItems: 'center', padding: SPACING.md, borderRadius: RADIUS.lg, marginBottom: SPACING.sm, backgroundColor: COLORS.background },
+  notifItemUnread: { backgroundColor: COLORS.infoSoft },
+  notifIcon: { width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginRight: SPACING.md },
+  notifContent: { flex: 1 },
+  notifTitle: { ...FONTS.bodySmall, color: COLORS.textPrimary, fontWeight: '600' },
+  notifBody: { ...FONTS.bodySmall, color: COLORS.textSecondary, marginTop: 2, fontSize: 12 },
+  notifTime: { ...FONTS.caption, color: COLORS.textTertiary, marginTop: 4, fontSize: 9 },
+  unreadDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: COLORS.urgency, marginLeft: SPACING.sm },
 });
