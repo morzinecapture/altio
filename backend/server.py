@@ -775,6 +775,9 @@ async def list_emergency(user: dict = Depends(get_current_user)):
                 r["provider_name"] = prov.get("name", "")
                 r["provider_picture"] = prov.get("picture", "")
         _serialize_dates(r)
+        # Strip commission fields from list view
+        for field in ["displacement_total_owner", "displacement_total_provider", "quote_total_owner", "quote_total_provider"]:
+            r.pop(field, None)
     return requests
 
 
