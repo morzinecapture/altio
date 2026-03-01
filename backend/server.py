@@ -1364,6 +1364,12 @@ async def owner_dashboard(user: dict = Depends(get_current_user)):
 
 # ============== HELPERS ==============
 
+def _serialize_dates(doc: dict):
+    """Convert datetime fields to ISO strings in place."""
+    for key, value in list(doc.items()):
+        if isinstance(value, datetime):
+            doc[key] = value.isoformat()
+
 async def _assign_provider(mission_id: str, provider_id: str, rate: Optional[float] = None):
     """Assign a provider to a mission and send mock email with access info."""
     await db.missions.update_one(
