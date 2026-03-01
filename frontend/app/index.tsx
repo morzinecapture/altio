@@ -71,13 +71,14 @@ export default function LoginScreen() {
     try {
       const result = await exchangeSession(sessionId);
       await AsyncStorage.setItem('session_token', result.session_token);
-      setUser(result.user);
       // Clean URL hash on web
       if (Platform.OS === 'web' && typeof window !== 'undefined') {
         window.history.replaceState(null, '', window.location.pathname);
       }
+      setProcessing(false);
+      setUser(result.user);
     } catch (error) {
-      console.error('Auth error:', error);
+      console.error('Auth callback error:', error);
       setProcessing(false);
     }
   };
