@@ -392,6 +392,13 @@ class TestEdgeCases:
         client = pymongo.MongoClient(mongo_url)
         db = client['test_database']
         
+        # Get actual provider ID from token
+        me_response = api_client.get(
+            f"{BASE_URL}/api/auth/me",
+            headers={"Authorization": f"Bearer {PROVIDER_TOKEN}"}
+        )
+        provider_user_id = me_response.json()["user_id"]
+        
         # Create emergency with quote_sent status
         test_emergency_id = f"test_edge_{int(time.time())}"
         db.emergency_requests.insert_one({
@@ -401,7 +408,7 @@ class TestEdgeCases:
             "service_type": "plumbing",
             "description": "Test",
             "status": "quote_sent",  # Wrong status
-            "accepted_provider_id": "test-provider"
+            "accepted_provider_id": provider_user_id
         })
         
         payload = {"before_photos": [], "after_photos": []}
@@ -410,7 +417,7 @@ class TestEdgeCases:
             json=payload,
             headers={"Authorization": f"Bearer {PROVIDER_TOKEN}"}
         )
-        assert response.status_code == 400
+        assert response.status_code == 400, f"Expected 400, got {response.status_code}"
         print(f"✓ Complete blocked when quote not paid")
         
         # Cleanup
