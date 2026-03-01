@@ -81,6 +81,11 @@ class EmergencyCreate(BaseModel):
     description: str
     urgency_level: str = "high"  # high, critical
 
+class EmergencyAccept(BaseModel):
+    displacement_fee: float  # Provider's displacement fee
+    diagnostic_fee: float  # Provider's diagnostic fee
+    eta_minutes: int  # Estimated time of arrival in minutes
+
 class QuoteCreate(BaseModel):
     emergency_request_id: str
     lines: List[Dict[str, Any]]  # [{description, quantity, unit_price}]
@@ -94,6 +99,14 @@ class ProviderProfileUpdate(BaseModel):
     zone: Optional[str] = None
     bio: Optional[str] = None
     hourly_rate: Optional[float] = None
+
+class EmergencyCompleteRequest(BaseModel):
+    before_photos: List[str] = []  # base64 encoded photos
+    after_photos: List[str] = []
+
+# Platform commission rates (HIDDEN from users)
+EMERGENCY_COMMISSION_RATE = 0.20  # 20%
+CLEANING_COMMISSION_RATE = 0.10  # 10%
 
 # ============== AUTH HELPERS ==============
 
