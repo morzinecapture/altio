@@ -1124,7 +1124,7 @@ async def complete_emergency(request_id: str, data: EmergencyCompleteRequest, us
     await _mock_email(
         owner.get("email", ""),
         "Intervention terminée",
-        f"L'intervention est terminée. Consultez les photos avant/après dans l'application."
+        "L'intervention est terminée. Consultez les photos avant/après dans l'application."
     )
 
     return {"message": "Emergency completed"}
@@ -1218,7 +1218,7 @@ async def handle_quote(quote_id: str, data: QuoteAction, user: dict = Depends(ge
 
     if data.action == "accept":
         await db.quotes.update_one({"quote_id": quote_id}, {"$set": {"status": "accepted"}})
-        await _mock_email("provider@example.com", "Devis accepté", f"Votre devis a été accepté.")
+        await _mock_email("provider@example.com", "Devis accepté", "Votre devis a été accepté.")
     elif data.action == "reject":
         await db.quotes.update_one({"quote_id": quote_id}, {"$set": {"status": "rejected"}})
         # Reset emergency to allow new quote
