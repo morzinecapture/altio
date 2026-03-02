@@ -103,7 +103,7 @@ export default function MissionDetailScreen() {
         </View>
 
         {/* Access info for assigned provider */}
-        {isProvider && mission.assigned_provider_id === user?.user_id && mission.access_code && (
+        {isProvider && mission.assigned_provider_id === user?.id && mission.access_code && (
           <View style={[styles.card, styles.accessCard]}>
             <Text style={styles.sectionTitle}>Informations d'accès</Text>
             <View style={styles.accessRow}>
@@ -178,13 +178,13 @@ export default function MissionDetailScreen() {
             <Text style={styles.mainActionText}>Candidater</Text>
           </TouchableOpacity>
         )}
-        {isProvider && mission.status === 'assigned' && mission.assigned_provider_id === user?.user_id && (
+        {isProvider && mission.status === 'assigned' && mission.assigned_provider_id === user?.id && (
           <TouchableOpacity testID="start-btn" style={styles.mainAction} onPress={handleStart}>
             <Ionicons name="play" size={20} color={COLORS.textInverse} />
             <Text style={styles.mainActionText}>Démarrer la mission</Text>
           </TouchableOpacity>
         )}
-        {isProvider && mission.status === 'in_progress' && mission.assigned_provider_id === user?.user_id && (
+        {isProvider && mission.status === 'in_progress' && mission.assigned_provider_id === user?.id && (
           <TouchableOpacity testID="complete-btn" style={[styles.mainAction, { backgroundColor: COLORS.success }]} onPress={handleComplete}>
             <Ionicons name="checkmark-circle" size={20} color={COLORS.textInverse} />
             <Text style={styles.mainActionText}>Terminer la mission</Text>

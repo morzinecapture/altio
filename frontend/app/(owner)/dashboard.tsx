@@ -8,12 +8,18 @@ import { useAuth } from '../../src/auth';
 import { getOwnerDashboard, getEmergencies, getNotifications, markNotificationRead } from '../../src/api';
 
 const EMERGENCY_STATUS_LABELS: Record<string, string> = {
-  open: 'En attente de technicien',
-  provider_accepted: 'Paiement requis',
+  open: 'En attente de candidatures',
+  bids_open: 'En attente de candidatures',
+  provider_accepted: 'Technicien en route',
+  bid_accepted: 'Technicien en route',
   displacement_paid: 'Technicien en route',
+  on_site: 'Technicien sur place',
   quote_sent: 'Devis à valider',
+  quote_submitted: 'Devis à valider',
   quote_paid: 'Travaux en cours',
+  quote_accepted: 'Travaux en cours',
   in_progress: 'Travaux en cours',
+  quote_refused: 'Devis refusé',
   completed: 'Terminée',
 };
 
@@ -47,7 +53,7 @@ export default function OwnerDashboard() {
 
   const handleNotifTap = async (notif: any) => {
     if (!notif.read) {
-      try { await markNotificationRead(notif.notification_id); } catch {}
+      try { await markNotificationRead(notif.notification_id); } catch { }
     }
     setShowNotifs(false);
     // Navigate based on notification type
@@ -64,9 +70,9 @@ export default function OwnerDashboard() {
   }
 
   const stats = [
-    { label: 'Logements', value: data?.total_properties || 0, icon: 'home-outline', color: COLORS.brandPrimary },
-    { label: 'En attente', value: data?.pending_missions || 0, icon: 'time-outline', color: COLORS.warning },
-    { label: 'En cours', value: data?.active_missions || 0, icon: 'play-outline', color: COLORS.info },
+    { label: 'Logements', value: data?.total_properties ?? 0, icon: 'home-outline', color: COLORS.brandPrimary },
+    { label: 'En attente', value: data?.pending_missions ?? 0, icon: 'time-outline', color: COLORS.warning },
+    { label: 'En cours', value: data?.active_missions ?? 0, icon: 'play-outline', color: COLORS.info },
     { label: 'Urgences', value: emergencies.filter(e => e.status !== 'completed').length, icon: 'warning-outline', color: COLORS.urgency },
   ];
 
@@ -114,13 +120,13 @@ export default function OwnerDashboard() {
               <Text style={[styles.sectionTitle, { color: COLORS.urgency }]}>🚨 Urgences en cours</Text>
             </View>
             {activeEmergencies.map((e) => {
-              const needsAction = e.status === 'provider_accepted' || e.status === 'quote_sent';
+              const needsAction = e.status === 'bids_open' || e.status === 'open' || e.status === 'quote_submitted' || e.status === 'quote_sent' || e.status === 'on_site';
               return (
                 <TouchableOpacity
-                  key={e.request_id}
-                  testID={`emergency-card-${e.request_id}`}
+                  key={e.id}
+                  testID={`emergency-card-${e.id}`}
                   style={[styles.emergencyCard, needsAction && styles.emergencyCardAction]}
-                  onPress={() => router.push(`/emergency?id=${e.request_id}`)}
+                  onPress={() => router.push(`/emergency?id=${e.id}`)}
                 >
                   <View style={styles.emergencyTop}>
                     <View style={[styles.statusChip, { backgroundColor: needsAction ? COLORS.urgencySoft : COLORS.infoSoft }]}>
@@ -147,7 +153,10 @@ export default function OwnerDashboard() {
                     <View style={styles.actionNeeded}>
                       <Ionicons name="arrow-forward-circle" size={18} color={COLORS.urgency} />
                       <Text style={styles.actionText}>
-                        {e.status === 'provider_accepted' ? 'Payer les frais de déplacement' : 'Valider le devis'}
+                        {(e.status === 'bids_open' || e.status === 'open') ? 'Choisir un prestataire'
+                          : (e.status === 'quote_submitted' || e.status === 'quote_sent') ? 'Valider le devis'
+                          : e.status === 'on_site' ? 'Technicien sur place — devis en cours'
+                          : 'Action requise'}
                       </Text>
                     </View>
                   )}

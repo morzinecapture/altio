@@ -20,9 +20,9 @@ export default function RoleSelectScreen() {
       const updatedUser = await setRole(selected);
       setUser(updatedUser);
       if (selected === 'owner') {
-        router.replace('/(owner)/dashboard');
+        router.replace('/onboarding-owner');
       } else {
-        router.replace('/(provider)/dashboard');
+        router.replace('/onboarding-provider');
       }
     } catch (error) {
       console.error('Role set error:', error);

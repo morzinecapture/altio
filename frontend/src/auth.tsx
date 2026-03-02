@@ -1,29 +1,29 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getMe, logout as apiLogout } from './api';
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import { supabase } from './lib/supabase';
+import { Session } from '@supabase/supabase-js';
 
-interface User {
-  user_id: string;
+export interface User {
+  id: string;
   email: string;
   name: string;
   picture?: string;
   role?: string;
+  onboarding_completed?: boolean;
+  owner_type?: string;
 }
 
 interface AuthContextType {
   user: User | null;
   loading: boolean;
   setUser: (user: User | null) => void;
-  checkAuth: () => Promise<void>;
   handleLogout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
-  setUser: () => {},
-  checkAuth: async () => {},
-  handleLogout: async () => {},
+  setUser: () => { },
+  handleLogout: async () => { },
 });
 
 export const useAuth = () => useContext(AuthContext);
@@ -32,46 +32,79 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const checkAuth = useCallback(async () => {
-    // CRITICAL: If returning from OAuth callback, skip the /me check.
-    // AuthCallback will exchange the session_id and establish the session first.
-    if (typeof window !== 'undefined' && window.location.hash?.includes('session_id=')) {
-      setLoading(false);
+  // Fetch full user profile from the public.users table
+  const fetchUserProfile = async (session: Session | null) => {
+    if (!session?.user) {
+      setUser(null);
       return;
     }
 
     try {
-      const token = await AsyncStorage.getItem('session_token');
-      if (!token) {
-        setUser(null);
-        setLoading(false);
-        return;
+      const { data: profile, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', session.user.id)
+        .maybeSingle();
+
+      if (error && error.code !== 'PGRST116') {
+        console.warn('Error fetching profile:', error);
       }
-      const userData = await getMe();
-      setUser(userData);
-    } catch {
-      setUser(null);
-      await AsyncStorage.removeItem('session_token');
-    } finally {
-      setLoading(false);
+
+      if (profile) {
+        setUser({
+          id: session.user.id,
+          email: session.user.email || '',
+          name: profile.name || '',
+          picture: profile.picture,
+          role: profile.role,
+          onboarding_completed: profile.onboarding_completed,
+          owner_type: profile.owner_type,
+        });
+      } else {
+        // Fallback if profile not created yet
+        setUser({
+          id: session.user.id,
+          email: session.user.email || '',
+          name: session.user.user_metadata?.full_name || '',
+        });
+      }
+    } catch (e) {
+      console.error('Exception in fetchUserProfile:', e);
+      // Ensure we don't get stuck loading if network fails
+      setUser({
+        id: session.user.id,
+        email: session.user.email || '',
+        name: session.user.user_metadata?.full_name || '',
+      });
     }
-  }, []);
+  };
 
   useEffect(() => {
-    checkAuth();
-  }, [checkAuth]);
+    // onAuthStateChange fires INITIAL_SESSION on mount — no need for a separate getSession() call
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (event: string, session: Session | null) => {
+      console.log('Auth event:', event);
+      if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        await fetchUserProfile(session);
+      } else if (event === 'SIGNED_OUT') {
+        setUser(null);
+      }
+      setLoading(false);
+    });
+
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
+  }, []);
 
   const handleLogout = async () => {
-    try {
-      await apiLogout();
-    } catch {}
-    await AsyncStorage.removeItem('session_token');
-    setUser(null);
+    await supabase.auth.signOut();
+    // setUser(null) is handled by onAuthStateChange SIGNED_OUT event
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, setUser, checkAuth, handleLogout }}>
+    <AuthContext.Provider value={{ user, loading, setUser, handleLogout }}>
       {children}
     </AuthContext.Provider>
   );
 };
+

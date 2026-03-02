@@ -1,110 +1,115 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Platform } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Platform, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
+import { supabase } from '../src/lib/supabase';
 import { COLORS, FONTS, SPACING, RADIUS, SHADOWS } from '../src/theme';
 import { useAuth } from '../src/auth';
-import { exchangeSession } from '../src/api';
-
-const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { user, loading, setUser, checkAuth } = useAuth();
+  const { user, loading } = useAuth();
   const [processing, setProcessing] = useState(false);
-  const hasProcessed = useRef(false);
 
-  // Handle OAuth callback - detect session_id in URL hash (web)
+  // Sur web uniquement : complète la session OAuth si on revient d'un redirect
   useEffect(() => {
-    if (Platform.OS === 'web' && typeof window !== 'undefined') {
-      const hash = window.location.hash;
-      if (hash && hash.includes('session_id=') && !hasProcessed.current) {
-        hasProcessed.current = true;
-        const sessionId = hash.split('session_id=')[1]?.split('&')[0];
-        if (sessionId) {
-          handleAuthCallback(sessionId);
-        }
-      }
+    if (Platform.OS === 'web') {
+      WebBrowser.maybeCompleteAuthSession();
     }
-  }, []);
-
-  // Handle deep link for native (Expo Go)
-  useEffect(() => {
-    if (Platform.OS === 'web') return;
-    const handleUrl = (event: { url: string }) => {
-      const url = event.url;
-      if (url && url.includes('session_id=')) {
-        const sessionId = url.split('session_id=')[1]?.split('&')[0];
-        if (sessionId && !hasProcessed.current) {
-          hasProcessed.current = true;
-          handleAuthCallback(sessionId);
-        }
-      }
-    };
-    const subscription = Linking.addEventListener('url', handleUrl);
-    // Check if app was opened with a URL
-    Linking.getInitialURL().then((url) => {
-      if (url) handleUrl({ url });
-    });
-    return () => subscription.remove();
   }, []);
 
   // Redirect authenticated users
   useEffect(() => {
     if (!loading && user && !processing) {
-      if (!user.role) {
-        router.replace('/role-select');
-      } else if (user.role === 'owner') {
-        router.replace('/(owner)/dashboard');
-      } else {
-        router.replace('/(provider)/dashboard');
-      }
+      setTimeout(() => {
+        if (!user.role) {
+          router.replace('/role-select');
+        } else if (!user.onboarding_completed) {
+          router.replace(user.role === 'owner' ? '/onboarding-owner' : '/onboarding-provider');
+        } else if (user.role === 'owner') {
+          router.replace('/(owner)/dashboard');
+        } else {
+          router.replace('/(provider)/dashboard');
+        }
+      }, 100);
     }
   }, [user, loading, processing]);
 
-  const handleAuthCallback = async (sessionId: string) => {
+  const handleGoogleLogin = async () => {
     setProcessing(true);
     try {
-      const result = await exchangeSession(sessionId);
-      await AsyncStorage.setItem('session_token', result.session_token);
-      // Clean URL hash on web
-      if (Platform.OS === 'web' && typeof window !== 'undefined') {
-        window.history.replaceState(null, '', window.location.pathname);
+      if (Platform.OS === 'web') {
+        await supabase.auth.signInWithOAuth({
+          provider: 'google',
+          options: {
+            redirectTo: typeof window !== 'undefined' ? window.location.origin : '/',
+            queryParams: { prompt: 'select_account' },
+          },
+        });
+        return;
       }
-      setProcessing(false);
-      setUser(result.user);
-    } catch (error) {
-      console.error('Auth callback error:', error);
-      setProcessing(false);
-    }
-  };
 
-  const handleGoogleLogin = async () => {
-    // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
-    if (Platform.OS === 'web') {
-      // Web: direct redirect
-      if (typeof window !== 'undefined') {
-        const redirectUrl = window.location.origin + '/';
-        window.location.href = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
-      }
-    } else {
-      // Native (Expo Go): use WebBrowser with redirect back to app
-      const redirectUrl = Linking.createURL('/');
-      const authUrl = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
-      const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUrl);
-      if (result.type === 'success' && result.url) {
-        const url = result.url;
-        if (url.includes('session_id=')) {
-          const sessionId = url.split('session_id=')[1]?.split('&')[0]?.split('#')[0];
-          if (sessionId) {
-            handleAuthCallback(sessionId);
+      // We want to avoid routing directly to a non-existent 'auth/callback' screen logic
+      const redirectUrl = Linking.createURL('');
+      console.log('Redirect URL:', redirectUrl);
+
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: redirectUrl,
+          skipBrowserRedirect: true,
+          queryParams: { prompt: 'select_account' },
+        },
+      });
+
+      if (error) throw error;
+
+      if (data?.url) {
+        // We must use 'exp://...' as the base origin if using Expo Go Native since that's what Supabase accepts
+        const browserRes = await WebBrowser.openAuthSessionAsync(data.url, redirectUrl);
+
+        console.log('WebBrowser result:', browserRes.type);
+
+        if (browserRes.type === 'success' && browserRes.url) {
+          console.log('Returned URL for parsing:', browserRes.url);
+
+          let access_token = null;
+          let refresh_token = null;
+
+          // Strategy 1: standard expo-linking extract
+          const params = Linking.parse(browserRes.url);
+          if (params.queryParams?.access_token && params.queryParams?.refresh_token) {
+            access_token = params.queryParams.access_token as string;
+            refresh_token = params.queryParams.refresh_token as string;
+          }
+
+          // Strategy 2: manual hash block extract (common for implicit oauth flows)
+          if (!access_token && browserRes.url.includes('#')) {
+            const hashString = browserRes.url.split('#')[1];
+            // Fix edge case where hash might contain ? separator incorrectly
+            const cleanHash = hashString.includes('?') ? hashString.replace('?', '&') : hashString;
+            const hashMap = new URLSearchParams(cleanHash);
+            access_token = hashMap.get('access_token');
+            refresh_token = hashMap.get('refresh_token');
+          }
+
+          console.log('Tokens extracted:', { hasAccessToken: !!access_token, hasRefreshToken: !!refresh_token });
+
+          if (access_token && refresh_token) {
+            const { error: sessionErr } = await supabase.auth.setSession({ access_token, refresh_token });
+            if (sessionErr) console.error('Failed to set session:', sessionErr);
+          } else {
+            console.error('Could not find tokens in redirect URL');
           }
         }
       }
+    } catch (err: any) {
+      console.error('Google login error:', err);
+    } finally {
+      setProcessing(false);
     }
   };
 
@@ -159,7 +164,7 @@ export default function LoginScreen() {
         </TouchableOpacity>
 
         <Text style={styles.disclaimer}>
-          En continuant, vous acceptez nos conditions d'utilisation
+          En continuant, vous acceptez nos conditions d&apos;utilisation
         </Text>
       </View>
 

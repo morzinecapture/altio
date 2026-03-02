@@ -18,9 +18,13 @@ export default function ProviderDashboard() {
 
   const fetchData = async () => {
     try {
-      const [m, e, profile] = await Promise.all([getMissions('pending'), getEmergencies(), getProfile()]);
+      const [m, e, profile] = await Promise.all([getMissions('pending', undefined, true), getEmergencies(true), getProfile()]);
+      // Filter out missions the provider already applied to
       setMissions(m.filter((mi: any) => mi.status === 'pending'));
-      setEmergencies(e);
+      // Show open emergencies + ones assigned to me
+      setEmergencies(e.filter((em: any) =>
+        em.status === 'open' || em.status === 'bids_open' || em.accepted_provider_id === user?.id
+      ));
       setAvailable(profile?.provider_profile?.available || false);
     } catch (e) { console.error(e); }
     finally { setLoading(false); setRefreshing(false); }
@@ -128,28 +132,42 @@ export default function ProviderDashboard() {
         {emergencies.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Urgences en cours</Text>
-            {emergencies.filter((e: any) => e.status === 'open' || e.accepted_provider_id === user?.user_id).map((e: any) => (
-              <TouchableOpacity key={e.request_id} style={[styles.missionCard, styles.emergencyCard]} onPress={() => router.push(`/emergency?id=${e.request_id}`)}>
-                <View style={styles.missionTop}>
-                  <View style={[styles.chip, { backgroundColor: COLORS.urgencySoft }]}>
-                    <Text style={[styles.chipText, { color: COLORS.urgency }]}>URGENCE</Text>
+            {emergencies.filter((e: any) =>
+              e.status === 'open' || e.status === 'bids_open' || e.accepted_provider_id === user?.id
+            ).map((e: any) => {
+              const isOpen = e.status === 'open' || e.status === 'bids_open';
+              const isMine = e.accepted_provider_id === user?.id;
+              const statusLabel: Record<string, string> = {
+                on_site: 'Sur place — saisir le devis',
+                quote_submitted: 'Devis envoyé — en attente',
+                quote_accepted: 'Devis accepté — travaux à faire',
+                bid_accepted: 'Sélectionné — en route',
+                provider_accepted: 'Sélectionné — en route',
+              };
+              return (
+                <TouchableOpacity key={e.id} style={[styles.missionCard, styles.emergencyCard]} onPress={() => router.push(`/emergency?id=${e.id}`)}>
+                  <View style={styles.missionTop}>
+                    <View style={[styles.chip, { backgroundColor: COLORS.urgencySoft }]}>
+                      <Text style={[styles.chipText, { color: COLORS.urgency }]}>URGENCE</Text>
+                    </View>
+                    <Text style={styles.modeText}>{e.service_type}</Text>
                   </View>
-                  <Text style={styles.modeText}>{e.service_type}</Text>
-                </View>
-                <Text style={styles.missionTitle}>{e.property_name}</Text>
-                <Text style={styles.missionDesc}>{e.description}</Text>
-                {e.status === 'open' ? (
-                  <TouchableOpacity style={[styles.applyBtn, { backgroundColor: COLORS.urgency }]} onPress={() => router.push(`/emergency?id=${e.request_id}`)}>
-                    <Ionicons name="checkmark-circle-outline" size={18} color={COLORS.textInverse} />
-                    <Text style={styles.applyText}>Accepter & envoyer les frais</Text>
-                  </TouchableOpacity>
-                ) : (
-                  <View style={[styles.chip, { backgroundColor: COLORS.infoSoft, alignSelf: 'flex-start', marginTop: SPACING.sm }]}>
-                    <Text style={[styles.chipText, { color: COLORS.info }]}>{e.status === 'displacement_paid' ? 'Envoyer devis' : e.status}</Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-            ))}
+                  <Text style={styles.missionTitle}>{e.property_name}</Text>
+                  {e.property_address ? <Text style={styles.missionAddr}>{e.property_address}</Text> : null}
+                  <Text style={styles.missionDesc} numberOfLines={2}>{e.description}</Text>
+                  {isOpen ? (
+                    <TouchableOpacity style={[styles.applyBtn, { backgroundColor: COLORS.urgency }]} onPress={() => router.push(`/emergency?id=${e.id}`)}>
+                      <Ionicons name="hand-left-outline" size={18} color={COLORS.textInverse} />
+                      <Text style={styles.applyText}>Candidater à l'urgence</Text>
+                    </TouchableOpacity>
+                  ) : isMine ? (
+                    <View style={[styles.chip, { backgroundColor: COLORS.infoSoft, alignSelf: 'flex-start', marginTop: SPACING.sm }]}>
+                      <Text style={[styles.chipText, { color: COLORS.info }]}>{statusLabel[e.status] || e.status}</Text>
+                    </View>
+                  ) : null}
+                </TouchableOpacity>
+              );
+            })}
           </View>
         )}
 
