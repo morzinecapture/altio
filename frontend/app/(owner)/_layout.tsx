@@ -7,7 +7,7 @@ export default function OwnerTabLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: COLORS.brandPrimary,
+        tabBarActiveTintColor: COLORS.info,
         tabBarInactiveTintColor: COLORS.textTertiary,
         tabBarStyle: {
           backgroundColor: COLORS.paper,
@@ -27,7 +27,8 @@ export default function OwnerTabLayout() {
         name="dashboard"
         options={{
           title: 'Accueil',
-          tabBarIcon: ({ color, size }) => <Ionicons name="grid-outline" size={size} color={color} />,
+          tabBarIcon: ({ color, size }) => <Ionicons name="home-outline" size={size} color={color} />,
+          tabBarStyle: { display: 'none' },
         }}
       />
       <Tabs.Screen

@@ -1,27 +1,58 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, RefreshControl, Modal } from 'react-native';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  ScrollView,
+  ActivityIndicator,
+  RefreshControl,
+  Modal,
+  TextInput,
+  Image,
+  Dimensions,
+} from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, FONTS, SPACING, RADIUS, SHADOWS, STATUS_COLORS, STATUS_LABELS, MISSION_TYPE_LABELS, SERVICE_TYPE_LABELS } from '../../src/theme';
+import { BlurView } from 'expo-blur';
+import { COLORS, FONTS, SPACING, RADIUS, SHADOWS } from '../../src/theme';
 import { useAuth } from '../../src/auth';
 import { getOwnerDashboard, getEmergencies, getNotifications, markNotificationRead } from '../../src/api';
 
-const EMERGENCY_STATUS_LABELS: Record<string, string> = {
-  open: 'En attente de technicien',
-  provider_accepted: 'Paiement requis',
-  displacement_paid: 'Technicien en route',
-  quote_sent: 'Devis à valider',
-  quote_paid: 'Travaux en cours',
-  in_progress: 'Travaux en cours',
-  completed: 'Terminée',
-};
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
+// Mock data for categories
+const CATEGORIES = [
+  { id: '1', name: 'Plumber', icon: 'construct-outline' as const },
+  { id: '2', name: 'Electrician', icon: 'flash-outline' as const },
+  { id: '3', name: 'Carpenter', icon: 'hammer-outline' as const },
+  { id: '4', name: 'Painter', icon: 'color-palette-outline' as const },
+  { id: '5', name: 'Mason', icon: 'cube-outline' as const },
+  { id: '6', name: 'Welder', icon: 'bonfire-outline' as const },
+  { id: '7', name: 'Roofer', icon: 'home-outline' as const },
+  { id: '8', name: 'More', icon: 'grid-outline' as const },
+];
+
+// Mock data for popular providers
+const POPULAR_PROVIDERS = [
+  {
+    id: '1',
+    name: 'Expert Plumbing',
+    category: 'Plumber',
+    categoryColor: '#FF6B6B',
+    price: '$45',
+    rating: 4.5,
+    reviews: 120,
+    avatar: 'https://images.unsplash.com/photo-1607990281513-2c110a25bd8c?w=100&h=100&fit=crop',
+    verified: true,
+  },
+];
 
 export default function OwnerDashboard() {
   const router = useRouter();
   const { user } = useAuth();
   const [data, setData] = useState<any>(null);
-  const [emergencies, setEmergencies] = useState<any[]>([]);
   const [notifications, setNotifications] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -29,16 +60,18 @@ export default function OwnerDashboard() {
 
   const fetchData = async () => {
     try {
-      const [dashboard, emerg, notifs] = await Promise.all([
+      const [dashboard, notifs] = await Promise.all([
         getOwnerDashboard(),
-        getEmergencies(),
         getNotifications(),
       ]);
       setData(dashboard);
-      setEmergencies(emerg);
       setNotifications(notifs);
-    } catch (e) { console.error(e); }
-    finally { setLoading(false); setRefreshing(false); }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
   };
 
   useFocusEffect(useCallback(() => { fetchData(); }, []));
@@ -50,7 +83,6 @@ export default function OwnerDashboard() {
       try { await markNotificationRead(notif.notification_id); } catch {}
     }
     setShowNotifs(false);
-    // Navigate based on notification type
     if (notif.type === 'emergency' || notif.type === 'emergency_accepted') {
       router.push(`/emergency?id=${notif.reference_id}`);
     } else if (notif.type === 'mission' || notif.type === 'mission_assigned') {
@@ -60,32 +92,41 @@ export default function OwnerDashboard() {
   };
 
   if (loading) {
-    return <View style={styles.center}><ActivityIndicator size="large" color={COLORS.brandPrimary} /></View>;
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color={COLORS.info} />
+      </View>
+    );
   }
 
-  const stats = [
-    { label: 'Logements', value: data?.total_properties || 0, icon: 'home-outline', color: COLORS.brandPrimary },
-    { label: 'En attente', value: data?.pending_missions || 0, icon: 'time-outline', color: COLORS.warning },
-    { label: 'En cours', value: data?.active_missions || 0, icon: 'play-outline', color: COLORS.info },
-    { label: 'Urgences', value: emergencies.filter(e => e.status !== 'completed').length, icon: 'warning-outline', color: COLORS.urgency },
-  ];
-
-  const activeEmergencies = emergencies.filter(e => e.status !== 'completed');
+  const userName = user?.name?.split(' ')[0] || 'Alex Carter';
 
   return (
     <SafeAreaView style={styles.container} testID="owner-dashboard">
       <ScrollView
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchData(); }} />}
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchData(); }} />
+        }
       >
         {/* Header */}
         <View style={styles.header}>
-          <View>
-            <Text style={styles.greeting}>Bonjour,</Text>
-            <Text style={styles.userName}>{user?.name?.split(' ')[0]} 👋</Text>
+          <View style={styles.headerLeft}>
+            <View style={styles.avatar}>
+              <Ionicons name="person" size={22} color={COLORS.textInverse} />
+            </View>
+            <View style={styles.headerText}>
+              <Text style={styles.greeting}>Hello</Text>
+              <Text style={styles.userName}>{userName}</Text>
+            </View>
           </View>
-          <TouchableOpacity testID="notifications-btn" onPress={() => setShowNotifs(true)} style={styles.notifBtn}>
-            <Ionicons name="notifications-outline" size={24} color={COLORS.textPrimary} />
+          <TouchableOpacity
+            testID="notifications-btn"
+            onPress={() => setShowNotifs(true)}
+            style={styles.notifBtn}
+          >
+            <Ionicons name="notifications-outline" size={22} color={COLORS.textPrimary} />
             {unreadCount > 0 && (
               <View style={styles.notifBadge}>
                 <Text style={styles.notifBadgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
@@ -94,155 +135,141 @@ export default function OwnerDashboard() {
           </TouchableOpacity>
         </View>
 
-        {/* Stats Grid */}
-        <View style={styles.statsGrid}>
-          {stats.map((stat, i) => (
-            <View key={i} style={styles.statCard}>
-              <View style={[styles.statIcon, { backgroundColor: stat.color + '15' }]}>
-                <Ionicons name={stat.icon as any} size={20} color={stat.color} />
+        {/* Search Bar */}
+        <View style={styles.searchContainer}>
+          <View style={styles.searchBar}>
+            <Ionicons name="search" size={20} color={COLORS.textTertiary} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search for any service..."
+              placeholderTextColor={COLORS.textTertiary}
+              editable={false}
+            />
+            <View style={styles.searchDivider} />
+            <TouchableOpacity style={styles.filterBtn}>
+              <Ionicons name="options-outline" size={20} color={COLORS.textPrimary} />
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Promo Banner */}
+        <View style={styles.promoBanner}>
+          <View style={styles.promoContent}>
+            <View style={styles.promoSaveBadge}>
+              <Text style={styles.promoSaveText}>Save 25% Today!</Text>
+            </View>
+            <Text style={styles.promoTitle}>
+              Exclusive discounts{'\n'}on home service
+            </Text>
+            <TouchableOpacity style={styles.promoButton} activeOpacity={0.8}>
+              <Ionicons name="calendar-outline" size={16} color={COLORS.textInverse} />
+              <Text style={styles.promoButtonText}>Book Now</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.promoImageContainer}>
+            <Image
+              source={{ uri: 'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=200&h=250&fit=crop' }}
+              style={styles.promoImage}
+              resizeMode="cover"
+            />
+          </View>
+        </View>
+
+        {/* Most Booked Services */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Most Booked Services</Text>
+            <TouchableOpacity>
+              <Text style={styles.viewAll}>View all</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.categoriesGrid}>
+            {CATEGORIES.map((cat) => (
+              <TouchableOpacity key={cat.id} style={styles.categoryItem} activeOpacity={0.7}>
+                <View style={styles.categoryIconBox}>
+                  <Ionicons name={cat.icon} size={26} color={COLORS.info} />
+                </View>
+                <Text style={styles.categoryName}>{cat.name}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        {/* Popular Near You */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Popular Near You</Text>
+            <TouchableOpacity>
+              <Text style={styles.viewAll}>View all</Text>
+            </TouchableOpacity>
+          </View>
+          {POPULAR_PROVIDERS.map((provider) => (
+            <View key={provider.id} style={styles.providerCard}>
+              <View style={styles.providerTop}>
+                <View style={styles.providerAvatarContainer}>
+                  <Image
+                    source={{ uri: provider.avatar }}
+                    style={styles.providerAvatar}
+                  />
+                  {provider.verified && (
+                    <View style={styles.verifiedBadge}>
+                      <Ionicons name="checkmark-circle" size={16} color="#10B981" />
+                    </View>
+                  )}
+                </View>
+                <View style={styles.providerInfo}>
+                  <View style={styles.providerNameRow}>
+                    <Text style={styles.providerName}>{provider.name}</Text>
+                    <View style={[styles.categoryBadge, { backgroundColor: provider.categoryColor }]}>
+                      <Text style={styles.categoryBadgeText}>{provider.category}</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.providerPrice}>{provider.price}</Text>
+                  <View style={styles.ratingRow}>
+                    <Ionicons name="star" size={14} color="#F59E0B" />
+                    <Text style={styles.ratingText}>
+                      {provider.rating} ({provider.reviews} reviews)
+                    </Text>
+                  </View>
+                </View>
               </View>
-              <Text style={styles.statValue}>{stat.value}</Text>
-              <Text style={styles.statLabel}>{stat.label}</Text>
+              <View style={styles.providerActions}>
+                <TouchableOpacity style={styles.viewProfileBtn}>
+                  <Ionicons name="eye-outline" size={16} color={COLORS.textSecondary} />
+                  <Text style={styles.viewProfileText}>View Profile</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.bookNowBtn} activeOpacity={0.8}>
+                  <Ionicons name="calendar-outline" size={16} color={COLORS.textInverse} />
+                  <Text style={styles.bookNowText}>Book Now</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           ))}
         </View>
 
-        {/* Active Emergencies */}
-        {activeEmergencies.length > 0 && (
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={[styles.sectionTitle, { color: COLORS.urgency }]}>🚨 Urgences en cours</Text>
-            </View>
-            {activeEmergencies.map((e) => {
-              const needsAction = e.status === 'provider_accepted' || e.status === 'quote_sent';
-              return (
-                <TouchableOpacity
-                  key={e.request_id}
-                  testID={`emergency-card-${e.request_id}`}
-                  style={[styles.emergencyCard, needsAction && styles.emergencyCardAction]}
-                  onPress={() => router.push(`/emergency?id=${e.request_id}`)}
-                >
-                  <View style={styles.emergencyTop}>
-                    <View style={[styles.statusChip, { backgroundColor: needsAction ? COLORS.urgencySoft : COLORS.infoSoft }]}>
-                      <Text style={[styles.statusChipText, { color: needsAction ? COLORS.urgency : COLORS.info }]}>
-                        {EMERGENCY_STATUS_LABELS[e.status] || e.status}
-                      </Text>
-                    </View>
-                    <Text style={styles.emergencyType}>{SERVICE_TYPE_LABELS[e.service_type] || e.service_type}</Text>
-                  </View>
-                  <Text style={styles.emergencyProp}>{e.property_name}</Text>
-                  {e.provider_name && (
-                    <View style={styles.providerInfo}>
-                      <Ionicons name="person-outline" size={14} color={COLORS.textTertiary} />
-                      <Text style={styles.providerText}>{e.provider_name}</Text>
-                      {e.eta_minutes && e.status === 'provider_accepted' && (
-                        <>
-                          <Ionicons name="time-outline" size={14} color={COLORS.info} />
-                          <Text style={[styles.providerText, { color: COLORS.info }]}>{e.eta_minutes} min</Text>
-                        </>
-                      )}
-                    </View>
-                  )}
-                  {needsAction && (
-                    <View style={styles.actionNeeded}>
-                      <Ionicons name="arrow-forward-circle" size={18} color={COLORS.urgency} />
-                      <Text style={styles.actionText}>
-                        {e.status === 'provider_accepted' ? 'Payer les frais de déplacement' : 'Valider le devis'}
-                      </Text>
-                    </View>
-                  )}
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        )}
-
-        {/* Upcoming Missions */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Missions à venir</Text>
-            <TouchableOpacity onPress={() => router.push('/(owner)/missions')}>
-              <Text style={styles.seeAll}>Voir tout</Text>
-            </TouchableOpacity>
-          </View>
-
-          {(data?.upcoming_missions || []).length === 0 ? (
-            <View style={styles.emptyCard}>
-              <Ionicons name="calendar-outline" size={40} color={COLORS.textTertiary} />
-              <Text style={styles.emptyText}>Aucune mission planifiée</Text>
-              <Text style={styles.emptySubtext}>Ajoutez un logement et synchronisez votre calendrier iCal</Text>
-            </View>
-          ) : (
-            (data?.upcoming_missions || []).slice(0, 5).map((m: any) => (
-              <TouchableOpacity
-                key={m.mission_id}
-                style={styles.missionCard}
-                testID={`mission-card-${m.mission_id}`}
-                onPress={() => router.push(`/mission/${m.mission_id}`)}
-              >
-                <View style={styles.missionTop}>
-                  <View style={[styles.statusChip, { backgroundColor: (STATUS_COLORS[m.status] || STATUS_COLORS.pending).bg }]}>
-                    <Text style={[styles.statusChipText, { color: (STATUS_COLORS[m.status] || STATUS_COLORS.pending).text }]}>
-                      {STATUS_LABELS[m.status] || m.status}
-                    </Text>
-                  </View>
-                  <Text style={styles.missionType}>{MISSION_TYPE_LABELS[m.mission_type] || m.mission_type}</Text>
-                </View>
-                <Text style={styles.missionProperty}>{m.property_name}</Text>
-                <View style={styles.missionMeta}>
-                  <Ionicons name="calendar-outline" size={14} color={COLORS.textTertiary} />
-                  <Text style={styles.missionDate}>
-                    {m.scheduled_date ? new Date(m.scheduled_date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }) : 'Non planifiée'}
-                  </Text>
-                  {m.fixed_rate && (
-                    <>
-                      <Ionicons name="cash-outline" size={14} color={COLORS.textTertiary} />
-                      <Text style={styles.missionDate}>{m.fixed_rate}€</Text>
-                    </>
-                  )}
-                </View>
-              </TouchableOpacity>
-            ))
-          )}
-        </View>
-
-        {/* Quick Actions */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Actions rapides</Text>
-          <View style={styles.quickActions}>
-            <TouchableOpacity testID="add-property-quick-btn" style={styles.quickAction} onPress={() => router.push('/property/add')}>
-              <View style={[styles.quickActionIcon, { backgroundColor: COLORS.infoSoft }]}>
-                <Ionicons name="add-circle-outline" size={24} color={COLORS.info} />
-              </View>
-              <Text style={styles.quickActionText}>Ajouter un{'\n'}logement</Text>
-            </TouchableOpacity>
-            <TouchableOpacity testID="create-mission-quick-btn" style={styles.quickAction} onPress={() => router.push('/(owner)/missions')}>
-              <View style={[styles.quickActionIcon, { backgroundColor: COLORS.successSoft }]}>
-                <Ionicons name="clipboard-outline" size={24} color={COLORS.success} />
-              </View>
-              <Text style={styles.quickActionText}>Créer une{'\n'}mission</Text>
-            </TouchableOpacity>
-            <TouchableOpacity testID="emergency-quick-btn" style={styles.quickAction} onPress={() => router.push('/emergency')}>
-              <View style={[styles.quickActionIcon, { backgroundColor: COLORS.urgencySoft }]}>
-                <Ionicons name="warning-outline" size={24} color={COLORS.urgency} />
-              </View>
-              <Text style={styles.quickActionText}>Urgence</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
+        {/* Bottom spacing for floating nav */}
         <View style={{ height: 100 }} />
       </ScrollView>
 
-      {/* Floating Emergency Button */}
-      <TouchableOpacity
-        testID="emergency-fab"
-        style={styles.emergencyFab}
-        onPress={() => router.push('/emergency')}
-        activeOpacity={0.8}
-      >
-        <Ionicons name="warning" size={28} color={COLORS.textInverse} />
-      </TouchableOpacity>
+      {/* Floating Bottom Navigation */}
+      <View style={styles.floatingNavContainer}>
+        <BlurView intensity={80} tint="light" style={styles.floatingNav}>
+          <TouchableOpacity style={styles.navItem}>
+            <View style={styles.navItemActive}>
+              <Ionicons name="home" size={22} color={COLORS.textInverse} />
+            </View>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.navItem} onPress={() => {}}>
+            <Ionicons name="chatbubble-outline" size={22} color={COLORS.textTertiary} />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.navItem} onPress={() => router.push('/(owner)/missions')}>
+            <Ionicons name="calendar-outline" size={22} color={COLORS.textTertiary} />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.navItem} onPress={() => router.push('/(owner)/profile')}>
+            <Ionicons name="person-outline" size={22} color={COLORS.textTertiary} />
+          </TouchableOpacity>
+        </BlurView>
+      </View>
 
       {/* Notifications Modal */}
       <Modal visible={showNotifs} animationType="slide" transparent>
@@ -258,7 +285,7 @@ export default function OwnerDashboard() {
               {notifications.length === 0 ? (
                 <View style={styles.emptyNotifs}>
                   <Ionicons name="notifications-off-outline" size={40} color={COLORS.textTertiary} />
-                  <Text style={styles.emptyText}>Aucune notification</Text>
+                  <Text style={styles.emptyText}>No notifications</Text>
                 </View>
               ) : (
                 notifications.map((n) => (
@@ -296,71 +323,456 @@ export default function OwnerDashboard() {
   );
 }
 
+const CATEGORY_ITEM_WIDTH = (SCREEN_WIDTH - 40 - 36) / 4; // padding - gaps
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.background },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.background },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: SPACING.xl, paddingTop: SPACING.lg, paddingBottom: SPACING.md },
-  greeting: { ...FONTS.bodySmall, color: COLORS.textSecondary },
-  userName: { ...FONTS.h2, color: COLORS.textPrimary },
-  notifBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: COLORS.paper, justifyContent: 'center', alignItems: 'center', ...SHADOWS.card },
-  notifBadge: { position: 'absolute', top: -2, right: -2, width: 20, height: 20, borderRadius: 10, backgroundColor: COLORS.urgency, justifyContent: 'center', alignItems: 'center' },
-  notifBadgeText: { ...FONTS.caption, color: COLORS.textInverse, fontSize: 10 },
-  statsGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: SPACING.xl, gap: SPACING.md, marginTop: SPACING.md },
-  statCard: { width: '47%', backgroundColor: COLORS.paper, padding: SPACING.lg, borderRadius: RADIUS.lg, ...SHADOWS.card },
-  statIcon: { width: 36, height: 36, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginBottom: SPACING.sm },
-  statValue: { ...FONTS.h2, color: COLORS.textPrimary },
-  statLabel: { ...FONTS.bodySmall, color: COLORS.textSecondary, marginTop: 2 },
-  section: { paddingHorizontal: SPACING.xl, marginTop: SPACING.xxl },
-  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.md },
-  sectionTitle: { ...FONTS.h3, color: COLORS.textPrimary },
-  seeAll: { ...FONTS.bodySmall, color: COLORS.info },
-  // Emergency cards
-  emergencyCard: { backgroundColor: COLORS.paper, padding: SPACING.lg, borderRadius: RADIUS.lg, marginBottom: SPACING.md, borderLeftWidth: 3, borderLeftColor: COLORS.info, ...SHADOWS.card },
-  emergencyCardAction: { borderLeftColor: COLORS.urgency, backgroundColor: '#FFFBFB' },
-  emergencyTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.sm },
-  emergencyType: { ...FONTS.caption, color: COLORS.textTertiary },
-  emergencyProp: { ...FONTS.h3, color: COLORS.textPrimary, fontSize: 16 },
-  providerInfo: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginTop: SPACING.sm },
-  providerText: { ...FONTS.bodySmall, color: COLORS.textSecondary },
-  actionNeeded: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginTop: SPACING.md, paddingTop: SPACING.md, borderTopWidth: 1, borderTopColor: COLORS.border },
-  actionText: { ...FONTS.bodySmall, color: COLORS.urgency, fontWeight: '600' },
-  // Missions
-  emptyCard: { backgroundColor: COLORS.paper, padding: SPACING.xxl, borderRadius: RADIUS.lg, alignItems: 'center', ...SHADOWS.card },
-  emptyText: { ...FONTS.body, color: COLORS.textSecondary, marginTop: SPACING.md },
-  emptySubtext: { ...FONTS.bodySmall, color: COLORS.textTertiary, textAlign: 'center', marginTop: SPACING.sm },
-  missionCard: { backgroundColor: COLORS.paper, padding: SPACING.lg, borderRadius: RADIUS.lg, marginBottom: SPACING.md, ...SHADOWS.card },
-  missionTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.sm },
-  statusChip: { paddingHorizontal: SPACING.md, paddingVertical: 4, borderRadius: RADIUS.full },
-  statusChipText: { ...FONTS.caption, fontSize: 10 },
-  missionType: { ...FONTS.caption, color: COLORS.textTertiary },
-  missionProperty: { ...FONTS.h3, color: COLORS.textPrimary, marginBottom: SPACING.sm, fontSize: 16 },
-  missionMeta: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
-  missionDate: { ...FONTS.bodySmall, color: COLORS.textTertiary },
-  // Quick actions
-  quickActions: { flexDirection: 'row', gap: SPACING.md, marginTop: SPACING.sm },
-  quickAction: { flex: 1, backgroundColor: COLORS.paper, padding: SPACING.lg, borderRadius: RADIUS.lg, alignItems: 'center', ...SHADOWS.card },
-  quickActionIcon: { width: 48, height: 48, borderRadius: 14, justifyContent: 'center', alignItems: 'center', marginBottom: SPACING.sm },
-  quickActionText: { ...FONTS.bodySmall, color: COLORS.textPrimary, textAlign: 'center', fontSize: 12 },
-  // Emergency FAB
-  emergencyFab: {
-    position: 'absolute', bottom: 80, right: 20,
-    width: 60, height: 60, borderRadius: 30,
-    backgroundColor: COLORS.urgency,
-    justifyContent: 'center', alignItems: 'center',
-    ...SHADOWS.urgency,
+  container: {
+    flex: 1,
+    backgroundColor: '#F5F7FA',
   },
+  center: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F5F7FA',
+  },
+  scrollContent: {
+    paddingBottom: 20,
+  },
+
+  // Header
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 16,
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  avatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: COLORS.textTertiary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerText: {
+    gap: 2,
+  },
+  greeting: {
+    fontSize: 13,
+    fontWeight: '400',
+    color: COLORS.textSecondary,
+  },
+  userName: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+  },
+  notifBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: COLORS.paper,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#94A3B8',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  notifBadge: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: COLORS.info,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  notifBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: COLORS.textInverse,
+  },
+
+  // Search Bar
+  searchContainer: {
+    paddingHorizontal: 20,
+    marginBottom: 20,
+  },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.paper,
+    borderRadius: 30,
+    paddingHorizontal: 16,
+    height: 50,
+    shadowColor: '#94A3B8',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: COLORS.textPrimary,
+    marginLeft: 10,
+  },
+  searchDivider: {
+    width: 1,
+    height: 24,
+    backgroundColor: COLORS.border,
+    marginHorizontal: 12,
+  },
+  filterBtn: {
+    padding: 4,
+  },
+
+  // Promo Banner
+  promoBanner: {
+    marginHorizontal: 20,
+    borderRadius: 24,
+    backgroundColor: '#DCEBFC',
+    flexDirection: 'row',
+    overflow: 'hidden',
+    minHeight: 160,
+    marginBottom: 24,
+  },
+  promoContent: {
+    flex: 1,
+    padding: 20,
+    justifyContent: 'center',
+  },
+  promoSaveBadge: {
+    alignSelf: 'flex-start',
+    marginBottom: 8,
+  },
+  promoSaveText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#FF8B53',
+  },
+  promoTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#1A2B4A',
+    lineHeight: 24,
+    marginBottom: 14,
+  },
+  promoButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: '#FF8B53',
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 20,
+    gap: 6,
+  },
+  promoButtonText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.textInverse,
+  },
+  promoImageContainer: {
+    width: '40%',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+  },
+  promoImage: {
+    width: 130,
+    height: 150,
+    borderRadius: 12,
+  },
+
+  // Section
+  section: {
+    paddingHorizontal: 20,
+    marginBottom: 24,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  sectionTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+  },
+  viewAll: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: COLORS.textTertiary,
+  },
+
+  // Categories Grid
+  categoriesGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  categoryItem: {
+    width: CATEGORY_ITEM_WIDTH,
+    alignItems: 'center',
+    gap: 8,
+  },
+  categoryIconBox: {
+    width: CATEGORY_ITEM_WIDTH,
+    height: CATEGORY_ITEM_WIDTH,
+    backgroundColor: COLORS.paper,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#94A3B8',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  categoryName: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+  },
+
+  // Provider Card
+  providerCard: {
+    backgroundColor: COLORS.paper,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: '#94A3B8',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  providerTop: {
+    flexDirection: 'row',
+    marginBottom: 14,
+  },
+  providerAvatarContainer: {
+    position: 'relative',
+    marginRight: 12,
+  },
+  providerAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: COLORS.subtle,
+  },
+  verifiedBadge: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    backgroundColor: COLORS.paper,
+    borderRadius: 8,
+  },
+  providerInfo: {
+    flex: 1,
+  },
+  providerNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  providerName: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+    flex: 1,
+  },
+  categoryBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+    marginLeft: 8,
+  },
+  categoryBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: COLORS.textInverse,
+  },
+  providerPrice: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.info,
+    marginBottom: 4,
+  },
+  ratingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  ratingText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: COLORS.textSecondary,
+  },
+  providerActions: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  viewProfileBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  viewProfileText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.textSecondary,
+  },
+  bookNowBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: COLORS.info,
+  },
+  bookNowText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.textInverse,
+  },
+
+  // Floating Bottom Nav
+  floatingNavContainer: {
+    position: 'absolute',
+    bottom: 24,
+    left: 20,
+    right: 20,
+  },
+  floatingNav: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    height: 64,
+    borderRadius: 40,
+    backgroundColor: 'rgba(255,255,255,0.85)',
+    overflow: 'hidden',
+    shadowColor: '#64748B',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  navItem: {
+    width: 48,
+    height: 48,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  navItemActive: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: COLORS.info,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
   // Notifications modal
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalContent: { backgroundColor: COLORS.paper, borderTopLeftRadius: RADIUS.xl, borderTopRightRadius: RADIUS.xl, padding: SPACING.xl, maxHeight: '80%' },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.lg },
-  modalTitle: { ...FONTS.h2, color: COLORS.textPrimary },
-  emptyNotifs: { alignItems: 'center', paddingVertical: SPACING.xxxl },
-  notifItem: { flexDirection: 'row', alignItems: 'center', padding: SPACING.md, borderRadius: RADIUS.lg, marginBottom: SPACING.sm, backgroundColor: COLORS.background },
-  notifItemUnread: { backgroundColor: COLORS.infoSoft },
-  notifIcon: { width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginRight: SPACING.md },
-  notifContent: { flex: 1 },
-  notifTitle: { ...FONTS.bodySmall, color: COLORS.textPrimary, fontWeight: '600' },
-  notifBody: { ...FONTS.bodySmall, color: COLORS.textSecondary, marginTop: 2, fontSize: 12 },
-  notifTime: { ...FONTS.caption, color: COLORS.textTertiary, marginTop: 4, fontSize: 9 },
-  unreadDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: COLORS.urgency, marginLeft: SPACING.sm },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: COLORS.paper,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 20,
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+  },
+  emptyNotifs: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  emptyText: {
+    fontSize: 15,
+    color: COLORS.textSecondary,
+    marginTop: 12,
+  },
+  notifItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 16,
+    marginBottom: 8,
+    backgroundColor: '#F5F7FA',
+  },
+  notifItemUnread: {
+    backgroundColor: COLORS.infoSoft,
+  },
+  notifIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  notifContent: {
+    flex: 1,
+  },
+  notifTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.textPrimary,
+  },
+  notifBody: {
+    fontSize: 12,
+    fontWeight: '400',
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
+  notifTime: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: COLORS.textTertiary,
+    marginTop: 4,
+  },
+  unreadDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: COLORS.info,
+    marginLeft: 8,
+  },
 });
