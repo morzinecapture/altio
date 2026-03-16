@@ -204,73 +204,19 @@ export default function OwnerMissionsScreen() {
 
               <Text style={styles.inputLabel}>Date et Heure *</Text>
               <View style={styles.dateRow}>
-                <TouchableOpacity
-                  style={styles.dateBtn}
-                  onPress={() => setShowDatePicker(true)}
-                >
+                <TouchableOpacity style={styles.dateBtn} onPress={() => setShowDatePicker(true)}>
                   <Ionicons name="calendar-outline" size={18} color={COLORS.brandPrimary} />
                   <Text style={styles.dateBtnText}>
-                    {scheduledDate.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })}
+                    {scheduledDate.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'long' })}
                   </Text>
                 </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.dateBtn, styles.timeBtn]}
-                  onPress={() => setShowTimePicker(true)}
-                >
+                <TouchableOpacity style={[styles.dateBtn, styles.timeBtn]} onPress={() => setShowTimePicker(true)}>
                   <Ionicons name="time-outline" size={18} color={COLORS.brandPrimary} />
                   <Text style={styles.dateBtnText}>
                     {scheduledDate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
                   </Text>
                 </TouchableOpacity>
               </View>
-
-              {/* Date Picker — iOS inline, Android dialog */}
-              {showDatePicker && (
-                <DateTimePicker
-                  value={scheduledDate}
-                  mode="date"
-                  display={Platform.OS === 'ios' ? 'inline' : 'default'}
-                  minimumDate={new Date()}
-                  locale="fr-FR"
-                  onChange={(_, selected) => {
-                    if (Platform.OS === 'android') setShowDatePicker(false);
-                    if (selected) {
-                      const merged = new Date(selected);
-                      merged.setHours(scheduledDate.getHours(), scheduledDate.getMinutes());
-                      setScheduledDate(merged);
-                    }
-                  }}
-                  style={{ marginBottom: SPACING.sm }}
-                />
-              )}
-              {showDatePicker && Platform.OS === 'ios' && (
-                <TouchableOpacity style={styles.pickerDoneBtn} onPress={() => setShowDatePicker(false)}>
-                  <Text style={styles.pickerDoneText}>Confirmer la date</Text>
-                </TouchableOpacity>
-              )}
-
-              {/* Time Picker */}
-              {showTimePicker && (
-                <DateTimePicker
-                  value={scheduledDate}
-                  mode="time"
-                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                  is24Hour
-                  onChange={(_, selected) => {
-                    if (Platform.OS === 'android') setShowTimePicker(false);
-                    if (selected) {
-                      const merged = new Date(scheduledDate);
-                      merged.setHours(selected.getHours(), selected.getMinutes());
-                      setScheduledDate(merged);
-                    }
-                  }}
-                />
-              )}
-              {showTimePicker && Platform.OS === 'ios' && (
-                <TouchableOpacity style={styles.pickerDoneBtn} onPress={() => setShowTimePicker(false)}>
-                  <Text style={styles.pickerDoneText}>Confirmer l'heure</Text>
-                </TouchableOpacity>
-              )}
 
               <Text style={styles.inputLabel}>Tarif (€)</Text>
               <TextInput
@@ -301,6 +247,77 @@ export default function OwnerMissionsScreen() {
             </ScrollView>
           </View>
         </View>
+      </Modal>
+
+      {/* Date Picker Modal — hors du ScrollView pour éviter les conflits de gestes */}
+      <Modal visible={showDatePicker} transparent animationType="fade">
+        <TouchableOpacity
+          style={styles.pickerOverlay}
+          activeOpacity={1}
+          onPress={() => setShowDatePicker(false)}
+        >
+          <View style={styles.pickerCard} onStartShouldSetResponder={() => true}>
+            <View style={styles.pickerHeader}>
+              <Text style={styles.pickerTitle}>Choisir une date</Text>
+              <TouchableOpacity onPress={() => setShowDatePicker(false)}>
+                <Ionicons name="close" size={22} color={COLORS.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            <DateTimePicker
+              value={scheduledDate}
+              mode="date"
+              display="inline"
+              minimumDate={new Date()}
+              locale="fr-FR"
+              onChange={(_, selected) => {
+                if (selected) {
+                  const merged = new Date(selected);
+                  merged.setHours(scheduledDate.getHours(), scheduledDate.getMinutes());
+                  setScheduledDate(merged);
+                }
+              }}
+              style={{ alignSelf: 'center' }}
+            />
+            <TouchableOpacity style={styles.pickerDoneBtn} onPress={() => setShowDatePicker(false)}>
+              <Text style={styles.pickerDoneText}>Confirmer</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Time Picker Modal */}
+      <Modal visible={showTimePicker} transparent animationType="fade">
+        <TouchableOpacity
+          style={styles.pickerOverlay}
+          activeOpacity={1}
+          onPress={() => setShowTimePicker(false)}
+        >
+          <View style={[styles.pickerCard, { paddingBottom: SPACING.xl }]} onStartShouldSetResponder={() => true}>
+            <View style={styles.pickerHeader}>
+              <Text style={styles.pickerTitle}>Choisir l'heure</Text>
+              <TouchableOpacity onPress={() => setShowTimePicker(false)}>
+                <Ionicons name="close" size={22} color={COLORS.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            <DateTimePicker
+              value={scheduledDate}
+              mode="time"
+              display="spinner"
+              is24Hour
+              onChange={(_, selected) => {
+                if (selected) {
+                  const merged = new Date(scheduledDate);
+                  merged.setHours(selected.getHours(), selected.getMinutes());
+                  setScheduledDate(merged);
+                }
+              }}
+              style={{ alignSelf: 'center' }}
+            />
+            <TouchableOpacity style={styles.pickerDoneBtn} onPress={() => setShowTimePicker(false)}>
+              <Text style={styles.pickerDoneText}>Confirmer</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
       </Modal>
     </SafeAreaView>
   );
@@ -369,13 +386,33 @@ const styles = StyleSheet.create({
   },
   timeBtn: { flex: 1 },
   dateBtnText: { ...FONTS.bodySmall, color: COLORS.textPrimary, fontWeight: '500', flex: 1 },
+  pickerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: SPACING.xl,
+  },
+  pickerCard: {
+    backgroundColor: COLORS.paper,
+    borderRadius: RADIUS.xl,
+    padding: SPACING.xl,
+    width: '100%',
+    ...SHADOWS.float,
+  },
+  pickerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: SPACING.md,
+  },
+  pickerTitle: { ...FONTS.h3, color: COLORS.textPrimary },
   pickerDoneBtn: {
     backgroundColor: COLORS.brandPrimary,
     borderRadius: RADIUS.md,
     paddingVertical: SPACING.md,
     alignItems: 'center',
-    marginTop: SPACING.sm,
-    marginBottom: SPACING.xs,
+    marginTop: SPACING.lg,
   },
   pickerDoneText: { ...FONTS.bodySmall, color: COLORS.textInverse, fontWeight: '600' },
   input: { backgroundColor: COLORS.subtle, borderRadius: RADIUS.md, padding: SPACING.lg, ...FONTS.body, color: COLORS.textPrimary, borderWidth: 1, borderColor: COLORS.border },
