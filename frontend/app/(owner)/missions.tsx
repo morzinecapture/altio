@@ -30,6 +30,7 @@ export default function OwnerMissionsScreen() {
     d.setHours(9, 0, 0, 0);
     return d;
   });
+  const [datePickerMode, setDatePickerMode] = useState<'date' | 'time' | null>(null);
 
   const fetchData = async () => {
     try {
@@ -202,42 +203,53 @@ export default function OwnerMissionsScreen() {
 
               <Text style={styles.inputLabel}>Date et Heure *</Text>
               <View style={styles.dateRow}>
-                <View style={styles.dateBtn}>
-                  <Ionicons name="calendar-outline" size={18} color={COLORS.brandPrimary} />
+                <TouchableOpacity
+                  style={[styles.dateBtn, datePickerMode === 'date' && styles.dateBtnActive]}
+                  onPress={() => setDatePickerMode(datePickerMode === 'date' ? null : 'date')}
+                >
+                  <Ionicons name="calendar-outline" size={18} color={datePickerMode === 'date' ? COLORS.textInverse : COLORS.brandPrimary} />
+                  <Text style={[styles.dateBtnText, datePickerMode === 'date' && { color: COLORS.textInverse }]}>
+                    {scheduledDate.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.dateBtn, styles.timeBtn, datePickerMode === 'time' && styles.dateBtnActive]}
+                  onPress={() => setDatePickerMode(datePickerMode === 'time' ? null : 'time')}
+                >
+                  <Ionicons name="time-outline" size={18} color={datePickerMode === 'time' ? COLORS.textInverse : COLORS.brandPrimary} />
+                  <Text style={[styles.dateBtnText, datePickerMode === 'time' && { color: COLORS.textInverse }]}>
+                    {scheduledDate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {datePickerMode !== null && (
+                <View style={styles.spinnerContainer}>
                   <DateTimePicker
                     value={scheduledDate}
-                    mode="date"
-                    display="compact"
-                    minimumDate={new Date()}
+                    mode={datePickerMode}
+                    display="spinner"
+                    minimumDate={datePickerMode === 'date' ? new Date() : undefined}
+                    is24Hour
                     locale="fr-FR"
                     onChange={(_, selected) => {
-                      if (selected) {
-                        const merged = new Date(selected);
-                        merged.setHours(scheduledDate.getHours(), scheduledDate.getMinutes());
-                        setScheduledDate(merged);
-                      }
-                    }}
-                    themeVariant="light"
-                  />
-                </View>
-                <View style={[styles.dateBtn, styles.timeBtn]}>
-                  <Ionicons name="time-outline" size={18} color={COLORS.brandPrimary} />
-                  <DateTimePicker
-                    value={scheduledDate}
-                    mode="time"
-                    display="compact"
-                    is24Hour
-                    onChange={(_, selected) => {
-                      if (selected) {
-                        const merged = new Date(scheduledDate);
+                      if (!selected) return;
+                      const merged = new Date(scheduledDate);
+                      if (datePickerMode === 'date') {
+                        merged.setFullYear(selected.getFullYear(), selected.getMonth(), selected.getDate());
+                      } else {
                         merged.setHours(selected.getHours(), selected.getMinutes());
-                        setScheduledDate(merged);
                       }
+                      setScheduledDate(merged);
                     }}
                     themeVariant="light"
+                    style={{ width: '100%' }}
                   />
+                  <TouchableOpacity style={styles.spinnerDoneBtn} onPress={() => setDatePickerMode(null)}>
+                    <Text style={styles.spinnerDoneText}>Confirmer</Text>
+                  </TouchableOpacity>
                 </View>
-              </View>
+              )}
 
               <Text style={styles.inputLabel}>Tarif (€)</Text>
               <TextInput
@@ -335,8 +347,26 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
   },
+  dateBtnActive: {
+    backgroundColor: COLORS.brandPrimary,
+    borderColor: COLORS.brandPrimary,
+  },
   timeBtn: { flex: 1 },
   dateBtnText: { ...FONTS.bodySmall, color: COLORS.textPrimary, fontWeight: '500', flex: 1 },
+  spinnerContainer: {
+    backgroundColor: COLORS.subtle,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    overflow: 'hidden',
+    marginTop: SPACING.sm,
+  },
+  spinnerDoneBtn: {
+    backgroundColor: COLORS.brandPrimary,
+    paddingVertical: SPACING.md,
+    alignItems: 'center',
+  },
+  spinnerDoneText: { ...FONTS.bodySmall, color: COLORS.textInverse, fontWeight: '600' },
   input: { backgroundColor: COLORS.subtle, borderRadius: RADIUS.md, padding: SPACING.lg, ...FONTS.body, color: COLORS.textPrimary, borderWidth: 1, borderColor: COLORS.border },
   textArea: { minHeight: 100, textAlignVertical: 'top' },
   submitBtn: { backgroundColor: COLORS.brandPrimary, paddingVertical: SPACING.lg, borderRadius: RADIUS.xl, alignItems: 'center', marginTop: SPACING.xxl, marginBottom: SPACING.xxxl, ...SHADOWS.card },
