@@ -4,6 +4,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { COLORS, FONTS, SPACING, RADIUS, SHADOWS, STATUS_COLORS, STATUS_LABELS, MISSION_TYPE_LABELS, GRADIENT } from '../../src/theme';
 import { getMissions, createMission, getProperties } from '../../src/api';
 
@@ -23,7 +24,14 @@ export default function OwnerMissionsScreen() {
   const [description, setDescription] = useState('');
   const [rate, setRate] = useState('');
   const [creating, setCreating] = useState(false);
-  const [scheduledDate, setScheduledDate] = useState(new Date());
+  const [scheduledDate, setScheduledDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    d.setHours(9, 0, 0, 0);
+    return d;
+  });
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showTimePicker, setShowTimePicker] = useState(false);
 
   const fetchData = async () => {
     try {
@@ -195,26 +203,74 @@ export default function OwnerMissionsScreen() {
               </View>
 
               <Text style={styles.inputLabel}>Date et Heure *</Text>
-              <View style={{ flexDirection: 'row', gap: SPACING.md }}>
-                {/* Fallback simple for iOS/Android default pickers - in Expo, standard way is @react-native-community/datetimepicker, but to avoid missing dependencies, we'll use standard text/buttons to trigger it if installed or fallback to safe defaults. For Altitude V1 scope, a simple TextInput for date/time is prone to error. Assuming we don't have the date-picker lib installed, we use a controlled native approach. 
-                Actually, let's use the simplest reliable input format to avoid breaking the build: A date-time selector row. */}
+              <View style={styles.dateRow}>
                 <TouchableOpacity
-                  style={[styles.input, { flex: 1, justifyContent: 'center' }]}
-                  onPress={() => {
-                    // In a real app we'd use DateTimePicker here.
-                    // For V1 MVP without adding dependencies, we'll just mock it or assume today + 2 days
-                    Alert.alert('Date', 'Pour la V1, la date est définie par défaut à dans 2 jours (Simulation).', [
-                      { text: 'Demain', onPress: () => { const d = new Date(); d.setDate(d.getDate() + 1); setScheduledDate(d); } },
-                      { text: 'Dans 2 jours', onPress: () => { const d = new Date(); d.setDate(d.getDate() + 2); setScheduledDate(d); } },
-                      { text: 'Dans 1 semaine', onPress: () => { const d = new Date(); d.setDate(d.getDate() + 7); setScheduledDate(d); } }
-                    ]);
-                  }}
+                  style={styles.dateBtn}
+                  onPress={() => setShowDatePicker(true)}
                 >
-                  <Text style={{ ...FONTS.body, color: COLORS.textPrimary }}>
-                    {scheduledDate.toLocaleDateString('fr-FR')} à {scheduledDate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                  <Ionicons name="calendar-outline" size={18} color={COLORS.brandPrimary} />
+                  <Text style={styles.dateBtnText}>
+                    {scheduledDate.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.dateBtn, styles.timeBtn]}
+                  onPress={() => setShowTimePicker(true)}
+                >
+                  <Ionicons name="time-outline" size={18} color={COLORS.brandPrimary} />
+                  <Text style={styles.dateBtnText}>
+                    {scheduledDate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
                   </Text>
                 </TouchableOpacity>
               </View>
+
+              {/* Date Picker — iOS inline, Android dialog */}
+              {showDatePicker && (
+                <DateTimePicker
+                  value={scheduledDate}
+                  mode="date"
+                  display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                  minimumDate={new Date()}
+                  locale="fr-FR"
+                  onChange={(_, selected) => {
+                    if (Platform.OS === 'android') setShowDatePicker(false);
+                    if (selected) {
+                      const merged = new Date(selected);
+                      merged.setHours(scheduledDate.getHours(), scheduledDate.getMinutes());
+                      setScheduledDate(merged);
+                    }
+                  }}
+                  style={{ marginBottom: SPACING.sm }}
+                />
+              )}
+              {showDatePicker && Platform.OS === 'ios' && (
+                <TouchableOpacity style={styles.pickerDoneBtn} onPress={() => setShowDatePicker(false)}>
+                  <Text style={styles.pickerDoneText}>Confirmer la date</Text>
+                </TouchableOpacity>
+              )}
+
+              {/* Time Picker */}
+              {showTimePicker && (
+                <DateTimePicker
+                  value={scheduledDate}
+                  mode="time"
+                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                  is24Hour
+                  onChange={(_, selected) => {
+                    if (Platform.OS === 'android') setShowTimePicker(false);
+                    if (selected) {
+                      const merged = new Date(scheduledDate);
+                      merged.setHours(selected.getHours(), selected.getMinutes());
+                      setScheduledDate(merged);
+                    }
+                  }}
+                />
+              )}
+              {showTimePicker && Platform.OS === 'ios' && (
+                <TouchableOpacity style={styles.pickerDoneBtn} onPress={() => setShowTimePicker(false)}>
+                  <Text style={styles.pickerDoneText}>Confirmer l'heure</Text>
+                </TouchableOpacity>
+              )}
 
               <Text style={styles.inputLabel}>Tarif (€)</Text>
               <TextInput
@@ -299,6 +355,29 @@ const styles = StyleSheet.create({
   typeChipActive: { backgroundColor: COLORS.brandPrimary, borderColor: COLORS.brandPrimary },
   typeChipText: { ...FONTS.bodySmall, color: COLORS.textSecondary, fontWeight: '500' },
   typeChipTextActive: { color: COLORS.textInverse },
+  dateRow: { flexDirection: 'row', gap: SPACING.md },
+  dateBtn: {
+    flex: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    backgroundColor: COLORS.subtle,
+    borderRadius: RADIUS.md,
+    padding: SPACING.lg,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  timeBtn: { flex: 1 },
+  dateBtnText: { ...FONTS.bodySmall, color: COLORS.textPrimary, fontWeight: '500', flex: 1 },
+  pickerDoneBtn: {
+    backgroundColor: COLORS.brandPrimary,
+    borderRadius: RADIUS.md,
+    paddingVertical: SPACING.md,
+    alignItems: 'center',
+    marginTop: SPACING.sm,
+    marginBottom: SPACING.xs,
+  },
+  pickerDoneText: { ...FONTS.bodySmall, color: COLORS.textInverse, fontWeight: '600' },
   input: { backgroundColor: COLORS.subtle, borderRadius: RADIUS.md, padding: SPACING.lg, ...FONTS.body, color: COLORS.textPrimary, borderWidth: 1, borderColor: COLORS.border },
   textArea: { minHeight: 100, textAlignVertical: 'top' },
   submitBtn: { backgroundColor: COLORS.brandPrimary, paddingVertical: SPACING.lg, borderRadius: RADIUS.xl, alignItems: 'center', marginTop: SPACING.xxl, marginBottom: SPACING.xxxl, ...SHADOWS.card },
