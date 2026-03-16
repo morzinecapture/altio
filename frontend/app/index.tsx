@@ -14,21 +14,30 @@ export default function LoginScreen() {
   const { user, loading } = useAuth();
   const [processing, setProcessing] = useState(false);
 
-  // Sur web uniquement : complète la session OAuth si on revient d'un redirect
+  // Resets the processing state when the component mounts or the app regains focus
   useEffect(() => {
     if (Platform.OS === 'web') {
       WebBrowser.maybeCompleteAuthSession();
     }
+    // Safety net: if we return to the screen and are stuck processing, reset it after a tiny delay
+    const timeout = setTimeout(() => {
+      setProcessing(false);
+    }, 1000);
+    return () => clearTimeout(timeout);
   }, []);
 
   // Redirect authenticated users
   useEffect(() => {
+    console.log(`[Index] Checking redirect - loading: ${loading}, user: ${!!user}, processing: ${processing}, role: ${user?.role}`);
     if (!loading && user && !processing) {
+      console.log('[Index] Conditions met! Proceeding to redirect...');
       setTimeout(() => {
         if (!user.role) {
-          router.replace('/role-select');
+          router.replace('/welcome');
         } else if (!user.onboarding_completed) {
           router.replace(user.role === 'owner' ? '/onboarding-owner' : '/onboarding-provider');
+        } else if (user.is_admin) {
+          router.replace('/(admin)/overview');
         } else if (user.role === 'owner') {
           router.replace('/(owner)/dashboard');
         } else {
@@ -96,19 +105,25 @@ export default function LoginScreen() {
             refresh_token = hashMap.get('refresh_token');
           }
 
-          console.log('Tokens extracted:', { hasAccessToken: !!access_token, hasRefreshToken: !!refresh_token });
+          console.log('[Index] Tokens extracted:', { hasAccessToken: !!access_token, hasRefreshToken: !!refresh_token });
 
           if (access_token && refresh_token) {
+            console.log('[Index] Calling setSession...');
             const { error: sessionErr } = await supabase.auth.setSession({ access_token, refresh_token });
-            if (sessionErr) console.error('Failed to set session:', sessionErr);
+            if (sessionErr) console.error('[Index] Failed to set session:', sessionErr);
+            console.log('[Index] setSession completed.');
+
+            // Force processing to false early so router unblocks
+            setProcessing(false);
           } else {
-            console.error('Could not find tokens in redirect URL');
+            console.error('[Index] Could not find tokens in redirect URL');
           }
         }
       }
     } catch (err: any) {
-      console.error('Google login error:', err);
+      console.error('[Index] Google login error:', err);
     } finally {
+      console.log('[Index] Releasing processing state...');
       setProcessing(false);
     }
   };
