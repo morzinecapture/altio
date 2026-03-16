@@ -3,7 +3,8 @@ import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal } from 'rea
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, FONTS, SPACING, RADIUS, SHADOWS } from '../../src/theme';
+import { LinearGradient } from 'expo-linear-gradient';
+import { COLORS, FONTS, SPACING, RADIUS, SHADOWS, GRADIENT } from '../../src/theme';
 import { useAuth } from '../../src/auth';
 
 const OWNER_TYPE_LABELS: Record<string, string> = {
@@ -38,6 +39,9 @@ export default function OwnerProfile() {
     { id: 'paiements', icon: 'card-outline' as const, label: 'Paiements' },
     { id: 'aide', icon: 'help-circle-outline' as const, label: 'Aide & FAQ' },
     { id: 'apropos', icon: 'information-circle-outline' as const, label: 'À propos' },
+    ...(user?.is_admin
+      ? [{ id: 'admin', icon: 'shield-outline' as const, label: 'Administration' }]
+      : []),
   ];
 
   return (
@@ -48,9 +52,9 @@ export default function OwnerProfile() {
         </View>
 
         <View style={styles.userCard}>
-          <View style={styles.avatar}>
+          <LinearGradient colors={GRADIENT.brandButton} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.avatar}>
             <Text style={styles.avatarText}>{user?.name?.[0] || 'U'}</Text>
-          </View>
+          </LinearGradient>
           <Text style={styles.userName}>{user?.name}</Text>
           <Text style={styles.userEmail}>{user?.email}</Text>
           {user?.owner_type && (
@@ -67,7 +71,7 @@ export default function OwnerProfile() {
             <TouchableOpacity
               key={item.id}
               style={[styles.menuItem, i === menuItems.length - 1 && { borderBottomWidth: 0 }]}
-              onPress={() => setActiveModal(item.id)}
+              onPress={() => item.id === 'admin' ? router.push('/admin/index') : setActiveModal(item.id)}
               activeOpacity={0.7}
             >
               <View style={styles.menuIconWrap}>
@@ -220,47 +224,47 @@ export default function OwnerProfile() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
-  header: { paddingHorizontal: SPACING.xl, paddingTop: SPACING.lg, paddingBottom: SPACING.sm },
-  title: { ...FONTS.h2, color: COLORS.textPrimary },
-  userCard: { alignItems: 'center', backgroundColor: COLORS.paper, marginHorizontal: SPACING.xl, marginTop: SPACING.md, padding: SPACING.xxl, borderRadius: RADIUS.xl, ...SHADOWS.card },
-  avatar: { width: 70, height: 70, borderRadius: 35, backgroundColor: COLORS.brandPrimary, justifyContent: 'center', alignItems: 'center', marginBottom: SPACING.md },
+  header: { paddingHorizontal: SPACING.xl, paddingTop: SPACING.xxl, paddingBottom: SPACING.lg },
+  title: { ...FONTS.h1, color: COLORS.textPrimary },
+  userCard: { alignItems: 'center', backgroundColor: COLORS.paper, marginHorizontal: SPACING.xl, padding: SPACING.xxl, borderRadius: RADIUS.xxl, ...SHADOWS.float, borderWidth: 1, borderColor: COLORS.border },
+  avatar: { width: 80, height: 80, borderRadius: 40, justifyContent: 'center', alignItems: 'center', marginBottom: SPACING.lg, ...SHADOWS.card },
   avatarText: { ...FONTS.h1, color: COLORS.textInverse },
-  userName: { ...FONTS.h3, color: COLORS.textPrimary },
-  userEmail: { ...FONTS.bodySmall, color: COLORS.textSecondary, marginTop: 4 },
-  ownerTypeText: { ...FONTS.bodySmall, color: COLORS.textTertiary, marginTop: 4 },
-  roleBadge: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, marginTop: SPACING.md, backgroundColor: COLORS.subtle, paddingHorizontal: SPACING.md, paddingVertical: SPACING.xs, borderRadius: RADIUS.full },
-  roleText: { ...FONTS.bodySmall, color: COLORS.brandPrimary },
-  menuSection: { marginTop: SPACING.xl, marginHorizontal: SPACING.xl, backgroundColor: COLORS.paper, borderRadius: RADIUS.xl, ...SHADOWS.card },
-  menuItem: { flexDirection: 'row', alignItems: 'center', padding: SPACING.lg, borderBottomWidth: 1, borderBottomColor: COLORS.border, gap: SPACING.md },
-  menuIconWrap: { width: 36, height: 36, borderRadius: 10, backgroundColor: COLORS.subtle, justifyContent: 'center', alignItems: 'center' },
-  menuLabel: { flex: 1, ...FONTS.body, color: COLORS.textPrimary },
-  logoutBtn: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, marginHorizontal: SPACING.xl, marginTop: SPACING.xl, padding: SPACING.lg, backgroundColor: COLORS.urgencySoft, borderRadius: RADIUS.lg },
-  logoutText: { ...FONTS.body, color: COLORS.urgency, fontWeight: '600' },
-  version: { ...FONTS.bodySmall, color: COLORS.textTertiary, textAlign: 'center', marginTop: SPACING.xxl, marginBottom: SPACING.xxxl },
+  userName: { ...FONTS.h2, color: COLORS.textPrimary },
+  userEmail: { ...FONTS.body, color: COLORS.textSecondary, marginTop: 4 },
+  ownerTypeText: { ...FONTS.bodySmall, color: COLORS.textTertiary, marginTop: SPACING.xs },
+  roleBadge: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, marginTop: SPACING.md, backgroundColor: COLORS.subtle, paddingHorizontal: SPACING.lg, paddingVertical: 6, borderRadius: RADIUS.full, borderWidth: 1, borderColor: COLORS.border },
+  roleText: { ...FONTS.bodySmall, color: COLORS.brandPrimary, fontWeight: '600' },
+  menuSection: { marginTop: SPACING.xxl, marginHorizontal: SPACING.xl, backgroundColor: COLORS.paper, borderRadius: RADIUS.xxl, ...SHADOWS.card, borderWidth: 1, borderColor: COLORS.border },
+  menuItem: { flexDirection: 'row', alignItems: 'center', padding: SPACING.lg, borderBottomWidth: 1, borderBottomColor: COLORS.subtle, gap: SPACING.md },
+  menuIconWrap: { width: 40, height: 40, borderRadius: 12, backgroundColor: COLORS.subtle, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: COLORS.border },
+  menuLabel: { flex: 1, ...FONTS.body, color: COLORS.textPrimary, fontWeight: '500' },
+  logoutBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.md, marginHorizontal: SPACING.xl, marginTop: SPACING.xxl, padding: SPACING.lg, backgroundColor: COLORS.paper, borderRadius: RADIUS.xl, borderWidth: 1, borderColor: COLORS.urgency, ...SHADOWS.card },
+  logoutText: { ...FONTS.h3, color: COLORS.urgency, fontSize: 16 },
+  version: { ...FONTS.bodySmall, color: COLORS.textTertiary, textAlign: 'center', marginTop: SPACING.xxxl, marginBottom: SPACING.xxxl, letterSpacing: 1 },
   // Modal
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  sheet: { backgroundColor: COLORS.paper, borderTopLeftRadius: RADIUS.xl, borderTopRightRadius: RADIUS.xl, padding: SPACING.xl, maxHeight: '80%' },
+  overlay: { flex: 1, backgroundColor: 'rgba(26,29,46,0.5)', justifyContent: 'flex-end' },
+  sheet: { backgroundColor: COLORS.paper, borderTopLeftRadius: RADIUS.xxl, borderTopRightRadius: RADIUS.xxl, padding: SPACING.xl, maxHeight: '85%', ...SHADOWS.float },
   sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.xl },
   sheetTitle: { ...FONTS.h2, color: COLORS.textPrimary },
   comingSoonWrap: { alignItems: 'center', paddingVertical: SPACING.lg, marginBottom: SPACING.lg },
-  bigIconWrap: { width: 72, height: 72, borderRadius: 20, backgroundColor: COLORS.subtle, justifyContent: 'center', alignItems: 'center', marginBottom: SPACING.md },
-  comingSoonTitle: { ...FONTS.h3, color: COLORS.textPrimary },
+  bigIconWrap: { width: 80, height: 80, borderRadius: 24, backgroundColor: COLORS.subtle, justifyContent: 'center', alignItems: 'center', marginBottom: SPACING.md, borderWidth: 1, borderColor: COLORS.border },
+  comingSoonTitle: { ...FONTS.h2, color: COLORS.textPrimary },
   comingSoonDesc: { ...FONTS.body, color: COLORS.textSecondary, textAlign: 'center', marginTop: SPACING.sm, lineHeight: 22 },
-  comingSoonBadge: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, alignSelf: 'center', marginTop: SPACING.lg, backgroundColor: COLORS.warningSoft, paddingHorizontal: SPACING.lg, paddingVertical: SPACING.sm, borderRadius: RADIUS.full },
-  comingSoonBadgeText: { ...FONTS.bodySmall, color: COLORS.warning },
+  comingSoonBadge: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, alignSelf: 'center', marginTop: SPACING.xl, backgroundColor: COLORS.warningSoft, paddingHorizontal: SPACING.xl, paddingVertical: SPACING.md, borderRadius: RADIUS.full },
+  comingSoonBadgeText: { ...FONTS.bodySmall, color: COLORS.warning, fontWeight: '600' },
   featureRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, paddingVertical: SPACING.sm },
-  featureRowText: { ...FONTS.body, color: COLORS.textSecondary, flex: 1 },
-  faqItem: { backgroundColor: COLORS.subtle, padding: SPACING.lg, borderRadius: RADIUS.lg, marginBottom: SPACING.md },
-  faqQuestion: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: SPACING.sm },
-  faqQ: { ...FONTS.bodySmall, color: COLORS.textPrimary, fontWeight: '700', flex: 1 },
+  featureRowText: { ...FONTS.body, color: COLORS.textSecondary, flex: 1, fontWeight: '500' },
+  faqItem: { backgroundColor: COLORS.subtle, padding: SPACING.xl, borderRadius: RADIUS.xl, marginBottom: SPACING.md, borderWidth: 1, borderColor: COLORS.border },
+  faqQuestion: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: SPACING.md },
+  faqQ: { ...FONTS.bodySmall, color: COLORS.textPrimary, fontWeight: '700', flex: 1, fontSize: 13 },
   faqA: { ...FONTS.body, color: COLORS.textSecondary, marginTop: SPACING.md, lineHeight: 22 },
   aboutWrap: { alignItems: 'center', paddingVertical: SPACING.lg },
-  aboutLogo: { width: 72, height: 72, borderRadius: 20, backgroundColor: COLORS.brandPrimary, justifyContent: 'center', alignItems: 'center', marginBottom: SPACING.md },
-  aboutAppName: { ...FONTS.h2, color: COLORS.textPrimary },
-  aboutVersion: { ...FONTS.bodySmall, color: COLORS.textTertiary, marginTop: 4 },
-  aboutDesc: { ...FONTS.body, color: COLORS.textSecondary, textAlign: 'center', marginTop: SPACING.lg, marginBottom: SPACING.xl, lineHeight: 22 },
-  aboutTable: { width: '100%', gap: SPACING.sm },
+  aboutLogo: { width: 80, height: 80, borderRadius: 24, backgroundColor: COLORS.brandPrimary, justifyContent: 'center', alignItems: 'center', marginBottom: SPACING.lg, ...SHADOWS.card },
+  aboutAppName: { ...FONTS.h1, color: COLORS.textPrimary },
+  aboutVersion: { ...FONTS.bodySmall, color: COLORS.textTertiary, marginTop: 4, fontWeight: '600' },
+  aboutDesc: { ...FONTS.body, color: COLORS.textSecondary, textAlign: 'center', marginTop: SPACING.lg, marginBottom: SPACING.xxl, lineHeight: 22 },
+  aboutTable: { width: '100%', gap: SPACING.sm, backgroundColor: COLORS.subtle, padding: SPACING.lg, borderRadius: RADIUS.xl, borderWidth: 1, borderColor: COLORS.border },
   aboutRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: SPACING.sm, borderBottomWidth: 1, borderBottomColor: COLORS.border },
-  aboutLabel: { ...FONTS.bodySmall, color: COLORS.textSecondary },
-  aboutValue: { ...FONTS.bodySmall, color: COLORS.textPrimary, fontWeight: '600' },
+  aboutLabel: { ...FONTS.bodySmall, color: COLORS.textSecondary, fontWeight: '500' },
+  aboutValue: { ...FONTS.bodySmall, color: COLORS.textPrimary, fontWeight: '700' },
 });

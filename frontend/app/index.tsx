@@ -151,18 +151,23 @@ export default function LoginScreen() {
           <Text style={styles.tagline}>Gestion opérationnelle{'\n'}de vos locations en montagne</Text>
         </View>
 
-        {/* Features */}
+        {/* Features — Trust & Authority signals */}
         <View style={styles.features}>
           {[
-            { icon: 'calendar-outline' as const, text: 'Sync automatique Airbnb/Booking' },
-            { icon: 'people-outline' as const, text: 'Prestataires qualifiés à proximité' },
-            { icon: 'warning-outline' as const, text: 'Urgences traitées en temps réel' },
+            { icon: 'calendar-outline' as const, text: 'Sync automatique Airbnb/Booking', badge: null },
+            { icon: 'shield-checkmark-outline' as const, text: 'Prestataires vérifiés et assurés', badge: 'Certifié' },
+            { icon: 'warning-outline' as const, text: 'Urgences traitées en moins de 2h', badge: null },
           ].map((f, i) => (
             <View key={i} style={styles.featureRow}>
               <View style={styles.featureIcon}>
                 <Ionicons name={f.icon} size={20} color={COLORS.brandPrimary} />
               </View>
               <Text style={styles.featureText}>{f.text}</Text>
+              {f.badge && (
+                <View style={styles.featureBadge}>
+                  <Text style={styles.featureBadgeText}>{f.badge}</Text>
+                </View>
+              )}
             </View>
           ))}
         </View>
@@ -262,6 +267,19 @@ const styles = StyleSheet.create({
     ...FONTS.bodySmall,
     color: COLORS.textPrimary,
     flex: 1,
+  },
+  featureBadge: {
+    backgroundColor: COLORS.infoSoft,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 3,
+    borderRadius: RADIUS.sm,
+    marginLeft: SPACING.sm,
+  },
+  featureBadgeText: {
+    ...FONTS.caption,
+    color: COLORS.brandPrimary,
+    fontSize: 9,
+    textTransform: 'uppercase',
   },
   googleButton: {
     flexDirection: 'row',

@@ -1,5 +1,7 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { BlurView } from 'expo-blur';
+import { StyleSheet, Platform } from 'react-native';
 import { COLORS, FONTS } from '../../src/theme';
 
 export default function ProviderTabLayout() {
@@ -7,17 +9,26 @@ export default function ProviderTabLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: COLORS.brandPrimary,
-        tabBarInactiveTintColor: COLORS.textTertiary,
+        tabBarActiveTintColor: '#3B82F6', // Blue accent
+        tabBarInactiveTintColor: '#94A3B8', // Grey
         tabBarStyle: {
-          backgroundColor: COLORS.paper,
-          borderTopColor: COLORS.border,
+          position: 'absolute',
+          backgroundColor: '#FFFFFF', // Pure white
+          borderTopColor: '#F1F5F9', // Light border
           borderTopWidth: 1,
-          height: 60,
-          paddingBottom: 8,
-          paddingTop: 4,
+          height: 80,
+          paddingBottom: 25,
+          paddingTop: 10,
+          elevation: 10, // Shadow for android
+          shadowColor: '#000', // Shadow for ios
+          shadowOffset: { width: 0, height: -4 },
+          shadowOpacity: 0.05,
+          shadowRadius: 10,
         },
-        tabBarLabelStyle: { ...FONTS.caption, fontSize: 10 },
+        tabBarLabelStyle: {
+          fontFamily: 'PlusJakartaSans_500Medium',
+          fontSize: 11,
+        },
       }}
     >
       <Tabs.Screen

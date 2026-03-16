@@ -25,7 +25,7 @@ export default function AdminTabLayout() {
           shadowRadius: 10,
         },
         tabBarLabelStyle: {
-          fontFamily: 'Inter_500Medium',
+          fontFamily: 'PlusJakartaSans_500Medium',
           fontSize: 11,
         },
       }}

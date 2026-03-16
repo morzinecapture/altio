@@ -1,55 +1,56 @@
-// Altio Theme — Premium Light Design System
+// Altio Theme — Professional B2B Design System
+// Inspired by: Minimalism / Swiss Style + Trust & Authority (ui-ux-pro-max)
 import { Dimensions } from 'react-native';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 export const COLORS = {
-  // Backgrounds
-  background: '#F0F4FF',
+  // Backgrounds — near-white, clean, professional
+  background: '#F8FAFC',
   paper: '#FFFFFF',
-  subtle: '#F5F7FC',
-  surfaceGlass: 'rgba(255, 255, 255, 0.85)',
+  subtle: '#F1F5F9',
+  surfaceGlass: 'rgba(255, 255, 255, 0.92)',
 
-  // Text
-  textPrimary: '#1A1D2E',
-  textSecondary: '#6B7194',
-  textTertiary: '#9CA3C0',
+  // Text — Slate palette, high contrast
+  textPrimary: '#1E293B',
+  textSecondary: '#64748B',
+  textTertiary: '#94A3B8',
   textInverse: '#FFFFFF',
 
-  // Brand
-  brandPrimary: '#4A6CF7',
-  brandSecondary: '#6C63FF',
-  brandAccent: '#3B5BDB',
-  brandGradientStart: '#4A6CF7',
-  brandGradientEnd: '#6C63FF',
+  // Brand — bleu professionnel pur (blue-600/500), sans dérive violet
+  brandPrimary: '#2563EB',
+  brandSecondary: '#3B82F6',
+  brandAccent: '#1D4ED8',
+  brandGradientStart: '#2563EB',
+  brandGradientEnd: '#3B82F6',
 
   // Functional
-  urgency: '#FF6B6B',
-  urgencySoft: '#FFF0F0',
-  success: '#06D6A0',
-  successSoft: '#E6FBF3',
-  warning: '#FFB648',
-  warningSoft: '#FFF8EB',
-  info: '#4A6CF7',
-  infoSoft: '#EEF2FF',
+  urgency: '#EF4444',
+  urgencySoft: '#FEF2F2',
+  success: '#10B981',
+  successSoft: '#ECFDF5',
+  warning: '#F59E0B',
+  warningSoft: '#FFFBEB',
+  info: '#2563EB',
+  infoSoft: '#EFF6FF',
 
-  // Accent (for badges, tags)
-  coral: '#FF8A65',
-  coralSoft: '#FFF3EE',
-  purple: '#8B5CF6',
-  purpleSoft: '#F3EEFF',
+  // Accent — orange CTA recommandé B2B, violet uniquement pour admin
+  coral: '#F97316',
+  coralSoft: '#FFF7ED',
+  purple: '#7C3AED',
+  purpleSoft: '#F5F3FF',
 
-  // Border
-  border: '#E8ECF4',
-  borderActive: '#C5CCE0',
+  // Border — Slate 200/300
+  border: '#E2E8F0',
+  borderActive: '#CBD5E1',
 };
 
 export const GRADIENT = {
-  header: ['#E8F0FE', '#D4E4FF', '#F0F4FF'] as const,
-  brandButton: ['#4A6CF7', '#6C63FF'] as const,
-  urgencyButton: ['#FF6B6B', '#FF8A8A'] as const,
-  successButton: ['#06D6A0', '#34E8BE'] as const,
-  warmBanner: ['#FF9A56', '#FFB648'] as const,
+  header: ['#F8FAFC', '#EFF6FF', '#F8FAFC'] as const,
+  brandButton: ['#2563EB', '#3B82F6'] as const,
+  urgencyButton: ['#EF4444', '#F87171'] as const,
+  successButton: ['#10B981', '#34D399'] as const,
+  warmBanner: ['#F97316', '#FB923C'] as const,
 };
 
 export const SPACING = {
@@ -72,51 +73,52 @@ export const RADIUS = {
   full: 999,
 };
 
+// Shadows neutres (Slate 900) — pas de couleurs de marque sur les ombres
 export const SHADOWS = {
   card: {
-    shadowColor: '#4A6CF7',
-    shadowOffset: { width: 0, height: 2 },
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
+    shadowRadius: 6,
+    elevation: 2,
   },
   cardHover: {
-    shadowColor: '#4A6CF7',
+    shadowColor: '#0F172A',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
+    shadowOpacity: 0.10,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  float: {
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.14,
     shadowRadius: 16,
     elevation: 6,
   },
-  float: {
-    shadowColor: '#4A6CF7',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.18,
-    shadowRadius: 20,
-    elevation: 8,
-  },
   urgency: {
-    shadowColor: '#FF6B6B',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 8,
+    shadowColor: '#EF4444',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.20,
+    shadowRadius: 8,
+    elevation: 4,
   },
   success: {
-    shadowColor: '#06D6A0',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
-    elevation: 6,
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    elevation: 4,
   },
 };
 
 export const FONTS = {
-  h1: { fontSize: 28, fontWeight: '700' as const, letterSpacing: -0.5, fontFamily: 'Inter_700Bold' },
-  h2: { fontSize: 22, fontWeight: '700' as const, letterSpacing: -0.3, fontFamily: 'Inter_700Bold' },
-  h3: { fontSize: 18, fontWeight: '600' as const, fontFamily: 'Inter_600SemiBold' },
-  body: { fontSize: 15, fontWeight: '400' as const, lineHeight: 22, fontFamily: 'Inter_400Regular' },
-  bodySmall: { fontSize: 13, fontWeight: '500' as const, fontFamily: 'Inter_500Medium' },
-  caption: { fontSize: 11, fontWeight: '600' as const, letterSpacing: 0.8, textTransform: 'uppercase' as const, fontFamily: 'Inter_600SemiBold' },
+  h1: { fontSize: 28, fontWeight: '800' as const, letterSpacing: -0.8, fontFamily: 'PlusJakartaSans_800ExtraBold' },
+  h2: { fontSize: 22, fontWeight: '700' as const, letterSpacing: -0.5, fontFamily: 'PlusJakartaSans_700Bold' },
+  h3: { fontSize: 18, fontWeight: '600' as const, letterSpacing: -0.2, fontFamily: 'PlusJakartaSans_600SemiBold' },
+  body: { fontSize: 15, fontWeight: '400' as const, lineHeight: 24, fontFamily: 'PlusJakartaSans_400Regular' },
+  bodySmall: { fontSize: 13, fontWeight: '400' as const, lineHeight: 20, fontFamily: 'PlusJakartaSans_400Regular' },
+  caption: { fontSize: 11, fontWeight: '600' as const, letterSpacing: 0.6, textTransform: 'uppercase' as const, fontFamily: 'PlusJakartaSans_600SemiBold' },
 };
 
 export const STATUS_COLORS: Record<string, { bg: string; text: string }> = {

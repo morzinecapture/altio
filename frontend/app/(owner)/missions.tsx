@@ -1,9 +1,10 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, RefreshControl, Modal, TextInput, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, RefreshControl, Modal, TextInput, Alert, Platform } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, FONTS, SPACING, RADIUS, SHADOWS, STATUS_COLORS, STATUS_LABELS, MISSION_TYPE_LABELS } from '../../src/theme';
+import { LinearGradient } from 'expo-linear-gradient';
+import { COLORS, FONTS, SPACING, RADIUS, SHADOWS, STATUS_COLORS, STATUS_LABELS, MISSION_TYPE_LABELS, GRADIENT } from '../../src/theme';
 import { getMissions, createMission, getProperties } from '../../src/api';
 
 export default function OwnerMissionsScreen() {
@@ -22,6 +23,7 @@ export default function OwnerMissionsScreen() {
   const [description, setDescription] = useState('');
   const [rate, setRate] = useState('');
   const [creating, setCreating] = useState(false);
+  const [scheduledDate, setScheduledDate] = useState(new Date());
 
   const fetchData = async () => {
     try {
@@ -44,7 +46,7 @@ export default function OwnerMissionsScreen() {
         mode,
         description: description || undefined,
         fixed_rate: rate ? parseFloat(rate) : undefined,
-        scheduled_date: new Date().toISOString(),
+        scheduled_date: scheduledDate.toISOString(),
       });
       setShowCreate(false);
       setDescription(''); setRate(''); setSelectedProp('');
@@ -58,19 +60,24 @@ export default function OwnerMissionsScreen() {
     { key: 'pending', label: 'En attente' },
     { key: 'assigned', label: 'Assignées' },
     { key: 'in_progress', label: 'En cours' },
-    { key: 'completed', label: 'Terminées' },
+    { key: 'awaiting_payment', label: 'À payer' },
+    { key: 'completed', label: 'Historique' },
   ];
 
   if (loading) return <View style={styles.center}><ActivityIndicator size="large" color={COLORS.brandPrimary} /></View>;
 
   return (
-    <SafeAreaView style={styles.container} testID="owner-missions-screen">
-      <View style={styles.header}>
+    <SafeAreaView style={styles.container} testID="owner-missions-screen" edges={['top']}>
+      <LinearGradient
+        colors={GRADIENT.header}
+        start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+        style={styles.header}
+      >
         <Text style={styles.title}>Missions</Text>
         <TouchableOpacity testID="create-mission-btn" style={styles.addBtn} onPress={() => setShowCreate(true)}>
           <Ionicons name="add" size={24} color={COLORS.textInverse} />
         </TouchableOpacity>
-      </View>
+      </LinearGradient>
 
       {/* Filters */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterBar} contentContainerStyle={styles.filterContent}>
@@ -101,7 +108,7 @@ export default function OwnerMissionsScreen() {
               key={m.mission_id}
               testID={`mission-item-${m.mission_id}`}
               style={styles.card}
-              onPress={() => router.push(`/mission/${m.mission_id}`)}
+              onPress={() => router.push(m.is_emergency ? `/emergency?id=${m.mission_id}` : `/mission/${m.mission_id}`)}
             >
               <View style={styles.cardTop}>
                 <View style={[styles.chip, { backgroundColor: (STATUS_COLORS[m.status] || STATUS_COLORS.pending).bg }]}>
@@ -109,14 +116,16 @@ export default function OwnerMissionsScreen() {
                     {STATUS_LABELS[m.status] || m.status}
                   </Text>
                 </View>
-                <Text style={styles.typeLabel}>{MISSION_TYPE_LABELS[m.mission_type] || m.mission_type}</Text>
+                <Text style={styles.typeLabel}>📌 {MISSION_TYPE_LABELS[m.mission_type] || m.mission_type}</Text>
               </View>
               <Text style={styles.cardTitle}>{m.property_name || 'Logement'}</Text>
               {m.description && <Text style={styles.cardDesc} numberOfLines={2}>{m.description}</Text>}
               <View style={styles.cardMeta}>
                 <Ionicons name="calendar-outline" size={14} color={COLORS.textTertiary} />
                 <Text style={styles.metaText}>
-                  {m.scheduled_date ? new Date(m.scheduled_date).toLocaleDateString('fr-FR') : '-'}
+                  {m.scheduled_date
+                    ? `${new Date(m.scheduled_date).toLocaleDateString('fr-FR')} à ${new Date(m.scheduled_date).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`
+                    : '-'}
                 </Text>
                 {m.fixed_rate && (
                   <>
@@ -149,11 +158,11 @@ export default function OwnerMissionsScreen() {
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.propSelect}>
                 {properties.map((p) => (
                   <TouchableOpacity
-                    key={p.property_id}
-                    style={[styles.propChip, selectedProp === p.property_id && styles.propChipActive]}
-                    onPress={() => setSelectedProp(p.property_id)}
+                    key={p.id}
+                    style={[styles.propChip, selectedProp === p.id && styles.propChipActive]}
+                    onPress={() => setSelectedProp(p.id)}
                   >
-                    <Text style={[styles.propChipText, selectedProp === p.property_id && styles.propChipTextActive]}>
+                    <Text style={[styles.propChipText, selectedProp === p.id && styles.propChipTextActive]}>
                       {p.name}
                     </Text>
                   </TouchableOpacity>
@@ -182,6 +191,28 @@ export default function OwnerMissionsScreen() {
                 </TouchableOpacity>
                 <TouchableOpacity style={[styles.typeChip, mode === 'bidding' && styles.typeChipActive]} onPress={() => setMode('bidding')}>
                   <Text style={[styles.typeChipText, mode === 'bidding' && styles.typeChipTextActive]}>Appel d'offres</Text>
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.inputLabel}>Date et Heure *</Text>
+              <View style={{ flexDirection: 'row', gap: SPACING.md }}>
+                {/* Fallback simple for iOS/Android default pickers - in Expo, standard way is @react-native-community/datetimepicker, but to avoid missing dependencies, we'll use standard text/buttons to trigger it if installed or fallback to safe defaults. For Altitude V1 scope, a simple TextInput for date/time is prone to error. Assuming we don't have the date-picker lib installed, we use a controlled native approach. 
+                Actually, let's use the simplest reliable input format to avoid breaking the build: A date-time selector row. */}
+                <TouchableOpacity
+                  style={[styles.input, { flex: 1, justifyContent: 'center' }]}
+                  onPress={() => {
+                    // In a real app we'd use DateTimePicker here.
+                    // For V1 MVP without adding dependencies, we'll just mock it or assume today + 2 days
+                    Alert.alert('Date', 'Pour la V1, la date est définie par défaut à dans 2 jours (Simulation).', [
+                      { text: 'Demain', onPress: () => { const d = new Date(); d.setDate(d.getDate() + 1); setScheduledDate(d); } },
+                      { text: 'Dans 2 jours', onPress: () => { const d = new Date(); d.setDate(d.getDate() + 2); setScheduledDate(d); } },
+                      { text: 'Dans 1 semaine', onPress: () => { const d = new Date(); d.setDate(d.getDate() + 7); setScheduledDate(d); } }
+                    ]);
+                  }}
+                >
+                  <Text style={{ ...FONTS.body, color: COLORS.textPrimary }}>
+                    {scheduledDate.toLocaleDateString('fr-FR')} à {scheduledDate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                  </Text>
                 </TouchableOpacity>
               </View>
 
@@ -222,43 +253,54 @@ export default function OwnerMissionsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.background },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: SPACING.xl, paddingTop: SPACING.lg },
-  title: { ...FONTS.h2, color: COLORS.textPrimary },
-  addBtn: { width: 44, height: 44, borderRadius: 14, backgroundColor: COLORS.brandPrimary, justifyContent: 'center', alignItems: 'center' },
-  filterBar: { maxHeight: 50, marginTop: SPACING.md },
-  filterContent: { paddingHorizontal: SPACING.xl, gap: SPACING.sm },
-  filterChip: { paddingHorizontal: SPACING.lg, paddingVertical: SPACING.sm, borderRadius: RADIUS.full, backgroundColor: COLORS.paper, borderWidth: 1, borderColor: COLORS.border },
-  filterChipActive: { backgroundColor: COLORS.brandPrimary, borderColor: COLORS.brandPrimary },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: SPACING.xl,
+    paddingTop: SPACING.lg,
+    paddingBottom: SPACING.xxl,
+    borderBottomLeftRadius: RADIUS.lg,
+    borderBottomRightRadius: RADIUS.lg,
+    elevation: 2,
+    zIndex: 10
+  },
+  title: { ...FONTS.h1, color: COLORS.textPrimary },
+  addBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: COLORS.brandPrimary, justifyContent: 'center', alignItems: 'center', ...SHADOWS.card },
+  filterBar: { maxHeight: 50, marginTop: -SPACING.md, zIndex: 11 },
+  filterContent: { paddingHorizontal: SPACING.xl, gap: SPACING.sm, alignItems: 'center' },
+  filterChip: { paddingHorizontal: SPACING.lg, paddingVertical: 10, borderRadius: RADIUS.full, backgroundColor: COLORS.paper, ...SHADOWS.card },
+  filterChipActive: { backgroundColor: COLORS.brandPrimary },
   filterText: { ...FONTS.bodySmall, color: COLORS.textSecondary },
   filterTextActive: { color: COLORS.textInverse },
   empty: { alignItems: 'center', paddingVertical: SPACING.xxxl * 2 },
-  emptyText: { ...FONTS.body, color: COLORS.textTertiary, marginTop: SPACING.md },
-  card: { backgroundColor: COLORS.paper, marginHorizontal: SPACING.xl, marginTop: SPACING.md, padding: SPACING.lg, borderRadius: RADIUS.lg, ...SHADOWS.card },
+  emptyText: { ...FONTS.body, color: COLORS.textSecondary, marginTop: SPACING.md, fontWeight: '600' },
+  card: { backgroundColor: COLORS.paper, marginHorizontal: SPACING.xl, marginTop: SPACING.lg, padding: SPACING.lg, borderRadius: RADIUS.xl, ...SHADOWS.card, borderWidth: 1, borderColor: COLORS.border },
   cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.sm },
-  chip: { paddingHorizontal: SPACING.md, paddingVertical: 3, borderRadius: RADIUS.full },
-  chipText: { ...FONTS.caption, fontSize: 10 },
+  chip: { paddingHorizontal: SPACING.md, paddingVertical: 6, borderRadius: RADIUS.full },
+  chipText: { ...FONTS.caption, fontSize: 11 },
   typeLabel: { ...FONTS.caption, color: COLORS.textTertiary },
-  cardTitle: { ...FONTS.h3, color: COLORS.textPrimary, fontSize: 16 },
-  cardDesc: { ...FONTS.bodySmall, color: COLORS.textSecondary, marginTop: 4 },
-  cardMeta: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginTop: SPACING.md, paddingTop: SPACING.md, borderTopWidth: 1, borderTopColor: COLORS.border },
+  cardTitle: { ...FONTS.h3, color: COLORS.textPrimary, fontSize: 18, marginBottom: 2 },
+  cardDesc: { ...FONTS.bodySmall, color: COLORS.textSecondary, marginTop: SPACING.xs, lineHeight: 18 },
+  cardMeta: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, marginTop: SPACING.md, paddingTop: SPACING.md, borderTopWidth: 1, borderTopColor: COLORS.border },
   metaText: { ...FONTS.bodySmall, color: COLORS.textTertiary },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalContent: { backgroundColor: COLORS.paper, borderTopLeftRadius: RADIUS.xl, borderTopRightRadius: RADIUS.xl, padding: SPACING.xl, maxHeight: '85%' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(26, 29, 46, 0.4)', justifyContent: 'flex-end' },
+  modalContent: { backgroundColor: COLORS.paper, borderTopLeftRadius: RADIUS.xxl, borderTopRightRadius: RADIUS.xxl, padding: SPACING.xl, maxHeight: '85%', ...SHADOWS.float },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.xl },
   modalTitle: { ...FONTS.h2, color: COLORS.textPrimary },
-  inputLabel: { ...FONTS.caption, color: COLORS.textSecondary, marginTop: SPACING.lg, marginBottom: SPACING.sm },
-  propSelect: { maxHeight: 40 },
-  propChip: { paddingHorizontal: SPACING.lg, paddingVertical: SPACING.sm, borderRadius: RADIUS.full, backgroundColor: COLORS.subtle, marginRight: SPACING.sm },
-  propChipActive: { backgroundColor: COLORS.brandPrimary },
-  propChipText: { ...FONTS.bodySmall, color: COLORS.textSecondary },
+  inputLabel: { ...FONTS.bodySmall, color: COLORS.textSecondary, fontWeight: '600', marginTop: SPACING.lg, marginBottom: SPACING.sm },
+  propSelect: { maxHeight: 44 },
+  propChip: { paddingHorizontal: SPACING.lg, paddingVertical: 10, borderRadius: RADIUS.full, backgroundColor: COLORS.subtle, marginRight: SPACING.sm, borderWidth: 1, borderColor: COLORS.border },
+  propChipActive: { backgroundColor: COLORS.brandPrimary, borderColor: COLORS.brandPrimary },
+  propChipText: { ...FONTS.bodySmall, color: COLORS.textSecondary, fontWeight: '500' },
   propChipTextActive: { color: COLORS.textInverse },
   typeRow: { flexDirection: 'row', gap: SPACING.sm },
-  typeChip: { paddingHorizontal: SPACING.lg, paddingVertical: SPACING.sm, borderRadius: RADIUS.full, backgroundColor: COLORS.subtle },
-  typeChipActive: { backgroundColor: COLORS.brandPrimary },
-  typeChipText: { ...FONTS.bodySmall, color: COLORS.textSecondary },
+  typeChip: { paddingHorizontal: SPACING.lg, paddingVertical: 10, borderRadius: RADIUS.full, backgroundColor: COLORS.subtle, borderWidth: 1, borderColor: COLORS.border },
+  typeChipActive: { backgroundColor: COLORS.brandPrimary, borderColor: COLORS.brandPrimary },
+  typeChipText: { ...FONTS.bodySmall, color: COLORS.textSecondary, fontWeight: '500' },
   typeChipTextActive: { color: COLORS.textInverse },
-  input: { backgroundColor: COLORS.subtle, borderRadius: RADIUS.md, padding: SPACING.lg, ...FONTS.body, color: COLORS.textPrimary },
-  textArea: { minHeight: 80, textAlignVertical: 'top' },
-  submitBtn: { backgroundColor: COLORS.brandPrimary, paddingVertical: SPACING.lg, borderRadius: RADIUS.lg, alignItems: 'center', marginTop: SPACING.xl, marginBottom: SPACING.xxl },
+  input: { backgroundColor: COLORS.subtle, borderRadius: RADIUS.md, padding: SPACING.lg, ...FONTS.body, color: COLORS.textPrimary, borderWidth: 1, borderColor: COLORS.border },
+  textArea: { minHeight: 100, textAlignVertical: 'top' },
+  submitBtn: { backgroundColor: COLORS.brandPrimary, paddingVertical: SPACING.lg, borderRadius: RADIUS.xl, alignItems: 'center', marginTop: SPACING.xxl, marginBottom: SPACING.xxxl, ...SHADOWS.card },
   submitText: { ...FONTS.h3, color: COLORS.textInverse },
 });

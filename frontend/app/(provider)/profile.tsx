@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, Alert, ActivityIndicator, TextInput } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, Alert, ActivityIndicator, TextInput, Image, Linking } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, FONTS, SPACING, RADIUS, SHADOWS } from '../../src/theme';
+import { LinearGradient } from 'expo-linear-gradient';
+import { COLORS, FONTS, SPACING, RADIUS, SHADOWS, GRADIENT } from '../../src/theme';
 import { useAuth } from '../../src/auth';
-import { getProfile, updateProviderProfile, geocodeAddress } from '../../src/api';
+import { getProfile, updateProviderProfile, geocodeAddress, createStripeConnectAccount } from '../../src/api';
 
 const SPECIALTIES = [
   { id: 'cleaning', icon: 'sparkles-outline' as const, label: 'Ménage' },
@@ -57,6 +58,7 @@ export default function ProviderProfile() {
   const [locationLabel, setLocationLabel] = useState('');
   const [loadingProfile, setLoadingProfile] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [connectingStripe, setConnectingStripe] = useState(false);
 
   const onLogout = async () => {
     await handleLogout();
@@ -103,6 +105,21 @@ export default function ProviderProfile() {
     } finally { setSaving(false); }
   };
 
+  const handleConnectStripe = async () => {
+    setConnectingStripe(true);
+    try {
+      const { url } = await createStripeConnectAccount();
+      if (url) {
+        Linking.openURL(url);
+        setActiveModal(null);
+      }
+    } catch (e: any) {
+      Alert.alert('Erreur Stripe', e.message);
+    } finally {
+      setConnectingStripe(false);
+    }
+  };
+
   const toggleSpecialty = (id: string) =>
     setSpecialties(prev => prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]);
 
@@ -122,7 +139,10 @@ export default function ProviderProfile() {
         <View style={styles.header}><Text style={styles.title}>Profil</Text></View>
 
         <View style={styles.userCard}>
-          <View style={styles.avatar}><Text style={styles.avatarText}>{user?.name?.[0] || 'P'}</Text></View>
+          <Image
+            source={{ uri: `https://ui-avatars.com/api/?name=${user?.name || 'Provider'}&background=FF6B6B&color=fff&size=150&font-size=0.4&rounded=true` }}
+            style={styles.avatar}
+          />
           <Text style={styles.userName}>{user?.name}</Text>
           <Text style={styles.userEmail}>{user?.email}</Text>
           <View style={styles.roleBadge}>
@@ -298,10 +318,21 @@ export default function ProviderProfile() {
                 <Text style={styles.featureRowText}>{item.text}</Text>
               </View>
             ))}
-            <View style={styles.comingSoonBadge}>
-              <Ionicons name="time-outline" size={14} color={COLORS.warning} />
-              <Text style={styles.comingSoonBadgeText}>Connexion Stripe — prochainement</Text>
-            </View>
+
+            <TouchableOpacity
+              style={[styles.saveBtn, { backgroundColor: '#635BFF', marginTop: SPACING.xxl }]}
+              onPress={handleConnectStripe}
+              disabled={connectingStripe}
+            >
+              {connectingStripe ? (
+                <ActivityIndicator color={COLORS.textInverse} />
+              ) : (
+                <>
+                  <Ionicons name="link-outline" size={20} color={COLORS.textInverse} />
+                  <Text style={styles.saveBtnText}>Connecter mon compte Stripe</Text>
+                </>
+              )}
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -342,54 +373,54 @@ export default function ProviderProfile() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
-  header: { paddingHorizontal: SPACING.xl, paddingTop: SPACING.lg },
-  title: { ...FONTS.h2, color: COLORS.textPrimary },
-  userCard: { alignItems: 'center', backgroundColor: COLORS.paper, marginHorizontal: SPACING.xl, marginTop: SPACING.xl, padding: SPACING.xxl, borderRadius: RADIUS.xl, ...SHADOWS.card },
-  avatar: { width: 70, height: 70, borderRadius: 35, backgroundColor: COLORS.brandPrimary, justifyContent: 'center', alignItems: 'center', marginBottom: SPACING.md },
+  header: { paddingHorizontal: SPACING.xl, paddingTop: SPACING.xxl, paddingBottom: SPACING.lg },
+  title: { ...FONTS.h1, color: COLORS.textPrimary },
+  userCard: { alignItems: 'center', backgroundColor: COLORS.paper, marginHorizontal: SPACING.xl, padding: SPACING.xxl, borderRadius: RADIUS.xxl, ...SHADOWS.float, borderWidth: 1, borderColor: COLORS.border },
+  avatar: { width: 80, height: 80, borderRadius: 40, justifyContent: 'center', alignItems: 'center', marginBottom: SPACING.lg, ...SHADOWS.card },
   avatarText: { ...FONTS.h1, color: COLORS.textInverse },
-  userName: { ...FONTS.h3, color: COLORS.textPrimary },
-  userEmail: { ...FONTS.bodySmall, color: COLORS.textSecondary, marginTop: 4 },
-  roleBadge: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, marginTop: SPACING.md, backgroundColor: COLORS.subtle, paddingHorizontal: SPACING.md, paddingVertical: SPACING.xs, borderRadius: RADIUS.full },
-  roleText: { ...FONTS.bodySmall, color: COLORS.brandPrimary },
-  menuSection: { marginTop: SPACING.xl, marginHorizontal: SPACING.xl, backgroundColor: COLORS.paper, borderRadius: RADIUS.xl, ...SHADOWS.card },
-  menuItem: { flexDirection: 'row', alignItems: 'center', padding: SPACING.lg, borderBottomWidth: 1, borderBottomColor: COLORS.border, gap: SPACING.md },
-  menuIconWrap: { width: 36, height: 36, borderRadius: 10, backgroundColor: COLORS.subtle, justifyContent: 'center', alignItems: 'center' },
-  menuLabel: { flex: 1, ...FONTS.body, color: COLORS.textPrimary },
-  logoutBtn: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, marginHorizontal: SPACING.xl, marginTop: SPACING.xl, padding: SPACING.lg, backgroundColor: COLORS.urgencySoft, borderRadius: RADIUS.lg },
-  logoutText: { ...FONTS.body, color: COLORS.urgency, fontWeight: '600' },
-  version: { ...FONTS.bodySmall, color: COLORS.textTertiary, textAlign: 'center', marginTop: SPACING.xxl, marginBottom: SPACING.xxxl },
+  userName: { ...FONTS.h2, color: COLORS.textPrimary },
+  userEmail: { ...FONTS.body, color: COLORS.textSecondary, marginTop: 4 },
+  roleBadge: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, marginTop: SPACING.md, backgroundColor: COLORS.subtle, paddingHorizontal: SPACING.lg, paddingVertical: 6, borderRadius: RADIUS.full, borderWidth: 1, borderColor: COLORS.border },
+  roleText: { ...FONTS.bodySmall, color: COLORS.brandPrimary, fontWeight: '600' },
+  menuSection: { marginTop: SPACING.xxl, marginHorizontal: SPACING.xl, backgroundColor: COLORS.paper, borderRadius: RADIUS.xxl, ...SHADOWS.card, borderWidth: 1, borderColor: COLORS.border },
+  menuItem: { flexDirection: 'row', alignItems: 'center', padding: SPACING.lg, borderBottomWidth: 1, borderBottomColor: COLORS.subtle, gap: SPACING.md },
+  menuIconWrap: { width: 40, height: 40, borderRadius: 12, backgroundColor: COLORS.subtle, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: COLORS.border },
+  menuLabel: { flex: 1, ...FONTS.body, color: COLORS.textPrimary, fontWeight: '500' },
+  logoutBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.md, marginHorizontal: SPACING.xl, marginTop: SPACING.xxl, padding: SPACING.lg, backgroundColor: COLORS.paper, borderRadius: RADIUS.xl, borderWidth: 1, borderColor: COLORS.urgency, ...SHADOWS.card },
+  logoutText: { ...FONTS.h3, color: COLORS.urgency, fontSize: 16 },
+  version: { ...FONTS.bodySmall, color: COLORS.textTertiary, textAlign: 'center', marginTop: SPACING.xxxl, marginBottom: SPACING.xxxl, letterSpacing: 1 },
   // Modal
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  sheet: { backgroundColor: COLORS.paper, borderTopLeftRadius: RADIUS.xl, borderTopRightRadius: RADIUS.xl, padding: SPACING.xl, maxHeight: '80%' },
+  overlay: { flex: 1, backgroundColor: 'rgba(26,29,46,0.5)', justifyContent: 'flex-end' },
+  sheet: { backgroundColor: COLORS.paper, borderTopLeftRadius: RADIUS.xxl, borderTopRightRadius: RADIUS.xxl, padding: SPACING.xl, maxHeight: '85%', ...SHADOWS.float },
   sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.xl },
   sheetTitle: { ...FONTS.h2, color: COLORS.textPrimary },
   loadingWrap: { height: 150, justifyContent: 'center', alignItems: 'center' },
   comingSoonWrap: { alignItems: 'center', paddingVertical: SPACING.lg, marginBottom: SPACING.lg },
-  bigIconWrap: { width: 72, height: 72, borderRadius: 20, backgroundColor: COLORS.subtle, justifyContent: 'center', alignItems: 'center', marginBottom: SPACING.md },
-  comingSoonTitle: { ...FONTS.h3, color: COLORS.textPrimary },
+  bigIconWrap: { width: 80, height: 80, borderRadius: 24, backgroundColor: COLORS.subtle, justifyContent: 'center', alignItems: 'center', marginBottom: SPACING.md, borderWidth: 1, borderColor: COLORS.border },
+  comingSoonTitle: { ...FONTS.h2, color: COLORS.textPrimary },
   comingSoonDesc: { ...FONTS.body, color: COLORS.textSecondary, textAlign: 'center', marginTop: SPACING.sm, lineHeight: 22 },
-  comingSoonBadge: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, alignSelf: 'center', marginTop: SPACING.lg, backgroundColor: COLORS.warningSoft, paddingHorizontal: SPACING.lg, paddingVertical: SPACING.sm, borderRadius: RADIUS.full },
-  comingSoonBadgeText: { ...FONTS.bodySmall, color: COLORS.warning },
+  comingSoonBadge: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, alignSelf: 'center', marginTop: SPACING.xl, backgroundColor: COLORS.warningSoft, paddingHorizontal: SPACING.xl, paddingVertical: SPACING.md, borderRadius: RADIUS.full },
+  comingSoonBadgeText: { ...FONTS.bodySmall, color: COLORS.warning, fontWeight: '600' },
   featureRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, paddingVertical: SPACING.sm },
-  featureRowText: { ...FONTS.body, color: COLORS.textSecondary, flex: 1 },
-  fieldLabel: { ...FONTS.caption, color: COLORS.textSecondary, marginBottom: SPACING.md },
+  featureRowText: { ...FONTS.body, color: COLORS.textSecondary, flex: 1, fontWeight: '500' },
+  fieldLabel: { ...FONTS.bodySmall, color: COLORS.textSecondary, marginBottom: SPACING.sm, fontWeight: '600' },
   specialtyGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm },
-  specialtyChip: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, borderRadius: RADIUS.full, backgroundColor: COLORS.subtle, borderWidth: 1, borderColor: COLORS.border },
-  specialtyChipSelected: { backgroundColor: COLORS.brandPrimary, borderColor: COLORS.brandPrimary },
-  specialtyChipText: { ...FONTS.bodySmall, color: COLORS.textSecondary, fontSize: 12 },
-  specialtyChipTextSelected: { color: COLORS.textInverse },
+  specialtyChip: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, paddingHorizontal: SPACING.lg, paddingVertical: SPACING.md, borderRadius: RADIUS.lg, backgroundColor: COLORS.subtle, borderWidth: 1, borderColor: COLORS.border },
+  specialtyChipSelected: { backgroundColor: COLORS.brandPrimary, borderColor: COLORS.brandPrimary, ...SHADOWS.float },
+  specialtyChipText: { ...FONTS.bodySmall, color: COLORS.textSecondary, fontSize: 13, fontWeight: '500' },
+  specialtyChipTextSelected: { color: COLORS.textInverse, fontWeight: '700' },
   chipRow: { flexDirection: 'row', gap: SPACING.sm, flexWrap: 'wrap' },
-  chip: { paddingHorizontal: SPACING.lg, paddingVertical: SPACING.md, borderRadius: RADIUS.full, backgroundColor: COLORS.subtle, borderWidth: 2, borderColor: COLORS.border },
-  chipSelected: { backgroundColor: COLORS.brandPrimary, borderColor: COLORS.brandPrimary },
-  chipText: { ...FONTS.bodySmall, color: COLORS.textSecondary },
-  chipTextSelected: { color: COLORS.textInverse },
-  dayChip: { width: 44, height: 44, borderRadius: 10, backgroundColor: COLORS.subtle, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: COLORS.border },
-  saveBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.sm, backgroundColor: COLORS.brandPrimary, paddingVertical: SPACING.lg, borderRadius: RADIUS.lg, marginTop: SPACING.xl, ...SHADOWS.float },
+  chip: { paddingHorizontal: SPACING.xl, paddingVertical: 12, borderRadius: RADIUS.full, backgroundColor: COLORS.subtle, borderWidth: 1, borderColor: COLORS.border },
+  chipSelected: { backgroundColor: COLORS.brandPrimary, borderColor: COLORS.brandPrimary, ...SHADOWS.card },
+  chipText: { ...FONTS.bodySmall, color: COLORS.textSecondary, fontWeight: '500' },
+  chipTextSelected: { color: COLORS.textInverse, fontWeight: '600' },
+  dayChip: { width: 48, height: 48, borderRadius: 12, backgroundColor: COLORS.subtle, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: COLORS.border },
+  saveBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.sm, backgroundColor: COLORS.brandPrimary, paddingVertical: SPACING.lg, borderRadius: RADIUS.xxl, marginTop: SPACING.xl, ...SHADOWS.float },
   saveBtnText: { ...FONTS.h3, color: COLORS.textInverse },
-  locationInput: { backgroundColor: COLORS.subtle, borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.lg, paddingHorizontal: SPACING.lg, paddingVertical: SPACING.md, ...FONTS.body, color: COLORS.textPrimary, marginBottom: SPACING.xs },
-  locationHint: { ...FONTS.bodySmall, color: COLORS.textTertiary, fontSize: 11, marginBottom: SPACING.sm },
-  faqItem: { backgroundColor: COLORS.subtle, padding: SPACING.lg, borderRadius: RADIUS.lg, marginBottom: SPACING.md },
-  faqQuestion: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: SPACING.sm },
-  faqQ: { ...FONTS.bodySmall, color: COLORS.textPrimary, fontWeight: '700', flex: 1 },
+  locationInput: { backgroundColor: COLORS.subtle, borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.xl, paddingHorizontal: SPACING.lg, paddingVertical: SPACING.lg, ...FONTS.body, color: COLORS.textPrimary, marginBottom: SPACING.sm },
+  locationHint: { ...FONTS.caption, color: COLORS.textTertiary, fontSize: 12, marginBottom: SPACING.sm },
+  faqItem: { backgroundColor: COLORS.subtle, padding: SPACING.xl, borderRadius: RADIUS.xl, marginBottom: SPACING.md, borderWidth: 1, borderColor: COLORS.border },
+  faqQuestion: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: SPACING.md },
+  faqQ: { ...FONTS.bodySmall, color: COLORS.textPrimary, fontWeight: '700', flex: 1, fontSize: 13 },
   faqA: { ...FONTS.body, color: COLORS.textSecondary, marginTop: SPACING.md, lineHeight: 22 },
 });

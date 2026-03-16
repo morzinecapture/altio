@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput,
-  Alert, ActivityIndicator, KeyboardAvoidingView, Platform,
+  Alert, ActivityIndicator, KeyboardAvoidingView, Platform, Image
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, FONTS, SPACING, RADIUS, SHADOWS, SERVICE_TYPE_LABELS } from '../src/theme';
+import { LinearGradient } from 'expo-linear-gradient';
+import { COLORS, FONTS, SPACING, RADIUS, SHADOWS, SERVICE_TYPE_LABELS, GRADIENT } from '../src/theme';
 import { useStripe } from '@stripe/stripe-react-native';
 import { useAuth } from '../src/auth';
 import {
@@ -152,18 +153,22 @@ export default function EmergencyScreen() {
 
   // ===== OWNER: Accept bid =====
   const handleAcceptBid = (bid: any) => {
-    const total = (bid.travel_cost || 0) + (bid.diagnostic_cost || 0);
+    const baseTotal = (bid.travel_cost || 0) + (bid.diagnostic_cost || 0);
+    const appFee = baseTotal * 0.10; // 10% for Altio
+    const ownerTotal = baseTotal + appFee;
+
     const arrivalStr = new Date(bid.estimated_arrival).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
     Alert.alert(
       'Accepter cette offre ?',
-      `Technicien : ${bid.provider_name}\nFrais totaux : ${total}€\nArrivée estimée : ${arrivalStr}`,
+      `Technicien : ${bid.provider_name}\nDéplacement & Diagnostic : ${baseTotal.toFixed(2)}€\nFrais urgence (10%) : ${appFee.toFixed(2)}€\n\nTotal à payer : ${ownerTotal.toFixed(2)}€\nArrivée estimée : ${arrivalStr}`,
       [
         { text: 'Annuler', style: 'cancel' },
         {
-          text: 'Payer & Confirmer', onPress: async () => {
+          text: `Payer ${ownerTotal.toFixed(2)}€`, onPress: async () => {
             try {
               setLoading(true);
-              const { clientSecret } = await createPaymentIntent(total, { emergencyId, bidId: bid.id }, 'automatic');
+              // Provider's Stripe Connect ID will be passed here when implemented (bid.provider_stripe_id)
+              const { clientSecret } = await createPaymentIntent(ownerTotal, { emergencyId, bidId: bid.id }, 'automatic');
 
               const { error: initError } = await initPaymentSheet({
                 merchantDisplayName: 'MontRTO',
@@ -216,16 +221,22 @@ export default function EmergencyScreen() {
   const handleAcceptQuote = () => {
     const quote = emergency.quote;
     if (!quote) return;
+
+    const baseTotal = quote.repair_cost;
+    const appFee = baseTotal * 0.10;
+    const ownerTotal = baseTotal + appFee;
+
     Alert.alert(
       'Accepter le devis ?',
-      `Montant : ${quote.repair_cost}€\nDélai : ${quote.repair_delay_days} jour(s)\n\nUne empreinte bancaire de ${quote.repair_cost}€ sera posée. Le paiement sera capturé à la fin des travaux (7j max).`,
+      `Montant des travaux : ${baseTotal.toFixed(2)}€\nFrais de service (10%) : ${appFee.toFixed(2)}€\nTotal : ${ownerTotal.toFixed(2)}€\nDélai : ${quote.repair_delay_days} jour(s)\n\nUne empreinte bancaire de ${ownerTotal.toFixed(2)}€ sera posée. Le paiement sera capturé à la fin des travaux (7j max).`,
       [
         { text: 'Annuler', style: 'cancel' },
         {
           text: 'Placer l\'empreinte', onPress: async () => {
             try {
               setLoading(true);
-              const { clientSecret, paymentIntentId } = await createPaymentIntent(quote.repair_cost, { emergencyId, quoteId: quote.id }, 'manual');
+              // Provider's Stripe Connect ID will be passed here when implemented
+              const { clientSecret, paymentIntentId } = await createPaymentIntent(ownerTotal, { emergencyId, quoteId: quote.id }, 'manual');
 
               const { error: initError } = await initPaymentSheet({
                 merchantDisplayName: 'MontRTO',
@@ -238,7 +249,7 @@ export default function EmergencyScreen() {
               if (presentError) throw new Error(presentError.message);
 
               await acceptEmergencyQuote(emergencyId!, quote.id, paymentIntentId);
-              Alert.alert('Devis accepté !', `Empreinte bancaire de ${quote.repair_cost}€ posée. Le technicien peut commencer.`);
+              Alert.alert('Devis accepté !', `Empreinte bancaire de ${ownerTotal.toFixed(2)}€ posée. Le technicien peut commencer.`);
               fetchEmergency();
             } catch (e: any) { Alert.alert('Erreur', e.message); setLoading(false); }
           }
@@ -301,16 +312,20 @@ export default function EmergencyScreen() {
     const quote = emergency.quote;
 
     return (
-      <SafeAreaView style={styles.container} testID="emergency-detail-screen">
-        <View style={styles.header}>
+      <SafeAreaView style={styles.container} testID="emergency-detail-screen" edges={['top']}>
+        <LinearGradient
+          colors={GRADIENT.header}
+          start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+          style={styles.header}
+        >
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
             <Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Urgence</Text>
-          <TouchableOpacity onPress={fetchEmergency}>
-            <Ionicons name="refresh-outline" size={22} color={COLORS.textSecondary} />
+          <TouchableOpacity onPress={fetchEmergency} style={styles.refreshBtn}>
+            <Ionicons name="refresh-outline" size={22} color={COLORS.textPrimary} />
           </TouchableOpacity>
-        </View>
+        </LinearGradient>
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
           {/* Status banner */}
@@ -323,9 +338,15 @@ export default function EmergencyScreen() {
           <View style={[styles.card, styles.urgentCard]}>
             <View style={styles.urgentBadge}>
               <Ionicons name="warning" size={18} color={COLORS.urgency} />
-              <Text style={styles.urgentLabel}>{SERVICE_TYPE_LABELS[emergency.service_type] || emergency.service_type}</Text>
+              <Text style={styles.urgentLabel}>🚨 {SERVICE_TYPE_LABELS[emergency.service_type] || emergency.service_type}</Text>
             </View>
-            <Text style={styles.propName}>{emergency.property_name}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: SPACING.md }}>
+              <Image
+                source={{ uri: `https://ui-avatars.com/api/?name=${emergency.property_name?.replace(/\s/g, '+') || 'Prop'}&background=FF6B6B&color=fff&size=200&font-size=0.4` }}
+                style={{ width: 44, height: 44, borderRadius: RADIUS.md, marginRight: SPACING.md }}
+              />
+              <Text style={styles.propName}>{emergency.property_name}</Text>
+            </View>
             {emergency.property_address ? (
               <View style={styles.addrRow}>
                 <Ionicons name="location-outline" size={14} color={COLORS.textTertiary} />
@@ -334,6 +355,14 @@ export default function EmergencyScreen() {
             ) : null}
             <Text style={styles.emergDesc}>{emergency.description}</Text>
           </View>
+
+          {/* Global Chat Button after assignment */}
+          {emergency.accepted_provider_id && (isOwner || isMyEmergency) && (
+            <TouchableOpacity style={[styles.mainActionBtn, { backgroundColor: COLORS.info, marginBottom: SPACING.lg, marginTop: 0 }]} onPress={() => router.push(`/chat/${emergencyId}?type=emergency&receiverId=${isOwner ? emergency.accepted_provider_id : emergency.owner_id}&title=Discussion`)}>
+              <Ionicons name="chatbubbles-outline" size={20} color={COLORS.textInverse} />
+              <Text style={styles.mainActionBtnText}>Discuter avec le {isOwner ? 'technicien' : 'propriétaire'}</Text>
+            </TouchableOpacity>
+          )}
 
           {/* ━━━ OWNER: Timer + bids ━━━ */}
           {isOwner && (emergency.status === 'bids_open' || emergency.status === 'open') && (
@@ -354,7 +383,10 @@ export default function EmergencyScreen() {
                   {emergency.bids.map((bid: any) => (
                     <View key={bid.id} style={styles.bidItem}>
                       <View style={styles.bidTop}>
-                        <View style={styles.bidProvider}>
+                        <TouchableOpacity
+                          style={styles.bidProvider}
+                          onPress={() => router.push(`/provider/${bid.provider_id}`)}
+                        >
                           <View style={styles.bidAvatar}>
                             <Text style={styles.bidAvatarText}>{bid.provider_name?.[0] || 'P'}</Text>
                           </View>
@@ -367,7 +399,7 @@ export default function EmergencyScreen() {
                               </View>
                             )}
                           </View>
-                        </View>
+                        </TouchableOpacity>
                         <View style={styles.bidPriceCol}>
                           <Text style={styles.bidTotal}>{(bid.travel_cost || 0) + (bid.diagnostic_cost || 0)}€</Text>
                           <Text style={styles.bidPriceSub}>dépla. + diag.</Text>
@@ -412,7 +444,10 @@ export default function EmergencyScreen() {
             <View style={styles.card}>
               <Text style={styles.sectionTitle}>Technicien sélectionné</Text>
               {emergency.provider_name ? (
-                <View style={styles.providerRow}>
+                <TouchableOpacity
+                  style={styles.providerRow}
+                  onPress={() => router.push(`/provider/${emergency.accepted_provider_id}`)}
+                >
                   <View style={styles.providerAvatar}>
                     <Text style={styles.providerAvatarText}>{emergency.provider_name[0]}</Text>
                   </View>
@@ -421,7 +456,7 @@ export default function EmergencyScreen() {
                     <Ionicons name="car-outline" size={14} color={COLORS.info} />
                     <Text style={styles.etaText}>En route</Text>
                   </View>
-                </View>
+                </TouchableOpacity>
               ) : null}
               <View style={[styles.waitRow, { marginTop: SPACING.md }]}>
                 <ActivityIndicator size="small" color={COLORS.info} />
@@ -705,15 +740,19 @@ export default function EmergencyScreen() {
   const selectedPropData = properties.find(p => p.id === selectedProp);
 
   return (
-    <SafeAreaView style={styles.container} testID="emergency-create-screen">
+    <SafeAreaView style={styles.container} testID="emergency-create-screen" edges={['top']}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-        <View style={styles.header}>
+        <LinearGradient
+          colors={GRADIENT.header}
+          start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+          style={styles.header}
+        >
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
             <Ionicons name="close" size={24} color={COLORS.textPrimary} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Urgence</Text>
-          <View style={{ width: 44 }} />
-        </View>
+          <Text style={styles.headerTitle}>Nouvelle urgence</Text>
+          <View style={{ width: 48 }} />
+        </LinearGradient>
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
           <View style={styles.urgentBanner}>
@@ -793,98 +832,109 @@ export default function EmergencyScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.background },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: SPACING.xl, paddingVertical: SPACING.md },
-  backBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: COLORS.paper, justifyContent: 'center', alignItems: 'center', ...SHADOWS.card },
-  headerTitle: { ...FONTS.h3, color: COLORS.textPrimary },
-  content: { paddingHorizontal: SPACING.xl, paddingBottom: SPACING.xxxl },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: SPACING.xl,
+    paddingVertical: SPACING.md,
+    paddingBottom: SPACING.xl,
+    borderBottomLeftRadius: RADIUS.lg,
+    borderBottomRightRadius: RADIUS.lg,
+    ...SHADOWS.card
+  },
+  backBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: COLORS.paper, justifyContent: 'center', alignItems: 'center', ...SHADOWS.card },
+  refreshBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: COLORS.paper, justifyContent: 'center', alignItems: 'center', ...SHADOWS.card },
+  headerTitle: { ...FONTS.h2, color: COLORS.textPrimary },
+  content: { paddingHorizontal: SPACING.xl, paddingBottom: SPACING.xxxl, paddingTop: SPACING.lg },
   // Status banner
-  statusBanner: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, padding: SPACING.lg, borderRadius: RADIUS.lg, marginBottom: SPACING.lg },
-  statusText: { ...FONTS.bodySmall, fontWeight: '600', flex: 1 },
+  statusBanner: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, padding: SPACING.lg, borderRadius: RADIUS.xl, marginBottom: SPACING.lg },
+  statusText: { ...FONTS.bodySmall, fontWeight: '700', flex: 1, fontSize: 13 },
   // Cards
-  card: { backgroundColor: COLORS.paper, padding: SPACING.xl, borderRadius: RADIUS.xl, marginBottom: SPACING.lg, ...SHADOWS.card },
-  urgentCard: { borderLeftWidth: 4, borderLeftColor: COLORS.urgency },
-  urgentBadge: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginBottom: SPACING.sm },
-  urgentLabel: { ...FONTS.caption, color: COLORS.urgency },
-  propName: { ...FONTS.h2, color: COLORS.textPrimary },
-  addrRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, marginTop: 4 },
+  card: { backgroundColor: COLORS.paper, padding: SPACING.xl, borderRadius: RADIUS.xl, marginBottom: SPACING.md, ...SHADOWS.card, borderWidth: 1, borderColor: COLORS.border },
+  urgentCard: { borderLeftWidth: 4, borderLeftColor: COLORS.urgency, ...SHADOWS.float },
+  urgentBadge: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginBottom: SPACING.xs },
+  urgentLabel: { ...FONTS.bodySmall, color: COLORS.urgency, fontWeight: '700' },
+  propName: { ...FONTS.h1, color: COLORS.textPrimary, fontSize: 24, marginBottom: 2 },
+  addrRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, marginTop: 2, marginBottom: SPACING.sm },
   propAddr: { ...FONTS.body, color: COLORS.textSecondary, flex: 1 },
-  emergDesc: { ...FONTS.body, color: COLORS.textSecondary, marginTop: SPACING.md },
-  sectionTitle: { ...FONTS.h3, color: COLORS.textPrimary, marginBottom: SPACING.md, fontSize: 16 },
+  emergDesc: { ...FONTS.body, color: COLORS.textSecondary, marginTop: SPACING.md, lineHeight: 22 },
+  sectionTitle: { ...FONTS.h3, color: COLORS.textPrimary, marginBottom: SPACING.md, fontSize: 18 },
   // Timer
-  timerCard: { borderLeftWidth: 3, borderLeftColor: COLORS.warning },
-  timerRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
-  timerLabel: { ...FONTS.bodySmall, color: COLORS.textSecondary, flex: 1 },
-  timerValue: { ...FONTS.h3, color: COLORS.warning, fontSize: 16 },
+  timerCard: { borderLeftWidth: 4, borderLeftColor: COLORS.warning },
+  timerRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md },
+  timerLabel: { ...FONTS.bodySmall, color: COLORS.textSecondary, flex: 1, fontWeight: '600' },
+  timerValue: { ...FONTS.h2, color: COLORS.warning, fontSize: 18 },
   // Bids
   bidItem: { paddingVertical: SPACING.lg, borderBottomWidth: 1, borderBottomColor: COLORS.border },
-  bidTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.sm },
+  bidTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.md },
   bidProvider: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md },
-  bidAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: COLORS.brandPrimary, justifyContent: 'center', alignItems: 'center' },
-  bidAvatarText: { ...FONTS.bodySmall, color: COLORS.textInverse, fontWeight: '700' },
-  bidName: { ...FONTS.bodySmall, color: COLORS.textPrimary, fontWeight: '600' },
-  ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 2 },
-  ratingText: { ...FONTS.bodySmall, color: COLORS.textTertiary, fontSize: 11 },
-  bidPriceCol: { alignItems: 'flex-end' },
-  bidTotal: { ...FONTS.h3, color: COLORS.success, fontSize: 18 },
-  bidPriceSub: { ...FONTS.bodySmall, color: COLORS.textTertiary, fontSize: 10 },
-  bidDetails: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm, marginBottom: SPACING.md },
-  bidDetailItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  bidDetailText: { ...FONTS.bodySmall, color: COLORS.textSecondary, fontSize: 12 },
-  acceptBidBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.sm, backgroundColor: COLORS.success, paddingVertical: SPACING.md, borderRadius: RADIUS.lg },
-  acceptBidBtnText: { ...FONTS.bodySmall, color: COLORS.textInverse, fontWeight: '700' },
+  bidAvatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: COLORS.brandPrimary + '20', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: COLORS.brandPrimary + '40' },
+  bidAvatarText: { ...FONTS.h3, color: COLORS.brandPrimary },
+  bidName: { ...FONTS.bodySmall, color: COLORS.textPrimary, fontWeight: '700', fontSize: 15 },
+  ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
+  ratingText: { ...FONTS.caption, color: COLORS.textTertiary, fontSize: 11 },
+  bidPriceCol: { alignItems: 'flex-end', backgroundColor: COLORS.subtle, paddingHorizontal: SPACING.md, paddingVertical: SPACING.xs, borderRadius: RADIUS.md },
+  bidTotal: { ...FONTS.h2, color: COLORS.success, fontSize: 18 },
+  bidPriceSub: { ...FONTS.caption, color: COLORS.textTertiary, fontSize: 10 },
+  bidDetails: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.md, marginBottom: SPACING.md, backgroundColor: COLORS.paper, padding: SPACING.sm, borderRadius: RADIUS.md },
+  bidDetailItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  bidDetailText: { ...FONTS.bodySmall, color: COLORS.textSecondary, fontSize: 12, fontWeight: '500' },
+  acceptBidBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.sm, backgroundColor: COLORS.success, paddingVertical: SPACING.md, borderRadius: RADIUS.xl, ...SHADOWS.card },
+  acceptBidBtnText: { ...FONTS.h3, color: COLORS.textInverse, fontSize: 15 },
   bidSentRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginBottom: SPACING.md },
   // Provider info
-  providerRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md },
-  providerAvatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: COLORS.brandPrimary, justifyContent: 'center', alignItems: 'center' },
-  providerAvatarText: { ...FONTS.h3, color: COLORS.textInverse },
-  providerName: { ...FONTS.body, color: COLORS.textPrimary, fontWeight: '600' },
-  etaBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: COLORS.infoSoft, paddingHorizontal: SPACING.md, paddingVertical: SPACING.xs, borderRadius: RADIUS.full },
-  etaText: { ...FONTS.bodySmall, color: COLORS.info, fontWeight: '600' },
+  providerRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.lg },
+  providerAvatar: { width: 50, height: 50, borderRadius: 25, backgroundColor: COLORS.brandPrimary + '20', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: COLORS.brandPrimary + '40' },
+  providerAvatarText: { ...FONTS.h2, color: COLORS.brandPrimary },
+  providerName: { ...FONTS.h3, color: COLORS.textPrimary, fontSize: 18 },
+  etaBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: COLORS.infoSoft, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, borderRadius: RADIUS.full, ...SHADOWS.float },
+  etaText: { ...FONTS.bodySmall, color: COLORS.info, fontWeight: '700' },
   // Amounts
-  amountRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: SPACING.sm, borderBottomWidth: 1, borderBottomColor: COLORS.border },
-  amountLabel: { ...FONTS.body, color: COLORS.textSecondary },
-  amountValue: { ...FONTS.body, color: COLORS.textPrimary, fontWeight: '600' },
+  amountRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: SPACING.md, borderBottomWidth: 1, borderBottomColor: COLORS.subtle },
+  amountLabel: { ...FONTS.bodySmall, color: COLORS.textSecondary, fontWeight: '500' },
+  amountValue: { ...FONTS.h3, color: COLORS.textPrimary },
   // Quote
-  quoteDescRow: { flexDirection: 'row', gap: SPACING.sm, alignItems: 'flex-start', marginBottom: SPACING.md, backgroundColor: COLORS.subtle, padding: SPACING.md, borderRadius: RADIUS.md },
-  quoteDescText: { ...FONTS.body, color: COLORS.textPrimary, flex: 1 },
-  quoteBanner: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACING.sm, backgroundColor: COLORS.warningSoft, padding: SPACING.md, borderRadius: RADIUS.md, marginTop: SPACING.md },
-  quoteBannerText: { ...FONTS.bodySmall, color: COLORS.warning, flex: 1, lineHeight: 18 },
+  quoteDescRow: { flexDirection: 'row', gap: SPACING.sm, alignItems: 'flex-start', marginBottom: SPACING.lg, backgroundColor: COLORS.subtle, padding: SPACING.lg, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.border },
+  quoteDescText: { ...FONTS.body, color: COLORS.textPrimary, flex: 1, lineHeight: 22 },
+  quoteBanner: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACING.sm, backgroundColor: COLORS.warningSoft, padding: SPACING.lg, borderRadius: RADIUS.lg, marginTop: SPACING.lg, marginBottom: SPACING.md },
+  quoteBannerText: { ...FONTS.bodySmall, color: COLORS.warning, flex: 1, lineHeight: 20, fontWeight: '500' },
   captureInfo: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, marginTop: SPACING.md },
-  captureText: { ...FONTS.bodySmall, color: COLORS.textTertiary, flex: 1, fontSize: 12 },
-  refuseBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.sm, backgroundColor: COLORS.urgencySoft, paddingVertical: SPACING.md, borderRadius: RADIUS.lg, marginTop: SPACING.sm },
+  captureText: { ...FONTS.caption, color: COLORS.textTertiary, flex: 1, fontSize: 11 },
+  refuseBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.sm, backgroundColor: COLORS.paper, borderWidth: 1, borderColor: COLORS.urgency, paddingVertical: SPACING.md, borderRadius: RADIUS.xl, marginTop: SPACING.sm },
   refuseBtnText: { ...FONTS.bodySmall, color: COLORS.urgency, fontWeight: '700' },
   // Wait
-  waitRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md },
-  waitText: { ...FONTS.body, color: COLORS.textSecondary, flex: 1 },
+  waitRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, backgroundColor: COLORS.subtle, padding: SPACING.md, borderRadius: RADIUS.md },
+  waitText: { ...FONTS.bodySmall, color: COLORS.textSecondary, flex: 1, fontWeight: '500', lineHeight: 20 },
   // Arrival chips
-  arrivalRow: { flexDirection: 'row', gap: SPACING.sm, marginBottom: SPACING.md },
-  arrivalChip: { flex: 1, paddingVertical: SPACING.md, borderRadius: RADIUS.md, backgroundColor: COLORS.subtle, alignItems: 'center', borderWidth: 1, borderColor: COLORS.border },
-  arrivalChipActive: { backgroundColor: COLORS.brandPrimary, borderColor: COLORS.brandPrimary },
-  arrivalChipText: { ...FONTS.bodySmall, color: COLORS.textSecondary },
+  arrivalRow: { flexDirection: 'row', gap: SPACING.sm, marginBottom: SPACING.lg },
+  arrivalChip: { flex: 1, paddingVertical: SPACING.md, borderRadius: RADIUS.xl, backgroundColor: COLORS.subtle, alignItems: 'center', borderWidth: 1, borderColor: COLORS.border },
+  arrivalChipActive: { backgroundColor: COLORS.brandPrimary, borderColor: COLORS.brandPrimary, ...SHADOWS.card },
+  arrivalChipText: { ...FONTS.bodySmall, color: COLORS.textTertiary, fontWeight: '600' },
   arrivalChipTextActive: { color: COLORS.textInverse },
   // Main action
-  mainActionBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.sm, backgroundColor: COLORS.brandPrimary, paddingVertical: SPACING.lg, borderRadius: RADIUS.lg, marginTop: SPACING.md, ...SHADOWS.float },
+  mainActionBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.sm, backgroundColor: COLORS.brandPrimary, paddingVertical: SPACING.lg, borderRadius: RADIUS.xxl, marginTop: SPACING.md, ...SHADOWS.float },
   mainActionBtnText: { ...FONTS.h3, color: COLORS.textInverse },
   // Form
-  fieldLabel: { ...FONTS.caption, color: COLORS.textSecondary, marginTop: SPACING.lg, marginBottom: SPACING.sm },
-  input: { backgroundColor: COLORS.subtle, borderRadius: RADIUS.md, padding: SPACING.lg, ...FONTS.body, color: COLORS.textPrimary, marginBottom: SPACING.sm },
+  fieldLabel: { ...FONTS.bodySmall, color: COLORS.textSecondary, fontWeight: '600', marginTop: SPACING.lg, marginBottom: SPACING.sm },
+  input: { backgroundColor: COLORS.subtle, borderRadius: RADIUS.md, padding: SPACING.lg, ...FONTS.body, color: COLORS.textPrimary, marginBottom: SPACING.sm, borderWidth: 1, borderColor: COLORS.border },
   textArea: { minHeight: 90, textAlignVertical: 'top' },
   // Create form
-  urgentBanner: { alignItems: 'center', backgroundColor: COLORS.urgencySoft, padding: SPACING.xxl, borderRadius: RADIUS.xl, marginBottom: SPACING.xl },
-  urgentBannerTitle: { ...FONTS.h2, color: COLORS.urgency, marginTop: SPACING.md },
-  urgentBannerDesc: { ...FONTS.body, color: COLORS.urgency, opacity: 0.8, textAlign: 'center', marginTop: SPACING.sm, lineHeight: 22 },
-  propScroll: { maxHeight: 44, marginBottom: SPACING.sm },
-  propChip: { paddingHorizontal: SPACING.lg, paddingVertical: SPACING.sm, borderRadius: RADIUS.full, backgroundColor: COLORS.paper, marginRight: SPACING.sm, borderWidth: 1, borderColor: COLORS.border },
+  urgentBanner: { alignItems: 'center', backgroundColor: COLORS.urgency + '15', padding: SPACING.xxl, borderRadius: RADIUS.xxl, marginBottom: SPACING.xl, borderWidth: 1, borderColor: COLORS.urgency + '30' },
+  urgentBannerTitle: { ...FONTS.h1, color: COLORS.urgency, marginTop: SPACING.md, textAlign: 'center' },
+  urgentBannerDesc: { ...FONTS.body, color: COLORS.textSecondary, textAlign: 'center', marginTop: SPACING.md, lineHeight: 24 },
+  propScroll: { maxHeight: 50, marginBottom: SPACING.md },
+  propChip: { paddingHorizontal: SPACING.xl, paddingVertical: 12, borderRadius: RADIUS.full, backgroundColor: COLORS.paper, marginRight: SPACING.sm, borderWidth: 1, borderColor: COLORS.border, ...SHADOWS.card },
   propChipActive: { backgroundColor: COLORS.brandPrimary, borderColor: COLORS.brandPrimary },
-  propChipText: { ...FONTS.bodySmall, color: COLORS.textSecondary },
+  propChipText: { ...FONTS.bodySmall, color: COLORS.textSecondary, fontWeight: '600' },
   propChipTextActive: { color: COLORS.textInverse },
-  addrPreview: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, marginBottom: SPACING.md, paddingHorizontal: SPACING.sm },
-  addrPreviewText: { ...FONTS.bodySmall, color: COLORS.textTertiary },
+  addrPreview: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginBottom: SPACING.md, paddingHorizontal: SPACING.md, backgroundColor: COLORS.subtle, paddingVertical: SPACING.md, borderRadius: RADIUS.md },
+  addrPreviewText: { ...FONTS.bodySmall, color: COLORS.textPrimary, fontWeight: '500' },
   typeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm },
-  serviceTypeCard: { width: '31%', padding: SPACING.md, borderRadius: RADIUS.lg, backgroundColor: COLORS.paper, alignItems: 'center', borderWidth: 1, borderColor: COLORS.border, gap: SPACING.xs },
-  serviceTypeActive: { backgroundColor: COLORS.urgency, borderColor: COLORS.urgency },
-  serviceTypeText: { ...FONTS.bodySmall, color: COLORS.textSecondary, fontSize: 11, textAlign: 'center' },
+  serviceTypeCard: { width: '31%', padding: SPACING.lg, borderRadius: RADIUS.xl, backgroundColor: COLORS.paper, alignItems: 'center', borderWidth: 1, borderColor: COLORS.border, gap: SPACING.sm, ...SHADOWS.card },
+  serviceTypeActive: { backgroundColor: COLORS.urgency, borderColor: COLORS.urgency, ...SHADOWS.float },
+  serviceTypeText: { ...FONTS.bodySmall, color: COLORS.textSecondary, fontSize: 11, textAlign: 'center', fontWeight: '600' },
   serviceTypeTextActive: { color: COLORS.textInverse },
-  emergencyBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.md, backgroundColor: COLORS.urgency, paddingVertical: SPACING.lg, borderRadius: RADIUS.lg, marginTop: SPACING.xxl, ...SHADOWS.urgency },
-  emergencyBtnText: { ...FONTS.h3, color: COLORS.textInverse },
+  emergencyBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.md, backgroundColor: COLORS.urgency, paddingVertical: SPACING.lg, borderRadius: RADIUS.xxl, marginTop: SPACING.xxl, ...SHADOWS.urgency },
+  emergencyBtnText: { ...FONTS.h2, color: COLORS.textInverse },
 });

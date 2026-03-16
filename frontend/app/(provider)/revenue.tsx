@@ -3,7 +3,8 @@ import { View, Text, StyleSheet, ScrollView, ActivityIndicator, RefreshControl }
 import { useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, FONTS, SPACING, RADIUS, SHADOWS } from '../../src/theme';
+import { LinearGradient } from 'expo-linear-gradient';
+import { COLORS, FONTS, SPACING, RADIUS, SHADOWS, GRADIENT } from '../../src/theme';
 import { getProviderStats } from '../../src/api';
 
 export default function RevenueScreen() {
@@ -34,7 +35,11 @@ export default function RevenueScreen() {
         </View>
 
         {/* Total Earnings */}
-        <View style={styles.earningsCard}>
+        <LinearGradient
+          colors={GRADIENT.brandButton}
+          start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+          style={styles.earningsCard}
+        >
           <Text style={styles.earningsLabel}>Revenus totaux</Text>
           <Text style={styles.earningsValue}>{(stats?.total_earnings || 0).toFixed(2)}€</Text>
           <View style={styles.earningsRow}>
@@ -43,11 +48,11 @@ export default function RevenueScreen() {
               <Text style={styles.earningStatText}>{stats?.rating || 0} / 5</Text>
             </View>
             <View style={styles.earningStat}>
-              <Ionicons name="chatbubble-outline" size={16} color={COLORS.textTertiary} />
+              <Ionicons name="chatbubble-outline" size={16} color={COLORS.textInverse} />
               <Text style={styles.earningStatText}>{stats?.total_reviews || 0} avis</Text>
             </View>
           </View>
-        </View>
+        </LinearGradient>
 
         {/* Stats Grid */}
         <View style={styles.statsGrid}>
@@ -100,27 +105,32 @@ export default function RevenueScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.background },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.background },
-  header: { paddingHorizontal: SPACING.xl, paddingTop: SPACING.lg },
-  title: { ...FONTS.h2, color: COLORS.textPrimary },
-  earningsCard: { backgroundColor: COLORS.brandPrimary, marginHorizontal: SPACING.xl, marginTop: SPACING.xl, padding: SPACING.xxl, borderRadius: RADIUS.xl, ...SHADOWS.float },
-  earningsLabel: { ...FONTS.bodySmall, color: COLORS.textInverse, opacity: 0.7 },
-  earningsValue: { ...FONTS.h1, color: COLORS.textInverse, fontSize: 36, marginVertical: SPACING.sm },
+  container: { flex: 1, backgroundColor: '#FFFFFF' },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFFFFF' },
+  header: {
+    paddingHorizontal: SPACING.xl,
+    paddingTop: SPACING.xl,
+    paddingBottom: SPACING.lg,
+    backgroundColor: '#FFFFFF',
+  },
+  title: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 24, color: '#1E3A5F' },
+  earningsCard: { marginHorizontal: SPACING.xl, marginTop: SPACING.xxl, padding: SPACING.xxl, borderRadius: RADIUS.xxl, ...SHADOWS.float },
+  earningsLabel: { ...FONTS.bodySmall, color: COLORS.textInverse, opacity: 0.9, fontWeight: '500' },
+  earningsValue: { ...FONTS.h1, color: COLORS.textInverse, fontSize: 40, marginVertical: SPACING.sm },
   earningsRow: { flexDirection: 'row', gap: SPACING.xl, marginTop: SPACING.md },
-  earningStat: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs },
-  earningStatText: { ...FONTS.bodySmall, color: COLORS.textInverse, opacity: 0.8 },
+  earningStat: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  earningStatText: { ...FONTS.bodySmall, color: COLORS.textInverse, fontWeight: '600' },
   statsGrid: { flexDirection: 'row', paddingHorizontal: SPACING.xl, gap: SPACING.md, marginTop: SPACING.xl },
-  statCard: { flex: 1, backgroundColor: COLORS.paper, padding: SPACING.lg, borderRadius: RADIUS.lg, alignItems: 'center', ...SHADOWS.card },
+  statCard: { flex: 1, backgroundColor: COLORS.paper, padding: SPACING.xl, borderRadius: RADIUS.xl, alignItems: 'center', ...SHADOWS.card, borderWidth: 1, borderColor: COLORS.border },
   statValue: { ...FONTS.h2, color: COLORS.textPrimary, marginTop: SPACING.sm },
-  statLabel: { ...FONTS.bodySmall, color: COLORS.textSecondary, marginTop: 2, fontSize: 11 },
-  section: { paddingHorizontal: SPACING.xl, marginTop: SPACING.xxl },
-  sectionTitle: { ...FONTS.h3, color: COLORS.textPrimary, marginBottom: SPACING.md },
-  emptyCard: { backgroundColor: COLORS.paper, padding: SPACING.xxl, borderRadius: RADIUS.lg, alignItems: 'center' },
+  statLabel: { ...FONTS.caption, color: COLORS.textSecondary, marginTop: 4, fontWeight: '600' },
+  section: { paddingHorizontal: SPACING.xl, marginTop: SPACING.xxxl },
+  sectionTitle: { ...FONTS.h3, color: COLORS.textPrimary, marginBottom: SPACING.lg },
+  emptyCard: { backgroundColor: COLORS.paper, padding: SPACING.xxl, borderRadius: RADIUS.xl, alignItems: 'center', borderWidth: 1, borderColor: COLORS.border },
   emptyText: { ...FONTS.body, color: COLORS.textTertiary },
-  missionItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: COLORS.paper, padding: SPACING.lg, borderRadius: RADIUS.lg, marginBottom: SPACING.sm, ...SHADOWS.card },
+  missionItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: COLORS.paper, padding: SPACING.lg, borderRadius: RADIUS.xl, marginBottom: SPACING.md, ...SHADOWS.card, borderWidth: 1, borderColor: COLORS.border },
   missionLeft: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, flex: 1 },
-  missionTitle: { ...FONTS.bodySmall, color: COLORS.textPrimary },
-  missionDate: { ...FONTS.bodySmall, color: COLORS.textTertiary, fontSize: 11 },
+  missionTitle: { ...FONTS.bodySmall, color: COLORS.textPrimary, fontWeight: '600' },
+  missionDate: { ...FONTS.caption, color: COLORS.textTertiary, marginTop: 2 },
   missionAmount: { ...FONTS.h3, color: COLORS.success },
 });

@@ -279,7 +279,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFFFFF' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFFFFF' },
   header: { paddingHorizontal: SPACING.xl, paddingTop: SPACING.lg, paddingBottom: SPACING.lg },
-  title: { fontFamily: 'Inter_700Bold', fontSize: 24, color: '#1E3A5F' },
+  title: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 24, color: '#1E3A5F' },
   empty: { alignItems: 'center', paddingVertical: SPACING.xxxl * 2 },
   emptyText: { ...FONTS.body, color: COLORS.textTertiary, marginTop: SPACING.md },
   emptySubtext: { ...FONTS.bodySmall, color: COLORS.textTertiary },
