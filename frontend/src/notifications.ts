@@ -3,13 +3,18 @@ import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
+import { router } from 'expo-router';
 import { registerPushToken } from './api';
+import { queryClient } from './query-client';
+import { notificationKeys } from './hooks/useNotifications';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
     shouldPlaySound: true,
     shouldSetBadge: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
   }),
 });
 
@@ -20,12 +25,20 @@ export const usePushNotifications = () => {
   useEffect(() => {
     registerForPushAsync();
 
-    notificationListener.current = Notifications.addNotificationReceivedListener(n => {
-      console.log('[Push] received:', n.request.content.title);
+    // When a push notification is received while app is open → refresh notification list
+    notificationListener.current = Notifications.addNotificationReceivedListener(() => {
+      queryClient.invalidateQueries({ queryKey: notificationKeys.all });
     });
 
-    responseListener.current = Notifications.addNotificationResponseReceivedListener(r => {
-      console.log('[Push] tapped:', r.notification.request.content.data);
+    // When user taps a push notification → navigate to the relevant screen
+    responseListener.current = Notifications.addNotificationResponseReceivedListener((response) => {
+      queryClient.invalidateQueries({ queryKey: notificationKeys.all });
+      const payload = response.notification.request.content.data as Record<string, string> | undefined;
+      if (payload?.emergencyId) {
+        router.push(`/emergency?id=${payload.emergencyId}`);
+      } else if (payload?.missionId) {
+        router.push(`/mission/${payload.missionId}`);
+      }
     });
 
     return () => {
@@ -40,10 +53,7 @@ async function registerForPushAsync() {
     if (!Device.isDevice) return;
 
     // Expo Go ne supporte plus les push depuis SDK 53 — skip silencieux
-    if (Constants.appOwnership === 'expo') {
-      console.log('[Push] Expo Go détecté — push désactivé (utilise un development build)');
-      return;
-    }
+    if (Constants.appOwnership === 'expo') return;
 
     if (Platform.OS === 'android') {
       await Notifications.setNotificationChannelAsync('default', {
@@ -67,15 +77,11 @@ async function registerForPushAsync() {
       Constants.expoConfig?.extra?.eas?.projectId ??
       Constants.easConfig?.projectId;
 
-    if (!projectId) {
-      console.warn('[Push] Aucun projectId EAS — ajoute-le dans app.json extra.eas.projectId');
-      return;
-    }
+    if (!projectId) return;
 
     const { data: token } = await Notifications.getExpoPushTokenAsync({ projectId });
     await registerPushToken(token, Platform.OS);
-    console.log('[Push] Token enregistré:', token);
-  } catch (e) {
-    console.warn('[Push] Enregistrement échoué:', e);
+  } catch (_) {
+    // Silent fail — push registration is non-critical
   }
 }
