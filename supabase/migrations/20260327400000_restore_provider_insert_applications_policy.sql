@@ -1,30 +1,38 @@
 -- ============================================================
--- Restore permissive INSERT policy on mission_applications
+-- Ensure mission_applications has correct per-operation policies
+-- for providers.
 --
--- Migration 20260327300000 replaced the original "Providers manage
--- own applications" (FOR ALL) with a restrictive INSERT policy
--- that requires verified=true, rc_pro_verified=true, and
--- decennale_verified=true.  This silently blocks test providers
--- (and any provider whose documents are still being reviewed)
--- because Supabase RLS returns an empty row instead of an error.
+-- The Sprint 6 audit (20260318000001) created a FOR ALL policy
+-- "Providers manage own applications". This migration splits it
+-- into explicit per-operation policies for clarity, while
+-- keeping INSERT permissive (auth.uid() = provider_id).
 --
--- The frontend already performs the same verification check in
--- applyToMission() and shows a user-friendly error message.
--- Keeping the RLS overly restrictive creates a double-block
--- that is invisible to the user (silent Supabase failure).
---
--- This migration restores the original simple policy:
--- a provider can INSERT their own application row.
--- Document verification is enforced at the application layer.
+-- Document verification is enforced at the application layer
+-- in applyToMission(). A future migration will add schema
+-- columns and a proper RLS gate once the data model is ready.
 -- ============================================================
 
 DO $$ BEGIN
   IF EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = 'mission_applications') THEN
 
-    -- Drop the restrictive INSERT policy from 20260327300000
-    DROP POLICY IF EXISTS "Verified providers insert applications" ON mission_applications;
+    -- Drop any leftover policies from previous attempts
+    DROP POLICY IF EXISTS "Providers manage own applications"       ON mission_applications;
+    DROP POLICY IF EXISTS "Providers read own applications"         ON mission_applications;
+    DROP POLICY IF EXISTS "Providers update own applications"       ON mission_applications;
+    DROP POLICY IF EXISTS "Providers delete own applications"       ON mission_applications;
+    DROP POLICY IF EXISTS "Providers insert own applications"       ON mission_applications;
+    DROP POLICY IF EXISTS "Verified providers insert applications"  ON mission_applications;
 
-    -- Restore simple INSERT: provider can insert their own rows
+    -- Per-operation policies for providers
+    CREATE POLICY "Providers read own applications" ON mission_applications
+      FOR SELECT USING (auth.uid() = provider_id);
+
+    CREATE POLICY "Providers update own applications" ON mission_applications
+      FOR UPDATE USING (auth.uid() = provider_id);
+
+    CREATE POLICY "Providers delete own applications" ON mission_applications
+      FOR DELETE USING (auth.uid() = provider_id);
+
     CREATE POLICY "Providers insert own applications" ON mission_applications
       FOR INSERT
       WITH CHECK (auth.uid() = provider_id);

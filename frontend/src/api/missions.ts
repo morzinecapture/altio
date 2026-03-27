@@ -256,15 +256,9 @@ export const applyToMission = async (missionId: string, data: ApplyToMissionPayl
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.user) throw new Error('Not authenticated');
 
-  // Vérifier que le prestataire a ses documents vérifiés avant de postuler
-  const { data: providerCheck } = await supabase
-    .from('provider_profiles')
-    .select('verified, siret, rc_pro_verified, decennale_verified')
-    .eq('provider_id', session.user.id)
-    .single();
-  if (!providerCheck || !providerCheck.verified || !providerCheck.siret || !providerCheck.rc_pro_verified || !providerCheck.decennale_verified) {
-    throw new Error('Votre profil doit être vérifié (SIRET, RC Pro, décennale) avant de postuler.');
-  }
+  // TODO: remettre la vérification documents (verified, rc_pro, décennale)
+  // une fois les colonnes ajoutées sur provider_profiles en prod.
+  // Pour l'instant, la candidature est ouverte à tout prestataire authentifié.
 
   // Vérifier que la mission est bien en 'pending_provider_approval' (anti-pattern #8)
   const { data: missionCheck } = await supabase
