@@ -78,10 +78,14 @@ export default function MissionDetailScreen() {
 
   const handleApply = async () => {
     try {
+      console.log('APPLY: calling applyToMission', { missionId: id, proposed_rate: mission?.fixed_rate });
       await applyToMission(id!, { proposed_rate: mission?.fixed_rate, message: 'Disponible' });
       Alert.alert('Candidature envoyée !', 'Le propriétaire va examiner votre profil. Vous serez notifié dès qu\'il aura fait son choix.');
       fetchData();
-    } catch (e) { Alert.alert(t('common.error'), e instanceof Error ? e.message : String(e)); }
+    } catch (e) {
+      console.log('APPLY ERROR:', e);
+      Alert.alert(t('common.error'), e instanceof Error ? e.message : String(e));
+    }
   };
 
   const handleStart = async () => {

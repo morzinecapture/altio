@@ -309,6 +309,7 @@ export const applyToMission = async (missionId: string, data: ApplyToMissionPayl
     .select()
     .single();
 
+  console.log('SUPABASE RESULT:', { app, error });
   checkError(error);
 
   // Notifier le propriétaire de la mission
