@@ -126,30 +126,35 @@ export const getEmergency = async (id: string) => {
     data.provider_name = data.provider?.name;
     data.provider_picture = data.provider?.picture;
 
-    // Fetch bids separately (with SIRET for legal compliance)
-    // company_name lives on users, not provider_profiles; tva_status does not exist yet
+    // Fetch bids separately
+    // Columns verified against remote schema 2026-03-27:
+    //   users: name, picture, company_name, siren (NOT siret)
+    //   provider_profiles: rating, total_reviews (NOT siret, NOT company_name, NOT tva_status)
     const { data: bids, error: bidsError } = await supabase
       .from('emergency_bids')
-      .select('*, provider:users!emergency_bids_provider_id_fkey(name, picture, company_name, profile:provider_profiles(rating, total_reviews, siret))')
+      .select('*, provider:users!emergency_bids_provider_id_fkey(name, picture, company_name, siren, profile:provider_profiles(rating, total_reviews))')
       .eq('emergency_request_id', id)
       .order('created_at', { ascending: true });
 
-    if (bidsError && __DEV__) console.warn('Failed to fetch bids:', bidsError);
-
-    data.bids = (bids || []).map((b) => {
-      const prov = unwrapJoin(b.provider);
-      const profile = Array.isArray(prov?.profile) ? prov.profile[0] : prov?.profile;
-      return {
-        ...b,
-        provider_name: prov?.name,
-        provider_picture: prov?.picture,
-        provider_rating: profile?.rating,
-        provider_reviews: profile?.total_reviews,
-        provider_siret: profile?.siret,
-        provider_company: prov?.company_name,
-        provider_tva_status: null,
-      };
-    });
+    if (bidsError) {
+      if (__DEV__) console.warn('Failed to fetch bids:', bidsError);
+      data.bids = [];
+    } else {
+      data.bids = (bids || []).map((b) => {
+        const prov = unwrapJoin(b.provider);
+        const profile = Array.isArray(prov?.profile) ? prov.profile[0] : prov?.profile;
+        return {
+          ...b,
+          provider_name: prov?.name,
+          provider_picture: prov?.picture,
+          provider_rating: profile?.rating,
+          provider_reviews: profile?.total_reviews,
+          provider_siret: prov?.siren,
+          provider_company: prov?.company_name,
+          provider_tva_status: null,
+        };
+      });
+    }
 
     // Fetch quote separately (with line items)
     const { data: quotes } = await supabase
