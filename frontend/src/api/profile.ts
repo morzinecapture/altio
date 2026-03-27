@@ -135,6 +135,9 @@ export const completeProviderOnboarding = async (data: {
   company_type: string;
   radius_km: number;
   weekly_availability: string[];
+  latitude?: number;
+  longitude?: number;
+  location_label?: string;
   cgu_accepted_at?: string;
   mandate_accepted_at?: string;
   dsa_certified_at?: string;
@@ -156,9 +159,18 @@ export const completeProviderOnboarding = async (data: {
     .update(userUpdate)
     .eq('id', session.user.id);
   checkError(userError);
+  const profileUpdate: Record<string, unknown> = {
+    specialties: data.specialties,
+    company_type: data.company_type,
+    radius_km: data.radius_km,
+    weekly_availability: data.weekly_availability,
+  };
+  if (data.latitude !== undefined) profileUpdate.latitude = data.latitude;
+  if (data.longitude !== undefined) profileUpdate.longitude = data.longitude;
+  if (data.location_label !== undefined) profileUpdate.location_label = data.location_label;
   const { data: updated, error } = await supabase
     .from('provider_profiles')
-    .update({ specialties: data.specialties, company_type: data.company_type, radius_km: data.radius_km, weekly_availability: data.weekly_availability })
+    .update(profileUpdate)
     .eq('provider_id', session.user.id)
     .select()
     .single();
