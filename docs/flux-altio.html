@@ -1,0 +1,833 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Altio — Cartographie des flux</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    background: #0F172A;
+    color: #E2E8F0;
+    min-height: 100vh;
+    padding: 40px 20px;
+  }
+
+  .container { max-width: 1100px; margin: 0 auto; }
+
+  h1 {
+    font-size: 2rem;
+    font-weight: 800;
+    text-align: center;
+    margin-bottom: 8px;
+    background: linear-gradient(135deg, #48A9A6, #6366F1);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .subtitle {
+    text-align: center;
+    color: #64748B;
+    margin-bottom: 40px;
+    font-size: 0.95rem;
+  }
+
+  .legend {
+    display: flex;
+    justify-content: center;
+    gap: 24px;
+    margin-bottom: 32px;
+    flex-wrap: wrap;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.8rem;
+    color: #94A3B8;
+  }
+
+  .legend-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+  }
+
+  .flow-section {
+    margin-bottom: 16px;
+    border-radius: 16px;
+    overflow: hidden;
+    border: 1px solid #1E293B;
+    background: #1E293B;
+    transition: all 0.3s ease;
+  }
+
+  .flow-section:hover { border-color: #334155; }
+
+  .flow-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 24px;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .flow-header:hover { background: #263548; }
+
+  .flow-title-group { display: flex; align-items: center; gap: 14px; }
+
+  .flow-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.4rem;
+    flex-shrink: 0;
+  }
+
+  .flow-title { font-size: 1.1rem; font-weight: 700; }
+  .flow-desc { font-size: 0.82rem; color: #64748B; margin-top: 2px; }
+
+  .flow-badge {
+    font-size: 0.72rem;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+
+  .chevron {
+    font-size: 1.2rem;
+    transition: transform 0.3s ease;
+    color: #475569;
+    margin-left: 12px;
+  }
+
+  .flow-section.open .chevron { transform: rotate(180deg); }
+
+  .flow-content {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.4s ease;
+    background: #151D2E;
+  }
+
+  .flow-section.open .flow-content { max-height: 5000px; }
+
+  .flow-inner { padding: 0 24px 24px; }
+
+  /* Tabs */
+  .tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 20px;
+    background: #1E293B;
+    border-radius: 10px;
+    padding: 4px;
+  }
+
+  .tab {
+    flex: 1;
+    padding: 10px;
+    text-align: center;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #64748B;
+    transition: all 0.2s;
+  }
+
+  .tab.active { background: #334155; color: #E2E8F0; }
+  .tab:hover:not(.active) { color: #94A3B8; }
+
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* Steps */
+  .steps { position: relative; padding-left: 32px; }
+
+  .steps::before {
+    content: '';
+    position: absolute;
+    left: 11px;
+    top: 12px;
+    bottom: 12px;
+    width: 2px;
+    background: #334155;
+  }
+
+  .step {
+    position: relative;
+    padding: 12px 0 12px 16px;
+  }
+
+  .step-dot {
+    position: absolute;
+    left: -27px;
+    top: 16px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 2px solid #334155;
+    background: #0F172A;
+    z-index: 1;
+  }
+
+  .step-dot.owner { border-color: #3B82F6; background: #1E3A5F; }
+  .step-dot.provider { border-color: #10B981; background: #064E3B; }
+  .step-dot.payment { border-color: #F59E0B; background: #451A03; }
+  .step-dot.system { border-color: #8B5CF6; background: #2E1065; }
+
+  .step-status {
+    display: inline-block;
+    font-size: 0.7rem;
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-weight: 600;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    margin-bottom: 6px;
+  }
+
+  .status-pending { background: #1E3A5F; color: #60A5FA; }
+  .status-active { background: #064E3B; color: #34D399; }
+  .status-payment { background: #451A03; color: #FBBF24; }
+  .status-done { background: #1a1a2e; color: #818CF8; }
+  .status-danger { background: #3B0D0D; color: #F87171; }
+
+  .step-label {
+    font-size: 0.9rem;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+
+  .step-detail {
+    font-size: 0.8rem;
+    color: #64748B;
+    line-height: 1.5;
+  }
+
+  .step-who {
+    font-size: 0.7rem;
+    color: #475569;
+    margin-top: 4px;
+  }
+
+  .step-who span {
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-weight: 600;
+  }
+
+  .who-owner { background: #1E3A5F; color: #60A5FA; }
+  .who-provider { background: #064E3B; color: #34D399; }
+  .who-system { background: #2E1065; color: #A78BFA; }
+
+  .branch {
+    margin: 12px 0 12px 16px;
+    padding: 14px 16px;
+    border-radius: 10px;
+    border-left: 3px solid;
+    background: #1a2236;
+  }
+
+  .branch-a { border-color: #3B82F6; }
+  .branch-b { border-color: #10B981; }
+  .branch-c { border-color: #F59E0B; }
+
+  .branch-title {
+    font-size: 0.82rem;
+    font-weight: 700;
+    margin-bottom: 6px;
+  }
+
+  .branch-detail {
+    font-size: 0.78rem;
+    color: #94A3B8;
+    line-height: 1.5;
+  }
+
+  /* Summary cards */
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+    margin-top: 16px;
+  }
+
+  .summary-card {
+    background: #1E293B;
+    border-radius: 10px;
+    padding: 16px;
+    text-align: center;
+  }
+
+  .summary-card .num {
+    font-size: 1.8rem;
+    font-weight: 800;
+    background: linear-gradient(135deg, #48A9A6, #6366F1);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .summary-card .label {
+    font-size: 0.78rem;
+    color: #64748B;
+    margin-top: 4px;
+  }
+
+  .divider {
+    height: 1px;
+    background: #1E293B;
+    margin: 16px 0;
+  }
+
+  .note {
+    font-size: 0.78rem;
+    color: #F59E0B;
+    padding: 10px 14px;
+    background: #451A0322;
+    border: 1px solid #451A03;
+    border-radius: 8px;
+    margin-top: 12px;
+  }
+
+  @media (max-width: 600px) {
+    body { padding: 20px 12px; }
+    h1 { font-size: 1.5rem; }
+    .flow-header { padding: 16px; }
+    .flow-inner { padding: 0 16px 16px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <h1>Altio — Cartographie des flux</h1>
+  <p class="subtitle">Tous les parcours utilisateur de la plateforme</p>
+
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:#3B82F6"></div> Action propriétaire</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#10B981"></div> Action prestataire</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#F59E0B"></div> Paiement Stripe</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#8B5CF6"></div> Système auto</div>
+  </div>
+
+  <div class="summary-grid">
+    <div class="summary-card"><div class="num">16</div><div class="label">Statuts mission</div></div>
+    <div class="summary-card"><div class="num">13</div><div class="label">Statuts urgence</div></div>
+    <div class="summary-card"><div class="num">3</div><div class="label">Flux principaux</div></div>
+    <div class="summary-card"><div class="num">4</div><div class="label">Points de paiement</div></div>
+  </div>
+
+  <div style="height:32px"></div>
+
+  <!-- ═══════════════════ MISSION BROADCAST ═══════════════════ -->
+  <div class="flow-section" id="mission-broadcast">
+    <div class="flow-header" onclick="toggle('mission-broadcast')">
+      <div class="flow-title-group">
+        <div class="flow-icon" style="background:#1E3A5F">📋</div>
+        <div>
+          <div class="flow-title">Mission — Broadcast</div>
+          <div class="flow-desc">Le proprio publie, les prestataires postulent</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center">
+        <span class="flow-badge" style="background:#1E3A5F;color:#60A5FA">7 étapes</span>
+        <span class="chevron">▼</span>
+      </div>
+    </div>
+    <div class="flow-content">
+      <div class="flow-inner">
+        <div class="tabs" data-group="broadcast">
+          <div class="tab active" onclick="switchTab(this,'broadcast','vue-complete')">Vue complète</div>
+          <div class="tab" onclick="switchTab(this,'broadcast','vue-proprio')">Côté proprio</div>
+          <div class="tab" onclick="switchTab(this,'broadcast','vue-presta')">Côté presta</div>
+        </div>
+
+        <div class="tab-content active" id="broadcast-vue-complete">
+          <div class="steps">
+            <div class="step">
+              <div class="step-dot owner"></div>
+              <div class="step-status status-pending">pending</div>
+              <div class="step-label">Création de la mission</div>
+              <div class="step-detail">Le proprio choisit : propriété, type (ménage/linge/maintenance), date, tarif fixe, description. La mission est visible par tous les prestataires de la zone.</div>
+              <div class="step-who"><span class="who-owner">Propriétaire</span> → <code>createMission()</code></div>
+            </div>
+
+            <div class="step">
+              <div class="step-dot provider"></div>
+              <div class="step-status status-pending">pending</div>
+              <div class="step-label">Candidatures des prestataires</div>
+              <div class="step-detail">Les prestataires voient la mission et postulent avec un tarif proposé + message. Max 3 candidatures par mission. Vérification SIRET + RC Pro obligatoire.</div>
+              <div class="step-who"><span class="who-provider">Prestataire</span> → <code>applyToMission()</code></div>
+            </div>
+
+            <div class="step">
+              <div class="step-dot owner"></div>
+              <div class="step-status status-active">assigned</div>
+              <div class="step-label">Acceptation d'une candidature</div>
+              <div class="step-detail">Le proprio voit les candidatures (nom, note, tarif). Il accepte → la mission passe en "assigned". Le prestataire est notifié par push.</div>
+              <div class="step-who"><span class="who-owner">Propriétaire</span> → <code>handleApplication(id, 'accepted')</code></div>
+            </div>
+
+            <div class="step">
+              <div class="step-dot provider"></div>
+              <div class="step-status status-active">in_progress</div>
+              <div class="step-label">Démarrage de la mission</div>
+              <div class="step-detail">Le prestataire clique "Démarrer". Il voit l'adresse complète, le code d'accès si fourni.</div>
+              <div class="step-who"><span class="who-provider">Prestataire</span> → <code>startMission()</code></div>
+            </div>
+
+            <div class="step">
+              <div class="step-dot provider"></div>
+              <div class="step-status status-payment">awaiting_payment</div>
+              <div class="step-label">Fin de mission + photos</div>
+              <div class="step-detail">Le prestataire uploade les photos de fin (min. 1 si require_photos=true), puis clique "Terminer". La mission attend la validation du proprio.</div>
+              <div class="step-who"><span class="who-provider">Prestataire</span> → <code>completeMission()</code></div>
+            </div>
+
+            <div class="step">
+              <div class="step-dot payment"></div>
+              <div class="step-status status-payment">paid</div>
+              <div class="step-label">Validation + Paiement</div>
+              <div class="step-detail">Le proprio vérifie les photos, clique "Valider & Payer". Stripe capture le montant (tarif × 1.10 pour le proprio, × 0.90 pour le presta). Facture générée automatiquement.</div>
+              <div class="step-who"><span class="who-owner">Propriétaire</span> → <code>validateMission()</code> → Stripe → <code>completeMissionPayment()</code></div>
+            </div>
+
+            <div class="step">
+              <div class="step-dot owner"></div>
+              <div class="step-status status-done">paid</div>
+              <div class="step-label">Notation</div>
+              <div class="step-detail">Le proprio est invité à noter le prestataire (1-5 étoiles + commentaire). Il peut aussi l'ajouter en favori.</div>
+              <div class="step-who"><span class="who-owner">Propriétaire</span> → <code>submitReview()</code></div>
+            </div>
+          </div>
+
+          <div class="note">⚠️ À tout moment avant le paiement, le proprio ou le presta peut annuler → <code>cancelMission()</code> → statut <code>cancelled</code></div>
+
+          <div class="divider"></div>
+
+          <div class="branch branch-a">
+            <div class="branch-title">🔀 Variante : Aucune candidature</div>
+            <div class="branch-detail">Si personne ne postule, le proprio peut cliquer "Élargir la zone" → <code>expandMissionZone()</code> → relance la recherche à 30km. Si toujours rien → la mission expire (<code>expired</code>) et peut être republiée.</div>
+          </div>
+
+          <div class="branch branch-c">
+            <div class="branch-title">🔀 Variante : Mode devis</div>
+            <div class="branch-detail">Au lieu du tarif fixe, le prestataire soumet un devis détaillé avec lignes (main d'œuvre, fournitures, etc.). Le proprio accepte ou refuse. Si accepté → paiement en pré-autorisation → travaux → capture finale.</div>
+          </div>
+        </div>
+
+        <div class="tab-content" id="broadcast-vue-proprio">
+          <div class="steps">
+            <div class="step"><div class="step-dot owner"></div><div class="step-label">Je crée ma mission</div><div class="step-detail">Choix propriété, type, date, tarif → Bouton "Publier"</div></div>
+            <div class="step"><div class="step-dot owner"></div><div class="step-label">J'attends les candidatures</div><div class="step-detail">Je vois le nombre de candidatures. Je peux élargir la zone si 0.</div></div>
+            <div class="step"><div class="step-dot owner"></div><div class="step-label">J'accepte un prestataire</div><div class="step-detail">Je vois nom, note, tarif de chacun. Bouton "Accepter" → alerte avec montant total (tarif + 10% frais).</div></div>
+            <div class="step"><div class="step-dot owner"></div><div class="step-label">J'attends qu'il fasse le travail</div><div class="step-detail">Statuts : "Confirmé" → "En cours". Je peux chatter avec le presta.</div></div>
+            <div class="step"><div class="step-dot owner"></div><div class="step-label">Je valide et je paye</div><div class="step-detail">Je vois les photos. Bouton "Valider & Payer" → Stripe → c'est payé.</div></div>
+            <div class="step"><div class="step-dot owner"></div><div class="step-label">Je note le prestataire</div><div class="step-detail">1-5 étoiles + commentaire. Je peux l'ajouter en favori.</div></div>
+          </div>
+        </div>
+
+        <div class="tab-content" id="broadcast-vue-presta">
+          <div class="steps">
+            <div class="step"><div class="step-dot provider"></div><div class="step-label">Je vois une mission disponible</div><div class="step-detail">Dans mon dashboard ou "Missions disponibles". Je vois : type, ville (pas l'adresse), date, tarif.</div></div>
+            <div class="step"><div class="step-dot provider"></div><div class="step-label">Je postule</div><div class="step-detail">Bouton "Postuler" → je propose mon tarif + un message. Il faut que mon SIRET et RC Pro soient vérifiés.</div></div>
+            <div class="step"><div class="step-dot provider"></div><div class="step-label">J'attends la réponse</div><div class="step-detail">Le proprio accepte ou refuse. Si accepté → je reçois une notif push.</div></div>
+            <div class="step"><div class="step-dot provider"></div><div class="step-label">Je démarre la mission</div><div class="step-detail">Bouton "Démarrer". Je vois l'adresse complète + code d'accès.</div></div>
+            <div class="step"><div class="step-dot provider"></div><div class="step-label">Je fais le travail + photos</div><div class="step-detail">J'uploade mes photos (obligatoire). Bouton "Terminer".</div></div>
+            <div class="step"><div class="step-dot provider"></div><div class="step-label">J'attends le paiement</div><div class="step-detail">Le proprio valide et paye. Je reçois mon montant (tarif × 0.90).</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ MISSION FAVORI ═══════════════════ -->
+  <div class="flow-section" id="mission-favori">
+    <div class="flow-header" onclick="toggle('mission-favori')">
+      <div class="flow-title-group">
+        <div class="flow-icon" style="background:#064E3B">⭐</div>
+        <div>
+          <div class="flow-title">Mission — Assignation directe (Favori)</div>
+          <div class="flow-desc">Le proprio envoie directement à son prestataire favori</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center">
+        <span class="flow-badge" style="background:#064E3B;color:#34D399">6 étapes</span>
+        <span class="chevron">▼</span>
+      </div>
+    </div>
+    <div class="flow-content">
+      <div class="flow-inner">
+        <div class="steps">
+          <div class="step">
+            <div class="step-dot owner"></div>
+            <div class="step-status status-pending">pending_provider_approval</div>
+            <div class="step-label">Envoi au favori</div>
+            <div class="step-detail">Le proprio crée la mission et l'assigne directement à un prestataire favori. Le presta reçoit une notif push.</div>
+            <div class="step-who"><span class="who-owner">Propriétaire</span> → <code>createMission({ provider_id })</code></div>
+          </div>
+
+          <div class="step">
+            <div class="step-dot provider"></div>
+            <div class="step-status status-active">assigned</div>
+            <div class="step-label">Le prestataire accepte ou refuse</div>
+            <div class="step-detail">Le presta voit l'écran ProviderMissionReview avec : détails mission, planning du jour, mini-carte (points verts = missions confirmées, point orange = nouvelle). Boutons Accepter / Décliner.</div>
+            <div class="step-who"><span class="who-provider">Prestataire</span> → <code>acceptDirectMission()</code> ou <code>rejectDirectMission()</code></div>
+          </div>
+
+          <div class="step">
+            <div class="step-dot provider"></div>
+            <div class="step-status status-active">in_progress</div>
+            <div class="step-label">Démarrage</div>
+            <div class="step-detail">Même flux que le broadcast : démarrage → photos → complétion.</div>
+          </div>
+
+          <div class="step">
+            <div class="step-dot provider"></div>
+            <div class="step-status status-payment">awaiting_payment</div>
+            <div class="step-label">Fin de mission + photos</div>
+            <div class="step-detail">Upload photos, marque terminé.</div>
+          </div>
+
+          <div class="step">
+            <div class="step-dot payment"></div>
+            <div class="step-status status-payment">paid</div>
+            <div class="step-label">Validation + Paiement</div>
+            <div class="step-detail">Le proprio valide, Stripe capture. Facture générée.</div>
+          </div>
+
+          <div class="step">
+            <div class="step-dot owner"></div>
+            <div class="step-status status-done">paid</div>
+            <div class="step-label">Notation</div>
+            <div class="step-detail">1-5 étoiles + commentaire.</div>
+          </div>
+        </div>
+
+        <div class="branch branch-b">
+          <div class="branch-title">🔀 Si le prestataire décline</div>
+          <div class="branch-detail">Statut → <code>rejected</code>, provider_id → null. Le proprio reçoit une notif et peut choisir de republier en broadcast ou d'envoyer à un autre favori.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ URGENCE ═══════════════════ -->
+  <div class="flow-section" id="urgence">
+    <div class="flow-header" onclick="toggle('urgence')">
+      <div class="flow-title-group">
+        <div class="flow-icon" style="background:#451A03">🚨</div>
+        <div>
+          <div class="flow-title">Urgence</div>
+          <div class="flow-desc">Plomberie, électricité, serrurerie — enchères + devis sur place</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center">
+        <span class="flow-badge" style="background:#451A03;color:#FBBF24">10 étapes</span>
+        <span class="chevron">▼</span>
+      </div>
+    </div>
+    <div class="flow-content">
+      <div class="flow-inner">
+        <div class="tabs" data-group="urgence">
+          <div class="tab active" onclick="switchTab(this,'urgence','urg-complete')">Vue complète</div>
+          <div class="tab" onclick="switchTab(this,'urgence','urg-proprio')">Côté proprio</div>
+          <div class="tab" onclick="switchTab(this,'urgence','urg-presta')">Côté presta</div>
+        </div>
+
+        <div class="tab-content active" id="urgence-urg-complete">
+          <div class="steps">
+            <div class="step">
+              <div class="step-dot owner"></div>
+              <div class="step-status status-danger">bids_open</div>
+              <div class="step-label">1. Création de l'urgence</div>
+              <div class="step-detail">Le proprio choisit propriété + type (plomberie/électricité/serrurerie/jacuzzi/réparation) + description + photos. Countdown 24h lancé. Notifs push envoyées aux prestas de la zone (favoris d'abord, 2h de priorité).</div>
+              <div class="step-who"><span class="who-owner">Propriétaire</span> → <code>createEmergency()</code></div>
+            </div>
+
+            <div class="step">
+              <div class="step-dot provider"></div>
+              <div class="step-status status-danger">bids_open</div>
+              <div class="step-label">2. Enchères des prestataires</div>
+              <div class="step-detail">Chaque presta soumet un bid : coût déplacement + coût diagnostic + heure d'arrivée estimée. Plusieurs prestas peuvent enchérir.</div>
+              <div class="step-who"><span class="who-provider">Prestataire</span> → <code>submitEmergencyBid()</code></div>
+            </div>
+
+            <div class="step">
+              <div class="step-dot owner"></div>
+              <div class="step-status status-pending">bid_accepted</div>
+              <div class="step-label">3. Le proprio choisit un bid</div>
+              <div class="step-detail">Le proprio voit les bids avec badges : "Arrive le plus vite" / "Moins cher" / "Mieux noté". Il accepte → paiement Stripe immédiat (déplacement + diagnostic).</div>
+              <div class="step-who"><span class="who-owner">Propriétaire</span> → <code>acceptEmergencyBid()</code> + <span class="who-system">Stripe</span></div>
+            </div>
+
+            <div class="step">
+              <div class="step-dot system"></div>
+              <div class="step-status status-active">displacement_paid</div>
+              <div class="step-label">4. En route</div>
+              <div class="step-detail">Le presta se déplace. Le proprio voit "En route" avec l'ETA.</div>
+            </div>
+
+            <div class="step">
+              <div class="step-dot provider"></div>
+              <div class="step-status status-active">on_site</div>
+              <div class="step-label">5. Arrivée sur place</div>
+              <div class="step-detail">Le presta clique "Je suis arrivé". Il diagnostique le problème.</div>
+              <div class="step-who"><span class="who-provider">Prestataire</span> → <code>markEmergencyArrived()</code></div>
+            </div>
+          </div>
+
+          <div class="divider"></div>
+          <p style="font-size:0.85rem;font-weight:700;margin-bottom:12px;color:#F59E0B">⚡ Deux chemins possibles :</p>
+
+          <div class="branch branch-a">
+            <div class="branch-title">Chemin A — Pas besoin de travaux supplémentaires</div>
+            <div class="branch-detail">La première heure (déplacement + diagnostic) suffit. Le presta clique "Terminer" → <code>completeEmergency()</code> → statut <code>completed</code>. Le paiement du bid était la totalité. Terminé.</div>
+          </div>
+
+          <div class="branch branch-b">
+            <div class="branch-title">Chemin B — Travaux nécessaires → Devis</div>
+            <div class="branch-detail" style="padding:0">
+              <div class="steps" style="margin-top:12px">
+                <div class="step">
+                  <div class="step-dot provider"></div>
+                  <div class="step-status status-pending">quote_submitted</div>
+                  <div class="step-label">6. Le presta crée un devis</div>
+                  <div class="step-detail">Lignes détaillées : main d'œuvre, pièces, déplacement. TVA calculée (20% standard, 10% rénovation, 0% auto-entrepreneur). Frais Altio 10% en plus.</div>
+                  <div class="step-who"><span class="who-provider">Prestataire</span> → <code>submitQuoteWithLines()</code></div>
+                </div>
+
+                <div class="step">
+                  <div class="step-dot owner"></div>
+                  <div class="step-status status-payment">quote_accepted</div>
+                  <div class="step-label">7. Le proprio accepte le devis</div>
+                  <div class="step-detail">Il voit le détail HT/TVA/TTC + frais. Il accepte → Stripe en PRÉ-AUTORISATION (pas capturé immédiatement).</div>
+                  <div class="step-who"><span class="who-owner">Propriétaire</span> → <code>acceptEmergencyQuote()</code> + <span class="who-system">Stripe hold</span></div>
+                </div>
+
+                <div class="step">
+                  <div class="step-dot provider"></div>
+                  <div class="step-status status-active">in_progress</div>
+                  <div class="step-label">8. Travaux en cours</div>
+                  <div class="step-detail">Le presta fait les travaux. Le paiement est bloqué sur la carte du proprio.</div>
+                </div>
+
+                <div class="step">
+                  <div class="step-dot payment"></div>
+                  <div class="step-status status-done">completed</div>
+                  <div class="step-label">9. Fin → Capture du paiement</div>
+                  <div class="step-detail">Le presta clique "Terminer" → le paiement pré-autorisé est capturé → <code>completed</code>.</div>
+                  <div class="step-who"><span class="who-provider">Prestataire</span> → <code>completeEmergencyWithCapture()</code></div>
+                </div>
+
+                <div class="step">
+                  <div class="step-dot owner"></div>
+                  <div class="step-status status-done">completed</div>
+                  <div class="step-label">10. Notation</div>
+                  <div class="step-detail">Le proprio note le presta. Fin du flux.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="branch branch-c">
+            <div class="branch-title">🔀 Si le proprio refuse le devis</div>
+            <div class="branch-detail">Statut → <code>quote_refused</code>. Le presta peut resoumettre un nouveau devis. Le cycle reprend à l'étape 6.</div>
+          </div>
+        </div>
+
+        <div class="tab-content" id="urgence-urg-proprio">
+          <div class="steps">
+            <div class="step"><div class="step-dot owner"></div><div class="step-label">Je déclare une urgence</div><div class="step-detail">Propriété + type + description + photos → "Envoyer"</div></div>
+            <div class="step"><div class="step-dot owner"></div><div class="step-label">J'attends les enchères (24h max)</div><div class="step-detail">Je vois les bids arriver avec les badges (rapide/pas cher/bien noté).</div></div>
+            <div class="step"><div class="step-dot owner"></div><div class="step-label">J'accepte un bid → je paye le déplacement</div><div class="step-detail">Stripe capture immédiatement. Le presta se met en route.</div></div>
+            <div class="step"><div class="step-dot owner"></div><div class="step-label">Le presta arrive et diagnostique</div><div class="step-detail">J'attends — il me dira s'il faut plus de travaux.</div></div>
+            <div class="step"><div class="step-dot owner"></div><div class="step-label">Si devis → j'accepte ou refuse</div><div class="step-detail">Je vois le détail des coûts. Si j'accepte → Stripe bloque le montant sur ma carte.</div></div>
+            <div class="step"><div class="step-dot owner"></div><div class="step-label">Travaux finis → paiement capturé</div><div class="step-detail">Le montant bloqué est débité. Je note le prestataire.</div></div>
+          </div>
+        </div>
+
+        <div class="tab-content" id="urgence-urg-presta">
+          <div class="steps">
+            <div class="step"><div class="step-dot provider"></div><div class="step-label">Je vois une urgence dans ma zone</div><div class="step-detail">Notif push + visible dans mon dashboard.</div></div>
+            <div class="step"><div class="step-dot provider"></div><div class="step-label">Je soumets mon enchère</div><div class="step-detail">Coût déplacement + diagnostic + heure d'arrivée estimée.</div></div>
+            <div class="step"><div class="step-dot provider"></div><div class="step-label">Si choisi → je me déplace</div><div class="step-detail">Notif "Vous avez été choisi !". Je me mets en route.</div></div>
+            <div class="step"><div class="step-dot provider"></div><div class="step-label">J'arrive → je clique "Sur place"</div><div class="step-detail">Je diagnostique le problème.</div></div>
+            <div class="step"><div class="step-dot provider"></div><div class="step-label">Option A : Pas besoin de plus → "Terminer"</div><div class="step-detail">La première heure suffisait. C'est fini.</div></div>
+            <div class="step"><div class="step-dot provider"></div><div class="step-label">Option B : Je crée un devis détaillé</div><div class="step-detail">Lignes : main d'œuvre, pièces, TVA calculée auto.</div></div>
+            <div class="step"><div class="step-dot provider"></div><div class="step-label">Si devis accepté → je fais les travaux</div><div class="step-detail">Le paiement est déjà bloqué. Je travaille sereinement.</div></div>
+            <div class="step"><div class="step-dot provider"></div><div class="step-label">Travaux finis → "Terminer"</div><div class="step-detail">Le paiement est capturé. Je reçois mon montant.</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ DEVIS ═══════════════════ -->
+  <div class="flow-section" id="devis">
+    <div class="flow-header" onclick="toggle('devis')">
+      <div class="flow-title-group">
+        <div class="flow-icon" style="background:#2E1065">📄</div>
+        <div>
+          <div class="flow-title">Devis</div>
+          <div class="flow-desc">Création ligne par ligne, acceptation, paiement</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center">
+        <span class="flow-badge" style="background:#2E1065;color:#A78BFA">5 étapes</span>
+        <span class="chevron">▼</span>
+      </div>
+    </div>
+    <div class="flow-content">
+      <div class="flow-inner">
+        <div class="steps">
+          <div class="step">
+            <div class="step-dot provider"></div>
+            <div class="step-status status-pending">quote_submitted</div>
+            <div class="step-label">Création du devis</div>
+            <div class="step-detail">Le presta accède à <code>/quote/create</code>. Il ajoute des lignes : type (main d'œuvre / fournitures / déplacement / diagnostic / custom), description, quantité, unité (heure/m²/forfait), prix unitaire HT. TVA calculée auto (20% standard, 10% rénovation, 0% micro-entrepreneur).</div>
+          </div>
+          <div class="step">
+            <div class="step-dot system"></div>
+            <div class="step-status status-pending">quote_sent</div>
+            <div class="step-label">Envoi au propriétaire</div>
+            <div class="step-detail">Le devis est envoyé. Le proprio reçoit une notification.</div>
+          </div>
+          <div class="step">
+            <div class="step-dot owner"></div>
+            <div class="step-status status-payment">quote_accepted</div>
+            <div class="step-label">Acceptation + pré-autorisation</div>
+            <div class="step-detail">Le proprio voit : sous-total HT, TVA, total TTC, frais Altio 10%, grand total. Il coche la case d'acceptation. Stripe bloque le montant (capture manuelle).</div>
+          </div>
+          <div class="step">
+            <div class="step-dot provider"></div>
+            <div class="step-status status-active">assigned / in_progress</div>
+            <div class="step-label">Travaux</div>
+            <div class="step-detail">Le presta effectue les travaux. Le paiement est bloqué.</div>
+          </div>
+          <div class="step">
+            <div class="step-dot payment"></div>
+            <div class="step-status status-done">completed / paid</div>
+            <div class="step-label">Complétion + capture</div>
+            <div class="step-detail">Le presta termine → le paiement pré-autorisé est capturé. Facture générée.</div>
+          </div>
+        </div>
+        <div class="branch branch-c">
+          <div class="branch-title">🔀 Si le proprio refuse le devis</div>
+          <div class="branch-detail">Statut → <code>quote_refused</code>. Le presta peut resoumettre un nouveau devis ou la mission/urgence peut être annulée.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ PAIEMENT ═══════════════════ -->
+  <div class="flow-section" id="paiement">
+    <div class="flow-header" onclick="toggle('paiement')">
+      <div class="flow-title-group">
+        <div class="flow-icon" style="background:#1a3a1a">💳</div>
+        <div>
+          <div class="flow-title">Paiements Stripe</div>
+          <div class="flow-desc">4 points de paiement dans l'app — commissions 10%+10%</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center">
+        <span class="flow-badge" style="background:#1a3a1a;color:#4ADE80">4 flux</span>
+        <span class="chevron">▼</span>
+      </div>
+    </div>
+    <div class="flow-content">
+      <div class="flow-inner">
+        <div class="branch branch-a">
+          <div class="branch-title">💳 1. Mission — Valider & Payer</div>
+          <div class="branch-detail">Quand : statut <code>awaiting_payment</code><br>Mode : capture immédiate<br>Montant proprio : tarif × 1.10 (inclut 10% frais Altio)<br>Montant presta : tarif × 0.90 (après 10% commission)<br>→ <code>createPaymentIntent()</code> → Stripe Sheet → <code>completeMissionPayment()</code></div>
+        </div>
+        <div class="branch branch-b">
+          <div class="branch-title">💳 2. Urgence — Accepter un bid</div>
+          <div class="branch-detail">Quand : proprio accepte un bid en <code>bids_open</code><br>Mode : capture immédiate<br>Montant : déplacement + diagnostic + frais<br>→ <code>acceptEmergencyBid()</code></div>
+        </div>
+        <div class="branch branch-c">
+          <div class="branch-title">💳 3. Urgence — Accepter un devis</div>
+          <div class="branch-detail">Quand : proprio accepte devis en <code>quote_sent</code><br>Mode : PRÉ-AUTORISATION (capture manuelle plus tard)<br>Montant : total TTC + frais Altio<br>→ <code>acceptEmergencyQuote()</code></div>
+        </div>
+        <div class="branch branch-a">
+          <div class="branch-title">💳 4. Urgence — Capture finale</div>
+          <div class="branch-detail">Quand : presta termine les travaux (<code>quote_accepted</code>)<br>Mode : capture du montant pré-autorisé<br>→ <code>completeEmergencyWithCapture()</code></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ AUTRES FLUX ═══════════════════ -->
+  <div class="flow-section" id="autres">
+    <div class="flow-header" onclick="toggle('autres')">
+      <div class="flow-title-group">
+        <div class="flow-icon" style="background:#334155">⚙️</div>
+        <div>
+          <div class="flow-title">Autres flux</div>
+          <div class="flow-desc">Chat, notifications, avis, favoris, planning, iCal</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center">
+        <span class="flow-badge" style="background:#334155;color:#94A3B8">6 flux</span>
+        <span class="chevron">▼</span>
+      </div>
+    </div>
+    <div class="flow-content">
+      <div class="flow-inner">
+        <div class="branch branch-a">
+          <div class="branch-title">💬 Chat</div>
+          <div class="branch-detail">Messagerie temps réel entre proprio et presta assigné. Supabase Realtime. Accessible depuis le détail mission/urgence.</div>
+        </div>
+        <div class="branch branch-b">
+          <div class="branch-title">🔔 Notifications</div>
+          <div class="branch-detail">Double système : push via Edge Function <code>send-push</code> + in-app stockées en DB. Triggers automatiques sur chaque changement de statut. Invalidation cache via <code>useRealtimeSync</code>.</div>
+        </div>
+        <div class="branch branch-a">
+          <div class="branch-title">⭐ Avis / Reviews</div>
+          <div class="branch-detail">Après chaque mission payée ou urgence terminée. 1-5 étoiles + commentaire. Affiché sur le profil presta. Auto-popup après paiement.</div>
+        </div>
+        <div class="branch branch-b">
+          <div class="branch-title">❤️ Favoris</div>
+          <div class="branch-detail">Le proprio ajoute un presta en favori. Les favoris ont 2h de priorité sur les broadcasts et urgences. Table <code>favorite_providers</code>.</div>
+        </div>
+        <div class="branch branch-c">
+          <div class="branch-title">📅 Planning prestataire</div>
+          <div class="branch-detail">Vue calendrier des missions du jour avec statuts colorés. Écran <code>(provider)/planning.tsx</code> + hook <code>useProviderSchedule()</code>.</div>
+        </div>
+        <div class="branch branch-a">
+          <div class="branch-title">📆 Sync iCal</div>
+          <div class="branch-detail">Edge Function <code>sync-ical</code> + cron. Synchro des réservations Airbnb/Booking via URL .ics. Actuellement : crée des missions auto (en cours de redesign pour juste notifier le proprio).</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+function toggle(id) {
+  document.getElementById(id).classList.toggle('open');
+}
+
+function switchTab(el, group, tabId) {
+  const section = el.closest('.flow-inner');
+  section.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  section.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById(group + '-' + tabId).classList.add('active');
+}
+</script>
+
+</body>
+</html>
