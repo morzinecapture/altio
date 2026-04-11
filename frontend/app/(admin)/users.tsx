@@ -1,44 +1,40 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, RefreshControl, TextInput, FlatList } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
+import { useQuery } from '@tanstack/react-query';
 import { COLORS, FONTS, SPACING, RADIUS, SHADOWS } from '../../src/theme';
 import { AdminGuard } from '../../src/components/AdminGuard';
 import { getAdminUsers } from '../../src/api';
-
-const ROLE_FILTERS  = [{ key: 'all', label: 'Tous' }, { key: 'owner', label: 'Owner' }, { key: 'provider', label: 'Prestataire' }];
-const STATUS_FILTERS = [{ key: 'all', label: 'Actifs' }, { key: 'suspended', label: 'Suspendus' }];
+import type { User } from '../../src/types/api';
 
 export default function AdminUsers() {
+  const { t } = useTranslation();
   const router = useRouter();
-  const [users, setUsers]             = useState<any[]>([]);
-  const [loading, setLoading]         = useState(true);
-  const [refreshing, setRefreshing]   = useState(false);
   const [search, setSearch]           = useState('');
   const [roleFilter, setRoleFilter]   = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [appliedSearch, setAppliedSearch] = useState('');
 
-  const fetchData = async () => {
-    try {
-      const result = await getAdminUsers(search, roleFilter, statusFilter);
-      setUsers(result);
-    } catch (e) { console.error(e); }
-    finally { setLoading(false); setRefreshing(false); }
-  };
+  const ROLE_FILTERS  = [{ key: 'all', label: t('admin.users.filter_all') }, { key: 'owner', label: t('admin.users.filter_owner') }, { key: 'provider', label: t('admin.users.filter_provider') }];
+  const STATUS_FILTERS = [{ key: 'all', label: t('admin.users.filter_active') }, { key: 'suspended', label: t('admin.users.filter_suspended') }];
 
-  useFocusEffect(useCallback(() => { fetchData(); }, []));
+  const { data: users = [] as User[], isLoading: loading, refetch } = useQuery({
+    queryKey: ['admin-users', appliedSearch, roleFilter, statusFilter],
+    queryFn: () => getAdminUsers(appliedSearch, roleFilter, statusFilter),
+  });
 
-  // Refetch quand les filtres changent
-  const applySearch = () => { setLoading(true); fetchData(); };
+  const applySearch = () => { setAppliedSearch(search); };
 
-  const renderUser = ({ item: u }: { item: any }) => (
-    <TouchableOpacity style={styles.userRow} onPress={() => router.push(`/(admin)/user/${u.id}` as any)} activeOpacity={0.8}>
+  const renderUser = ({ item: u }: { item: { id: string; name: string; email: string; role: string; is_admin?: boolean; suspended?: boolean; created_at: string } }) => (
+    <TouchableOpacity style={styles.userRow} onPress={() => router.push(`/(admin)/user/${u.id}` as never)} activeOpacity={0.8}>
       <View style={styles.avatarCircle}>
         <Text style={styles.avatarLetter}>{(u.name || u.email || '?')[0].toUpperCase()}</Text>
       </View>
       <View style={styles.userBody}>
-        <Text style={styles.userName} numberOfLines={1}>{u.name || 'Sans nom'}</Text>
+        <Text style={styles.userName} numberOfLines={1}>{u.name || t('admin.users.no_name')}</Text>
         <Text style={styles.userEmail} numberOfLines={1}>{u.email}</Text>
       </View>
       <View style={styles.userMeta}>
@@ -51,7 +47,7 @@ export default function AdminUsers() {
         )}
         {u.suspended && (
           <View style={[styles.roleBadge, { backgroundColor: COLORS.urgencySoft, marginTop: 4 }]}>
-            <Text style={[styles.roleBadgeText, { color: COLORS.urgency }]}>Suspendu</Text>
+            <Text style={[styles.roleBadgeText, { color: COLORS.urgency }]}>{t('admin.users.suspended')}</Text>
           </View>
         )}
       </View>
@@ -64,8 +60,8 @@ export default function AdminUsers() {
       <SafeAreaView style={styles.container}>
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.title}>Utilisateurs</Text>
-          <Text style={styles.count}>{users.length} résultat{users.length !== 1 ? 's' : ''}</Text>
+          <Text style={styles.title}>{t('admin.users.title')}</Text>
+          <Text style={styles.count}>{users.length !== 1 ? t('admin.users.results', { count: users.length }) : t('admin.users.result', { count: users.length })}</Text>
         </View>
 
         {/* Recherche */}
@@ -73,7 +69,7 @@ export default function AdminUsers() {
           <Ionicons name="search-outline" size={18} color={COLORS.textTertiary} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Rechercher par nom ou email…"
+            placeholder={t('admin.users.search_placeholder')}
             placeholderTextColor={COLORS.textTertiary}
             value={search}
             onChangeText={setSearch}
@@ -81,7 +77,7 @@ export default function AdminUsers() {
             returnKeyType="search"
           />
           {search.length > 0 && (
-            <TouchableOpacity onPress={() => { setSearch(''); setTimeout(applySearch, 0); }}>
+            <TouchableOpacity onPress={() => { setSearch(''); setAppliedSearch(''); }}>
               <Ionicons name="close-circle" size={18} color={COLORS.textTertiary} />
             </TouchableOpacity>
           )}
@@ -93,7 +89,7 @@ export default function AdminUsers() {
             <TouchableOpacity
               key={f.key}
               style={[styles.chip, roleFilter === f.key && styles.chipActive]}
-              onPress={() => { setRoleFilter(f.key); setLoading(true); setTimeout(fetchData, 0); }}
+              onPress={() => { setRoleFilter(f.key); }}
             >
               <Text style={[styles.chipText, roleFilter === f.key && styles.chipTextActive]}>{f.label}</Text>
             </TouchableOpacity>
@@ -103,7 +99,7 @@ export default function AdminUsers() {
             <TouchableOpacity
               key={f.key}
               style={[styles.chip, statusFilter === f.key && styles.chipActive, statusFilter === f.key && f.key === 'suspended' && { backgroundColor: COLORS.urgency, borderColor: COLORS.urgency }]}
-              onPress={() => { setStatusFilter(f.key); setLoading(true); setTimeout(fetchData, 0); }}
+              onPress={() => { setStatusFilter(f.key); }}
             >
               <Text style={[styles.chipText, statusFilter === f.key && styles.chipTextActive]}>{f.label}</Text>
             </TouchableOpacity>
@@ -117,13 +113,13 @@ export default function AdminUsers() {
             data={users}
             keyExtractor={u => u.id}
             renderItem={renderUser}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchData(); }} />}
+            refreshControl={<RefreshControl refreshing={false} onRefresh={() => refetch()} />}
             contentContainerStyle={styles.list}
             ItemSeparatorComponent={() => <View style={{ height: SPACING.sm }} />}
             ListEmptyComponent={
               <View style={styles.empty}>
                 <Ionicons name="people-outline" size={50} color={COLORS.textTertiary} />
-                <Text style={styles.emptyText}>Aucun utilisateur trouvé</Text>
+                <Text style={styles.emptyText}>{t('admin.users.no_user_found')}</Text>
               </View>
             }
           />

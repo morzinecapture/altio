@@ -25,7 +25,8 @@ serve(async (req) => {
     const adminClient = createClient(supabaseUrl, supabaseServiceKey)
 
     // Resolve the caller's user id from their token
-    const { data: { user }, error: userError } = await userClient.auth.getUser()
+    const token = authHeader.replace('Bearer ', '')
+    const { data: { user }, error: userError } = await userClient.auth.getUser(token)
     if (userError || !user) throw new Error('Invalid or expired token')
 
     const userId = user.id

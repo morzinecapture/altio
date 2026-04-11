@@ -1,27 +1,58 @@
 {
   "expo": {
-    "name": "frontend",
-    "slug": "frontend",
+    "name": "Altio",
+    "slug": "altio",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "frontend",
+    "scheme": "altio",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true,
-      "bundleIdentifier": "com.montrto.app",
+      "supportsTablet": false,
+      "bundleIdentifier": "com.altio.app",
+      "buildNumber": "1",
+      "usesAppleSignIn": true,
+      "privacyManifests": {
+        "NSPrivacyAccessedAPITypes": [
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryFileTimestamp",
+            "NSPrivacyAccessedAPITypeReasons": ["C617.1", "0A2A.1", "3B52.1"]
+          },
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryUserDefaults",
+            "NSPrivacyAccessedAPITypeReasons": ["CA92.1"]
+          },
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategorySystemBootTime",
+            "NSPrivacyAccessedAPITypeReasons": ["35F9.1"]
+          },
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryDiskSpace",
+            "NSPrivacyAccessedAPITypeReasons": ["E174.1", "85F4.1"]
+          }
+        ]
+      },
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSPhotoLibraryUsageDescription": "Cette application accède à vos photos pour uploader des preuves d'intervention.",
+        "NSPhotoLibraryAddUsageDescription": "Cette application sauvegarde des photos de vos interventions.",
+        "NSCameraUsageDescription": "Cette application utilise l'appareil photo pour prendre des preuves de fin de mission.",
+        "NSLocationWhenInUseUsageDescription": "Cette application utilise votre localisation pour trouver les prestataires et missions à proximité."
       }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#000"
+        "backgroundColor": "#000000"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.montrto.app"
+      "package": "com.altio.app",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -42,17 +73,36 @@
           "image": "./assets/images/splash-image.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#000"
+          "backgroundColor": "#000000"
         }
       ],
       "expo-web-browser",
       [
         "@stripe/stripe-react-native",
         {
-          "merchantIdentifier": "com.montrto.app",
+          "merchantIdentifier": "com.altio.app",
           "enableApplePay": true
         }
-      ]
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Cette application a besoin d'accéder à vos photos pour uploader des preuves d'intervention.",
+          "cameraPermission": "Cette application a besoin de l'appareil photo pour prendre des preuves de fin de mission."
+        }
+      ],
+      "expo-font",
+      "@react-native-community/datetimepicker",
+      "expo-localization",
+      "expo-apple-authentication",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Cette application utilise votre localisation pour trouver les prestataires et missions à proximité."
+        }
+      ],
+      "expo-secure-store",
+      "@sentry/react-native"
     ],
     "experiments": {
       "typedRoutes": true

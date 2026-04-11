@@ -5,13 +5,15 @@ import { supabase, checkError, captureError, unwrapJoin, getPropertyName, havers
 import type { MissionStatus, CreateMissionPayload, ApplyToMissionPayload, MergedMission, MissionApplicationEnriched, SupabaseError, MissionRow, ApplicationRow, ProviderWithUser } from './_client';
 import { sendPushNotification } from './notifications';
 import { getEmergency } from './emergencies';
+import { geocodeAddress } from './profile';
+
 
 // Missions
 export const getMissions = async (status?: string, missionType?: string, forProvider?: boolean) => {
   const { data: { session } } = await supabase.auth.getSession();
   const uid = session?.user?.id;
 
-  let query = supabase.from('missions').select('*, property:properties(name, address, access_code, instructions, deposit_location, latitude, longitude)').order('created_at', { ascending: false });
+  let query = supabase.from('missions').select('*, property:properties(name, address, city, access_code, instructions, deposit_location, latitude, longitude)').order('created_at', { ascending: false });
 
   if (status) query = query.eq('status', status);
   if (missionType) query = query.eq('mission_type', missionType);
@@ -23,7 +25,7 @@ export const getMissions = async (status?: string, missionType?: string, forProv
     ...m,
     mission_id: m.id,
     property_name: unwrapJoin(m.property)?.name,
-    property_address: unwrapJoin(m.property)?.address,
+    property_address: forProvider && (m.assigned_provider_id !== uid || ['pending', 'pending_provider_approval'].includes(m.status)) ? (unwrapJoin(m.property)?.city || '') : unwrapJoin(m.property)?.address,
     access_code: unwrapJoin(m.property)?.access_code,
     instructions: unwrapJoin(m.property)?.instructions,
     deposit_location: unwrapJoin(m.property)?.deposit_location,
@@ -32,16 +34,19 @@ export const getMissions = async (status?: string, missionType?: string, forProv
     is_emergency: false
   }));
 
-  let emQuery = supabase.from('emergency_requests').select('*, property:properties(name, address, access_code, instructions, deposit_location, latitude, longitude)').order('created_at', { ascending: false });
+  let emQuery = supabase.from('emergency_requests').select('*, property:properties(name, address, city, access_code, instructions, deposit_location, latitude, longitude)').order('created_at', { ascending: false });
   if (missionType) emQuery = emQuery.eq('service_type', missionType);
 
   const { data: emData } = await emQuery;
 
   let emergencies = (emData || []).map((e) => {
     let mappedStatus = 'pending';
-    if (e.status === 'open') mappedStatus = 'pending';
+    if (e.status === 'bids_open') mappedStatus = 'pending';
     else if (e.status === 'provider_accepted' || e.status === 'bid_accepted') mappedStatus = 'assigned';
     else if (e.status === 'completed') mappedStatus = 'completed';
+    else if (e.status === 'cancelled') mappedStatus = 'cancelled';
+    else if (e.status === 'refunded') mappedStatus = 'refunded';
+    else if (e.status === 'awaiting_payment' || e.status === 'quote_accepted' || e.status === 'quote_paid') mappedStatus = 'awaiting_payment';
     else mappedStatus = 'in_progress';
 
     const fixed_rate = (e.displacement_fee || 0) + (e.diagnostic_fee || 0);
@@ -56,7 +61,7 @@ export const getMissions = async (status?: string, missionType?: string, forProv
       fixed_rate,
       scheduled_date: e.created_at,
       property_name: unwrapJoin(e.property)?.name,
-      property_address: unwrapJoin(e.property)?.address,
+      property_address: forProvider && e.accepted_provider_id !== uid ? (unwrapJoin(e.property)?.city || '') : unwrapJoin(e.property)?.address,
       access_code: (e.property as MissionRow['property'])?.access_code,
       instructions: (e.property as MissionRow['property'])?.instructions,
       deposit_location: (e.property as MissionRow['property'])?.deposit_location,
@@ -108,6 +113,23 @@ export const getMissions = async (status?: string, missionType?: string, forProv
         return true;
       });
     }
+
+    // Fetch provider's emergency bids to attach status and filter cancelled
+    const { data: myEmBids } = await supabase
+      .from('emergency_bids')
+      .select('emergency_request_id, status')
+      .eq('provider_id', uid);
+    const bidStatusMap = new Map<string, string>();
+    (myEmBids || []).forEach((b: { emergency_request_id: string; status: string }) => {
+      bidStatusMap.set(b.emergency_request_id, b.status);
+    });
+
+    mergedMissions = mergedMissions.map((m) => {
+      if (m.is_emergency && bidStatusMap.has(m.mission_id)) {
+        return { ...m, my_bid_status: bidStatusMap.get(m.mission_id) };
+      }
+      return m;
+    }).filter((m) => !(m.is_emergency && m.my_bid_status === 'cancelled'));
   }
 
   return mergedMissions;
@@ -144,60 +166,13 @@ export const createMission = async (data: CreateMissionPayload) => {
     .single();
   checkError(error);
 
-  // Notify favorites first
-  const favoriteIds = new Set((favorites || []).map((f) => f.provider_id));
-  if (hasFavorites) {
-    for (const fav of favorites!) {
-      sendPushNotification(
-        fav.provider_id,
-        '⭐ Mission prioritaire',
-        `Une mission de ${data.mission_type || 'service'} vous est proposée en priorité pendant 2H. Répondez vite !`,
-        { missionId: mission.id }
-      ).catch(err => captureError(err, { context: 'push-notification-favorite', userId: fav.provider_id }));
-    }
-  }
-
-  // Notify all eligible providers (non-favorites get a standard notification)
-  if (!data.assigned_provider_id) {
-    try {
-      const { data: property } = await supabase
-        .from('properties')
-        .select('latitude, longitude')
-        .eq('id', data.property_id)
-        .single();
-
-      const { data: providers } = await supabase
-        .from('provider_profiles')
-        .select('provider_id, specialties, radius_km, latitude, longitude');
-
-      if (providers && property) {
-        for (const p of providers) {
-          if (favoriteIds.has(p.provider_id)) continue; // Already notified above
-          if (p.specialties && p.specialties.length > 0 && !p.specialties.includes(data.mission_type)) continue;
-          if (p.latitude && p.longitude && property.latitude && property.longitude) {
-            const dist = haversineKm(p.latitude, p.longitude, property.latitude, property.longitude);
-            if (dist > (p.radius_km || 50)) continue;
-          }
-          sendPushNotification(
-            p.provider_id,
-            '📋 Nouvelle mission disponible',
-            `Une mission de ${data.mission_type || 'service'} est disponible${hasFavorites ? ' (accessible dans 2H)' : ''} près de chez vous.`,
-            { missionId: mission.id }
-          ).catch(err => captureError(err, { context: 'push-notification-new-mission', userId: p.provider_id }));
-        }
-      }
-    } catch (err) {
-      if (__DEV__) console.warn('Failed to notify non-favorite providers', err);
-    }
-  }
-
   return mission;
 };
 
 export const getMission = async (id: string) => {
   const { data: mission, error } = await supabase
     .from('missions')
-    .select('*, property:properties(name, address, access_code, instructions, deposit_location, linen_instructions), applications:mission_applications(*, provider:users!mission_applications_provider_id_fkey(name, picture, profile:provider_profiles(rating, total_reviews)))')
+    .select('*, property:properties(name, address, city, access_code, instructions, deposit_location, linen_instructions, latitude, longitude), applications:mission_applications(*, provider:users!mission_applications_provider_id_fkey(name, picture, profile:provider_profiles(average_rating, total_reviews))), assigned_provider:users!missions_assigned_provider_id_fkey(name, picture)')
     .eq('id', id)
     .single();
 
@@ -220,22 +195,50 @@ export const getMission = async (id: string) => {
 
   checkError(error);
 
+  const { data: { session } } = await supabase.auth.getSession();
+  const uid = session?.user?.id;
+  const isAssigned = mission?.assigned_provider_id === uid;
+
   if (mission) {
     mission.property_name = mission.property?.name;
-    mission.property_address = mission.property?.address;
+    // Confidentialité : adresse complète + coordonnées uniquement pour le proprio
+    // ou le prestataire assigné (y compris favori en pending_provider_approval)
+    const canSeeAddress = mission.owner_id === uid || isAssigned;
+    mission.property_address = canSeeAddress ? mission.property?.address : (mission.property?.city || '');
+    mission.property_city = mission.property?.city;
+
+    // Auto-géocodage si la propriété n'a pas encore de coordonnées GPS
+    // On utilise l'adresse complète (disponible en DB côté serveur) pour une précision maximale
+    if (!mission.property?.latitude && mission.property?.address) {
+      const coords = await geocodeAddress(mission.property.address);
+      if (coords) {
+        supabase.from('properties')
+          .update({ latitude: coords.lat, longitude: coords.lng })
+          .eq('id', mission.property_id)
+          .then(() => {});
+        // Injecter les coords dans l'objet property pour cette requête
+        (mission.property as Record<string, unknown>).latitude = coords.lat;
+        (mission.property as Record<string, unknown>).longitude = coords.lng;
+      }
+    }
+
+    // Coordinates: visible to owner, assigned provider, or any provider on browsable missions
+    const canSeeCoords = canSeeAddress || mission.status === 'pending_provider_approval';
+    mission.property_lat = canSeeCoords ? mission.property?.latitude : undefined;
+    mission.property_lng = canSeeCoords ? mission.property?.longitude : undefined;
     mission.access_code = mission.property?.access_code;
     mission.instructions = mission.property?.instructions;
     mission.deposit_location = mission.property?.deposit_location;
     mission.linen_instructions = mission.property?.linen_instructions;
 
-    mission.applications = (mission.applications as { id: string; provider_id: string; proposed_rate?: number; message?: string; status: string; created_at: string; provider?: { name?: string; picture?: string; profile?: { rating?: number; total_reviews?: number } | { rating?: number; total_reviews?: number }[] } | { name?: string; picture?: string; profile?: { rating?: number; total_reviews?: number } | { rating?: number; total_reviews?: number }[] }[] }[] | undefined)?.map((app) => {
+    mission.applications = (mission.applications as { id: string; provider_id: string; proposed_rate?: number; message?: string; status: string; created_at: string; provider?: { name?: string; picture?: string; profile?: { average_rating?: number; total_reviews?: number } | { average_rating?: number; total_reviews?: number }[] } | { name?: string; picture?: string; profile?: { average_rating?: number; total_reviews?: number } | { average_rating?: number; total_reviews?: number }[] }[] }[] | undefined)?.map((app) => {
       const prov = unwrapJoin(app.provider);
       const profile = Array.isArray(prov?.profile) ? prov.profile[0] : prov?.profile;
       return {
         ...app,
         provider_name: prov?.name,
         provider_picture: prov?.picture,
-        provider_rating: profile?.rating,
+        provider_rating: profile?.average_rating,
         provider_reviews: profile?.total_reviews,
       };
     });
@@ -247,6 +250,10 @@ export const getMission = async (id: string) => {
       .order('uploaded_at', { ascending: false });
     if (photosError && __DEV__) console.warn('mission_photos query error:', photosError.message, photosError.code);
     mission.photos = photosData || [];
+
+    const ap = unwrapJoin(mission.assigned_provider as unknown);
+    mission.assigned_provider_name = (ap as { name?: string } | null)?.name;
+    mission.assigned_provider_picture = (ap as { picture?: string } | null)?.picture;
   }
 
   return mission;
@@ -256,9 +263,14 @@ export const applyToMission = async (missionId: string, data: ApplyToMissionPayl
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.user) throw new Error('Not authenticated');
 
-  // TODO: remettre la vérification documents (verified, rc_pro, décennale)
-  // une fois les colonnes ajoutées sur provider_profiles en prod.
-  // Pour l'instant, la candidature est ouverte à tout prestataire authentifié.
+  // Vérifier que le prestataire a complété ses documents obligatoires (SIRET + RC Pro)
+  const [{ data: userDoc }, { data: provDoc }] = await Promise.all([
+    supabase.from('users').select('siren').eq('id', session.user.id).single(),
+    supabase.from('provider_profiles').select('rc_pro_doc_url').eq('provider_id', session.user.id).single(),
+  ]);
+  if (!userDoc?.siren || !provDoc?.rc_pro_doc_url) {
+    throw new Error('Veuillez compléter votre profil (SIRET et assurance RC Pro) avant de postuler. Rendez-vous dans Profil > Mes documents & SIRET.');
+  }
 
   // Vérifier que la mission est bien en 'pending_provider_approval' (anti-pattern #8)
   const { data: missionCheck } = await supabase
@@ -266,7 +278,7 @@ export const applyToMission = async (missionId: string, data: ApplyToMissionPayl
     .select('status')
     .eq('id', missionId)
     .single();
-  if (!missionCheck || missionCheck.status !== 'pending_provider_approval') {
+  if (!missionCheck || !['pending', 'pending_provider_approval'].includes(missionCheck.status)) {
     throw new Error('Cette mission n\'est plus disponible pour candidature.');
   }
 
@@ -303,7 +315,6 @@ export const applyToMission = async (missionId: string, data: ApplyToMissionPayl
     .select()
     .single();
 
-  console.log('SUPABASE RESULT:', { app, error });
   checkError(error);
 
   // Notifier le propriétaire de la mission
@@ -330,15 +341,84 @@ export const applyToMission = async (missionId: string, data: ApplyToMissionPayl
   return app;
 };
 
+/**
+ * Provider declines a broadcast mission (no assigned_provider_id).
+ * Inserts a mission_applications row with status='declined' and notifies
+ * the owner that this provider isn't available, so they can expand the zone.
+ */
+export const declineBroadcastMission = async (missionId: string) => {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.user) throw new Error('Not authenticated');
+
+  // Sanity: only for broadcast missions in pending_provider_approval
+  const { data: missionCheck } = await supabase
+    .from('missions')
+    .select('status, assigned_provider_id')
+    .eq('id', missionId)
+    .single();
+  if (!missionCheck || !['pending', 'pending_provider_approval'].includes(missionCheck.status)) {
+    throw new Error('Cette mission n\'est plus ouverte.');
+  }
+  if (missionCheck.assigned_provider_id) {
+    throw new Error('Cette mission n\'est pas en broadcast.');
+  }
+
+  // Prevent duplicate decline
+  const { count: existingCount } = await supabase
+    .from('mission_applications')
+    .select('id', { count: 'exact', head: true })
+    .eq('mission_id', missionId)
+    .eq('provider_id', session.user.id);
+  if ((existingCount || 0) > 0) {
+    throw new Error('Vous avez déjà répondu à cette mission.');
+  }
+
+  const { data, error } = await supabase
+    .from('mission_applications')
+    .insert({
+      mission_id: missionId,
+      provider_id: session.user.id,
+      status: 'declined',
+    })
+    .select()
+    .single();
+  checkError(error);
+
+  // Owner notification is handled server-side via the
+  // notify_owner_on_broadcast_decline trigger on mission_applications.
+  return data;
+};
+
+/**
+ * Owner widens the broadcast zone for a mission to 30 km and re-notifies
+ * providers in the expanded radius (skipping those who already replied).
+ */
+export const expandMissionZone = async (missionId: string) => {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.user) throw new Error('Not authenticated');
+
+  const { error: updateError } = await supabase
+    .from('missions')
+    .update({ zone_radius_km: 30 })
+    .eq('id', missionId)
+    .eq('owner_id', session.user.id);
+  checkError(updateError);
+
+  const { error: rpcError } = await supabase.rpc('rebroadcast_mission_to_wider_zone', {
+    p_mission_id: missionId,
+  });
+  if (rpcError) throw new Error(rpcError.message);
+};
+
 export const getMyApplications = async () => {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.user) throw new Error('Not authenticated');
 
   const { data, error } = await supabase
     .from('mission_applications')
-    .select('*, mission:missions!mission_applications_mission_id_fkey(*, property:properties(name, address))')
+    .select('*, mission:missions!mission_applications_mission_id_fkey(*, property:properties(name, address, city))')
     .eq('provider_id', session.user.id)
-    .eq('status', 'pending')
+    .in('status', ['pending', 'accepted'])
     .order('created_at', { ascending: false });
 
   checkError(error);
@@ -348,7 +428,7 @@ export const getMyApplications = async () => {
     mission_id: unwrapJoin(app.mission)?.id,
     mission_type: unwrapJoin(app.mission)?.mission_type,
     property_name: unwrapJoin(unwrapJoin(app.mission)?.property)?.name,
-    property_address: unwrapJoin(unwrapJoin(app.mission)?.property)?.address,
+    property_address: unwrapJoin(unwrapJoin(app.mission)?.property)?.city || unwrapJoin(unwrapJoin(app.mission)?.property)?.address,
     description: unwrapJoin(app.mission)?.description,
     scheduled_date: unwrapJoin(app.mission)?.scheduled_date,
     fixed_rate: app.proposed_rate || unwrapJoin(app.mission)?.fixed_rate,
@@ -357,6 +437,8 @@ export const getMyApplications = async () => {
 };
 
 export const handleApplication = async (missionId: string, appId: string, action: string) => {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.user) throw new Error('Not authenticated');
   const status = action === 'accept' ? 'accepted' : 'rejected';
   const { data, error } = await supabase
     .from('mission_applications')
@@ -376,8 +458,18 @@ export const handleApplication = async (missionId: string, appId: string, action
       .select('mission_type, property:properties(name)')
       .eq('id', missionId)
       .single() as { data: Record<string, unknown> | null; error: SupabaseError | null };
-    // R3: Vérifier que la mission est bien en 'pending' avant de passer à 'assigned'
-    await supabase.from('missions').update({ status: 'assigned', assigned_provider_id: data.provider_id }).eq('id', missionId).eq('status', 'pending');
+    // R3: Mission must be in pending or pending_provider_approval to transition to assigned
+    const { error: assignError } = await supabase
+      .from('missions')
+      .update({ status: 'assigned', assigned_provider_id: data.provider_id })
+      .eq('id', missionId)
+      .eq('owner_id', session.user.id)
+      .in('status', ['pending', 'pending_provider_approval'])
+      .select()
+      .single();
+    if (assignError) {
+      throw new Error('Impossible d\'assigner la mission au prestataire');
+    }
     // Notifications are now handled server-side via DB trigger (trg_notify_mission_status)
     // Fire-and-forget Google Calendar sync
     supabase.functions.invoke('sync-google-calendar', {
@@ -457,10 +549,16 @@ export const uploadMissionPhoto = async (missionId: string, uri: string): Promis
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.user) throw new Error('Not authenticated');
 
+  // Import dynamique pour éviter le crash en Expo Go
+  const { compressImage } = await import('../utils/image-compress');
+
   const filename = `${missionId}/${session.user.id}/${Date.now()}.jpg`;
 
+  // Compress image before upload (1200px max width, 70% quality)
+  const compressedUri = await compressImage(uri);
+
   // Read file as ArrayBuffer (reliable on React Native)
-  const response = await fetch(uri);
+  const response = await fetch(compressedUri);
   if (!response.ok) throw new Error(`Impossible de lire le fichier (${response.status})`);
   const arrayBuffer = await response.arrayBuffer();
 
@@ -518,7 +616,7 @@ export const rejectDirectMission = async (missionId: string) => {
 
   const { data, error } = await supabase
     .from('missions')
-    .update({ status: 'rejected' })
+    .update({ status: 'rejected', assigned_provider_id: null })
     .eq('id', missionId)
     .eq('assigned_provider_id', session.user.id)
     .eq('status', 'pending_provider_approval')
@@ -529,6 +627,38 @@ export const rejectDirectMission = async (missionId: string) => {
   // Notifications are now handled server-side via DB trigger (trg_notify_mission_status)
 
   return data;
+};
+
+export const getProviderDaySchedule = async (providerId: string, date: string) => {
+  const startOfDay = `${date}T00:00:00`;
+  const endOfDay = `${date}T23:59:59`;
+
+  const { data, error } = await supabase
+    .from('missions')
+    .select('id, status, scheduled_date, mission_type, property:properties(id, name, address, latitude, longitude)')
+    .eq('assigned_provider_id', providerId)
+    .gte('scheduled_date', startOfDay)
+    .lte('scheduled_date', endOfDay)
+    .in('status', ['assigned', 'in_progress', 'awaiting_payment'])
+    .order('scheduled_date', { ascending: true });
+  checkError(error);
+
+  return (data || []).map((m) => {
+    const prop = unwrapJoin(m.property);
+    return {
+      id: m.id,
+      status: m.status,
+      scheduled_date: m.scheduled_date,
+      mission_type: m.mission_type,
+      property: prop ? {
+        id: (prop as { id: string }).id,
+        name: (prop as { name: string }).name,
+        address: (prop as { address: string }).address,
+        latitude: (prop as { latitude: number | null }).latitude,
+        longitude: (prop as { longitude: number | null }).longitude,
+      } : null,
+    };
+  });
 };
 
 export const addMissionExtraHours = async (missionId: string, newRate: number) => {
@@ -558,14 +688,18 @@ export const getOwnerDashboard = async () => {
       .select('id, status, mission_type, scheduled_date, fixed_rate, description, property:properties(name, address)')
       .eq('owner_id', uid)
       .neq('status', 'completed')
+      .neq('status', 'cancelled')
+      .neq('status', 'refunded')
       .order('scheduled_date', { ascending: true, nullsFirst: false })
       .limit(5),
-    supabase.from('emergency_requests').select('id', { count: 'exact', head: true }).eq('owner_id', uid).eq('status', 'open'),
-    supabase.from('emergency_requests').select('id', { count: 'exact', head: true }).eq('owner_id', uid).neq('status', 'open').neq('status', 'completed'),
+    supabase.from('emergency_requests').select('id', { count: 'exact', head: true }).eq('owner_id', uid).eq('status', 'bids_open'),
+    supabase.from('emergency_requests').select('id', { count: 'exact', head: true }).eq('owner_id', uid).neq('status', 'bids_open').neq('status', 'completed').neq('status', 'cancelled').neq('status', 'refunded'),
     supabase.from('emergency_requests')
       .select('id, status, service_type, created_at, displacement_fee, diagnostic_fee, description, property:properties(name, address)')
       .eq('owner_id', uid)
       .neq('status', 'completed')
+      .neq('status', 'cancelled')
+      .neq('status', 'refunded')
       .order('created_at', { ascending: true })
       .limit(5),
   ]);
@@ -580,8 +714,12 @@ export const getOwnerDashboard = async () => {
 
   const rawUpcomingEmergencies = (upcomingEmRes.data || []).map((e) => {
     let mappedStatus = 'pending';
-    if (e.status === 'open') mappedStatus = 'pending';
-    else mappedStatus = 'assigned';
+    if (e.status === 'bids_open') mappedStatus = 'pending';
+    else if (e.status === 'provider_accepted' || e.status === 'bid_accepted') mappedStatus = 'assigned';
+    else if (e.status === 'cancelled') mappedStatus = 'cancelled';
+    else if (e.status === 'refunded') mappedStatus = 'refunded';
+    else if (e.status === 'completed') mappedStatus = 'completed';
+    else mappedStatus = 'in_progress';
 
     return {
       mission_id: e.id,
@@ -624,12 +762,16 @@ export const cancelMission = async (missionId: string) => {
   if (fetchErr || !mission) throw new Error('Mission introuvable');
   assertMissionTransition(mission.status as MissionStatus, 'cancelled');
 
-  const { error } = await supabase
+  // Use the current status from DB (already validated by assertMissionTransition above)
+  const { data: updated, error } = await supabase
     .from('missions')
     .update({ status: 'cancelled', cancelled_at: new Date().toISOString() })
     .eq('id', missionId)
-    .eq('owner_id', session.user.id);
+    .eq('owner_id', session.user.id)
+    .eq('status', mission.status)
+    .select();
   checkError(error);
+  if (!updated || updated.length === 0) throw new Error('Cette mission ne peut plus être annulée');
 
   // Notifications are now handled server-side via DB trigger (trg_notify_mission_status)
 };
@@ -718,7 +860,7 @@ export const getQuoteDetails = async (quoteId: string) => {
 
   const { data: quote, error: qError } = await supabase
     .from('mission_quotes')
-    .select('*, provider:users!mission_quotes_provider_id_fkey(name, picture, email, profile:provider_profiles(rating, total_reviews, specialties, bio, zone, siret, company_name, tva_status))')
+    .select('*, provider:users!mission_quotes_provider_id_fkey(name, picture, email, siren, company_name, profile:provider_profiles(average_rating, total_reviews, specialties, bio, zone))')
     .eq('id', quoteId)
     .single();
   checkError(qError);
@@ -765,9 +907,8 @@ export const getQuoteDetails = async (quoteId: string) => {
     provider_specialties: providerProfile?.specialties || [],
     provider_bio: providerProfile?.bio,
     provider_zone: providerProfile?.zone,
-    provider_siret: providerProfile?.siret,
-    provider_company: providerProfile?.company_name,
-    provider_tva_status: providerProfile?.tva_status,
+    provider_siret: quote.provider?.siren,
+    provider_company: quote.provider?.company_name,
     line_items: lineItems || [],
     mission,
     emergency,
@@ -784,6 +925,8 @@ export const acceptQuote = async (quoteId: string, missionId?: string, emergency
     .from('mission_quotes')
     .update({
       status: 'accepted',
+      accepted_at: now,
+      accepted_by: session.user.id,
       owner_signature_at: now,
       owner_signature_text: 'Bon pour accord — Devis reçu avant l\'exécution des travaux',
     })
@@ -884,11 +1027,25 @@ export const submitQuoteWithLines = async (data: {
   estimated_duration?: string;
   description?: string;
   is_renovation: boolean;
+  is_vat_exempt: boolean;
 }) => {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.user) throw new Error('Not authenticated');
 
   const totalHT = data.lines.reduce((sum, l) => sum + l.quantity * l.unit_price_ht, 0);
+
+  // Parse French date (DD/MM/YYYY) to ISO for TIMESTAMPTZ column
+  let isoStartDate: string | null = null;
+  if (data.estimated_start_date) {
+    const parts = data.estimated_start_date.match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})$/);
+    if (parts) {
+      const [, dd, mm, yyyy] = parts;
+      isoStartDate = `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`;
+    } else {
+      // Already ISO or other format — pass as-is
+      isoStartDate = data.estimated_start_date;
+    }
+  }
 
   const quotePayload: Record<string, unknown> = {
     provider_id: session.user.id,
@@ -896,9 +1053,11 @@ export const submitQuoteWithLines = async (data: {
     repair_cost: totalHT,
     repair_delay_days: data.validity_days,
     status: 'pending',
-    estimated_start_date: data.estimated_start_date || null,
+    estimated_start_date: isoStartDate,
     estimated_duration: data.estimated_duration || null,
     is_renovation: data.is_renovation,
+    tva_rate: data.is_vat_exempt ? 0 : (data.is_renovation ? 0.10 : 0.20),
+    is_vat_exempt: data.is_vat_exempt,
     validity_days: data.validity_days,
   };
 
@@ -934,22 +1093,26 @@ export const submitQuoteWithLines = async (data: {
   }
 
   try {
-    const { data: docData } = await supabase.functions.invoke('generate-quote', {
+    const { data: docData, error: genError } = await supabase.functions.invoke('generate-quote', {
       body: {
         quoteId: quote.id,
         missionId: data.missionId || null,
         emergencyId: data.emergencyId || null,
       },
     });
+    if (genError) {
+      console.warn('[submitQuoteWithLines] generate-quote error:', JSON.stringify(genError));
+    }
 
-    if (docData?.document_url && quote) {
+    const generatedUrl = docData?.document_url || docData?.url;
+    if (generatedUrl && quote) {
       await supabase
         .from('mission_quotes')
-        .update({ quote_document_url: docData.document_url })
+        .update({ quote_document_url: generatedUrl })
         .eq('id', quote.id);
     }
-  } catch {
-    // Non-blocking: document generation can be retried later
+  } catch (e) {
+    console.warn('[submitQuoteWithLines] generate-quote failed:', e);
   }
 
   if (data.emergencyId) {

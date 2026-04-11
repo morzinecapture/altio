@@ -1,13 +1,10 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+import { corsHeaders, handleCors } from '../_shared/cors.ts';
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+  const corsResponse = handleCors(req);
+  if (corsResponse) return corsResponse;
 
   try {
     const supabase = createClient(
@@ -41,7 +38,7 @@ serve(async (req) => {
     }
 
     // Récupérer les push tokens des admins
-    const adminIds = admins.map((a: any) => a.id);
+    const adminIds = admins.map((a: { id: string }) => a.id);
     const { data: tokens } = await supabase
       .from('push_tokens')
       .select('token')
@@ -52,7 +49,7 @@ serve(async (req) => {
     }
 
     // Envoyer via Expo Push API
-    const messages = tokens.map((t: any) => ({
+    const messages = tokens.map((t: { token: string }) => ({
       to: t.token,
       title: '🆕 Nouveau prestataire inscrit',
       body: `${providerUser?.name || 'Prestataire'} vient de s'inscrire`,
@@ -77,9 +74,9 @@ serve(async (req) => {
       JSON.stringify({ success: true, notified: tokens.length }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
-  } catch (err: any) {
+  } catch (err: unknown) {
     return new Response(
-      JSON.stringify({ error: err.message }),
+      JSON.stringify({ error: err instanceof Error ? err.message : String(err) }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }

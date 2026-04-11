@@ -74,7 +74,7 @@ export const getProfile = async () => {
 export const getProviders = async (specialty?: string) => {
   let query = supabase
     .from('provider_profiles')
-    .select('*, user:users!inner(*)');
+    .select('*, user:users!inner(id, name, picture, role)');
 
   if (specialty) {
     query = query.contains('specialties', [specialty]);
@@ -141,6 +141,7 @@ export const completeProviderOnboarding = async (data: {
   cgu_accepted_at?: string;
   mandate_accepted_at?: string;
   dsa_certified_at?: string;
+  notify_new_missions_in_zone?: boolean;
 }) => {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.user) throw new Error('Not authenticated');
@@ -168,6 +169,7 @@ export const completeProviderOnboarding = async (data: {
   if (data.latitude !== undefined) profileUpdate.latitude = data.latitude;
   if (data.longitude !== undefined) profileUpdate.longitude = data.longitude;
   if (data.location_label !== undefined) profileUpdate.location_label = data.location_label;
+  if (data.notify_new_missions_in_zone !== undefined) profileUpdate.notify_new_missions_in_zone = data.notify_new_missions_in_zone;
   const { data: updated, error } = await supabase
     .from('provider_profiles')
     .update(profileUpdate)
@@ -221,10 +223,10 @@ export const getProviderStats = async () => {
   const uid = session.user.id;
 
   const [profileRes, completedRes, inProgressRes, applicationsRes, recentRes, earningsRes,
-    emCompletedRes, emInProgressRes, emEarningsRes, emQuotesRes] = await Promise.all([
-      supabase.from('provider_profiles').select('total_earnings, total_reviews, rating').eq('provider_id', uid).single(),
+    emCompletedRes, emInProgressRes, emEarningsRes, emQuotesRes, reviewsRes] = await Promise.all([
+      supabase.from('provider_profiles').select('total_earnings, total_reviews').eq('provider_id', uid).single(),
       supabase.from('missions').select('id', { count: 'exact', head: true }).eq('assigned_provider_id', uid).eq('status', 'completed'),
-      supabase.from('missions').select('id', { count: 'exact', head: true }).eq('assigned_provider_id', uid).eq('status', 'in_progress'),
+      supabase.from('missions').select('id', { count: 'exact', head: true }).eq('assigned_provider_id', uid).in('status', ['assigned', 'in_progress']),
       supabase.from('mission_applications').select('id', { count: 'exact', head: true }).eq('provider_id', uid).eq('status', 'pending'),
       supabase.from('missions')
         .select('id, mission_type, description, fixed_rate, completed_at, property:properties(name)')
@@ -237,15 +239,23 @@ export const getProviderStats = async () => {
         .eq('assigned_provider_id', uid)
         .eq('status', 'completed'),
       supabase.from('emergency_requests').select('id', { count: 'exact', head: true }).eq('accepted_provider_id', uid).eq('status', 'completed'),
-      supabase.from('emergency_requests').select('id', { count: 'exact', head: true }).eq('accepted_provider_id', uid).neq('status', 'open').neq('status', 'completed'),
+      supabase.from('emergency_requests').select('id', { count: 'exact', head: true }).eq('accepted_provider_id', uid).neq('status', 'bids_open').neq('status', 'completed'),
       supabase.from('emergency_requests').select('displacement_fee, diagnostic_fee, completed_at, id, service_type, description, property:properties(name)').eq('accepted_provider_id', uid).eq('status', 'completed').order('completed_at', { ascending: false }).limit(5),
-      supabase.from('mission_quotes').select('repair_cost, emergency_request_id, emergency:emergency_requests!inner(status)').eq('provider_id', uid).eq('status', 'accepted').eq('emergency.status', 'completed')
+      supabase.from('mission_quotes').select('repair_cost, emergency_request_id, emergency:emergency_requests!inner(status)').eq('provider_id', uid).eq('status', 'accepted').eq('emergency.status', 'completed'),
+      supabase.from('reviews').select('rating').eq('provider_id', uid),
     ]);
 
   const COMMISSION_RATE = 0.10;
   const missionsEarnings = (earningsRes.data || []).reduce((sum, m) => sum + (m.fixed_rate || 0), 0);
   const emFees = (emEarningsRes.data || []).reduce((sum, e) => sum + (e.displacement_fee || 0) + (e.diagnostic_fee || 0), 0);
   const emQuotesEarnings = (emQuotesRes.data || []).reduce((sum, q) => sum + (q.repair_cost || 0), 0);
+
+  // Rating : calculé directement depuis la table reviews (la colonne provider_profiles.rating n'est pas mise à jour automatiquement)
+  const reviewsList = reviewsRes.data || [];
+  const totalReviews = reviewsList.length;
+  const avgRating = totalReviews > 0
+    ? parseFloat((reviewsList.reduce((sum, r) => sum + (r.rating || 0), 0) / totalReviews).toFixed(1))
+    : 0;
 
   // Net perçu = montant brut × (1 - commission 10%)
   const grossEarnings = missionsEarnings + emFees + emQuotesEarnings;
@@ -279,8 +289,8 @@ export const getProviderStats = async () => {
 
   return {
     total_earnings: totalEarnings,
-    rating: profileRes.data?.rating || 0,
-    total_reviews: profileRes.data?.total_reviews || 0,
+    rating: avgRating,
+    total_reviews: totalReviews,
     completed_missions: (completedRes.count || 0) + (emCompletedRes.count || 0),
     in_progress_missions: (inProgressRes.count || 0) + (emInProgressRes.count || 0),
     pending_applications: applicationsRes.count || 0,

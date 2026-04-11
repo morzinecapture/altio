@@ -75,6 +75,14 @@ agenthub/agents/youtube/db
 
 # Build caches
 .cache/
+.metro-cache/
+npm-cache/
+.claude/
+test_reports/
+
+# Accidental files
+mkdir -p .claude:skills/
+frontend/fdc506a749b44b32785ba8afb3bd1399.jpg
 
 # Mobile development
 android-sdk/ -e 

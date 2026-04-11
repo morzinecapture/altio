@@ -1,134 +1,127 @@
-import React, { useState, useCallback } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, RefreshControl, Alert, Image } from 'react-native';
-import { useRouter, useFocusEffect } from 'expo-router';
+import React, { useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, FlatList, ActivityIndicator, RefreshControl, Alert, Image } from 'react-native';
+import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useTranslation } from 'react-i18next';
 import { COLORS, FONTS, SPACING, RADIUS, SHADOWS, GRADIENT } from '../../src/theme';
-import { getProperties, syncIcal, deleteProperty } from '../../src/api';
+import { SkeletonList } from '../../src/components/Skeleton';
+import { useProperties, useDeleteProperty, useSyncIcal } from '../../src/hooks';
+import type { Property } from '../../src/types/api';
 
 export default function PropertiesScreen() {
   const router = useRouter();
-  const [properties, setProperties] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const { t } = useTranslation();
+  const { data: properties = [], isLoading, refetch } = useProperties();
   const [syncing, setSyncing] = useState<string | null>(null);
-
-  const fetchData = async () => {
-    try {
-      const result = await getProperties();
-      setProperties(result);
-    } catch (e) { console.error(e); }
-    finally { setLoading(false); setRefreshing(false); }
-  };
-
-  useFocusEffect(useCallback(() => { fetchData(); }, []));
+  const deleteMut = useDeleteProperty();
+  const syncMut = useSyncIcal();
 
   const handleSync = async (propertyId: string) => {
     setSyncing(propertyId);
     try {
-      const result = await syncIcal(propertyId);
-      Alert.alert('Sync terminée', result.message);
-      fetchData();
-    } catch (e: any) {
-      Alert.alert('Erreur', e.message);
+      const result = await syncMut.mutateAsync(propertyId);
+      Alert.alert(t('owner.properties.sync_done'), result.message);
+    } catch (e: unknown) {
+      Alert.alert(t('common.error'), e instanceof Error ? e.message : String(e));
     } finally { setSyncing(null); }
   };
 
   const handleDelete = (propertyId: string, name: string) => {
-    Alert.alert('Supprimer', `Supprimer "${name}" ?`, [
-      { text: 'Annuler', style: 'cancel' },
+    Alert.alert(t('common.delete'), t('owner.properties.delete_confirm', { name }), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Supprimer', style: 'destructive', onPress: async () => {
-          try { await deleteProperty(propertyId); fetchData(); } catch (e: any) { Alert.alert('Erreur', e.message); }
+        text: t('common.delete'), style: 'destructive', onPress: async () => {
+          try { await deleteMut.mutateAsync(propertyId); } catch (e: unknown) { Alert.alert(t('common.error'), e instanceof Error ? e.message : String(e)); }
         }
       },
     ]);
   };
 
-  if (loading) return <View style={styles.center}><ActivityIndicator size="large" color={COLORS.brandPrimary} /></View>;
+  if (isLoading) return <SafeAreaView style={styles.container}><SkeletonList count={3} /></SafeAreaView>;
 
   return (
     <SafeAreaView style={styles.container} testID="properties-screen">
-      <ScrollView
+      <FlatList
+        data={properties}
+        keyExtractor={(prop) => prop.id}
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchData(); }} />}
-      >
-        <LinearGradient
-          colors={GRADIENT.header}
-          start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-          style={styles.header}
-        >
-          <Text style={styles.title}>Mes logements</Text>
-          <TouchableOpacity testID="add-property-btn" style={styles.addBtn} onPress={() => router.push('/property/add')}>
-            <Ionicons name="add" size={24} color={COLORS.textInverse} />
-          </TouchableOpacity>
-        </LinearGradient>
-
-        {properties.length === 0 ? (
+        refreshControl={<RefreshControl refreshing={false} onRefresh={() => refetch()} />}
+        contentContainerStyle={{ paddingBottom: 100 }}
+        ListHeaderComponent={
+          <LinearGradient
+            colors={GRADIENT.header}
+            start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+            style={styles.header}
+          >
+            <Text style={styles.title}>{t('owner.properties.title')}</Text>
+            <TouchableOpacity testID="add-property-btn" style={styles.addBtn} onPress={() => router.push('/property/add')}>
+              <Ionicons name="add" size={24} color={COLORS.textInverse} />
+            </TouchableOpacity>
+          </LinearGradient>
+        }
+        ListEmptyComponent={
           <View style={styles.empty}>
             <Ionicons name="home-outline" size={60} color={COLORS.textTertiary} />
-            <Text style={styles.emptyTitle}>Aucun logement</Text>
-            <Text style={styles.emptySubtext}>Ajoutez votre premier logement pour commencer</Text>
+            <Text style={styles.emptyTitle}>{t('owner.properties.empty')}</Text>
+            <Text style={styles.emptySubtext}>{t('owner.properties.empty_sub')}</Text>
             <TouchableOpacity style={styles.emptyBtn} onPress={() => router.push('/property/add')}>
-              <Text style={styles.emptyBtnText}>Ajouter un logement</Text>
+              <Text style={styles.emptyBtnText}>{t('owner.properties.add')}</Text>
             </TouchableOpacity>
           </View>
-        ) : (
-          properties.map((prop) => (
-            <TouchableOpacity
-              key={prop.id}
-              testID={`property-card-${prop.id}`}
-              style={styles.card}
-              onPress={() => router.push(`/property/${prop.id}`)}
-            >
-              <View style={styles.cardHeader}>
-                <Image
-                  source={{ uri: `https://ui-avatars.com/api/?name=${prop.name.replace(/\s/g, '+')}&background=random&color=fff&size=200&font-size=0.4` }}
-                  style={styles.propIcon}
-                />
-                <View style={styles.cardInfo}>
-                  <Text style={styles.propName}>{prop.name}</Text>
-                  <Text style={styles.propAddress}>{prop.address}</Text>
-                </View>
-                <TouchableOpacity onPress={() => handleDelete(prop.id, prop.name)}>
-                  <Ionicons name="trash-outline" size={20} color={COLORS.textTertiary} />
-                </TouchableOpacity>
+        }
+        renderItem={({ item: prop }) => (
+          <TouchableOpacity
+            testID={`property-card-${prop.id}`}
+            style={styles.card}
+            onPress={() => router.push(`/property/${prop.id}`)}
+          >
+            <View style={styles.cardHeader}>
+              <Image
+                source={{ uri: `https://ui-avatars.com/api/?name=${prop.name.replace(/\s/g, '+')}&background=random&color=fff&size=200&font-size=0.4` }}
+                style={styles.propIcon}
+              />
+              <View style={styles.cardInfo}>
+                <Text style={styles.propName}>{prop.name}</Text>
+                <Text style={styles.propAddress}>{prop.address}</Text>
               </View>
+              <TouchableOpacity onPress={() => handleDelete(prop.id, prop.name)}>
+                <Ionicons name="trash-outline" size={20} color={COLORS.textTertiary} />
+              </TouchableOpacity>
+            </View>
 
-              <View style={styles.cardMeta}>
-                {prop.fixed_rate && (
-                  <View style={styles.metaItem}>
-                    <Ionicons name="cash-outline" size={14} color={COLORS.success} />
-                    <Text style={styles.metaText}>{prop.fixed_rate}€/mission</Text>
-                  </View>
-                )}
+            <View style={styles.cardMeta}>
+              {prop.fixed_rate && (
                 <View style={styles.metaItem}>
-                  <Ionicons name="calendar-outline" size={14} color={COLORS.info} />
-                  <Text style={styles.metaText}>{prop.reservation_count || 0} réservations</Text>
+                  <Ionicons name="cash-outline" size={14} color={COLORS.success} />
+                  <Text style={styles.metaText}>{t('owner.properties.rate_per_mission', { rate: prop.fixed_rate })}</Text>
                 </View>
-              </View>
-
-              {prop.ical_url && (
-                <TouchableOpacity
-                  testID={`sync-ical-${prop.id}`}
-                  style={styles.syncBtn}
-                  onPress={() => handleSync(prop.id)}
-                  disabled={syncing === prop.id}
-                >
-                  {syncing === prop.id ? (
-                    <ActivityIndicator size="small" color={COLORS.info} />
-                  ) : (
-                    <Ionicons name="sync-outline" size={16} color={COLORS.info} />
-                  )}
-                  <Text style={styles.syncText}>Synchroniser iCal</Text>
-                </TouchableOpacity>
               )}
-            </TouchableOpacity>
-          ))
+              <View style={styles.metaItem}>
+                <Ionicons name="calendar-outline" size={14} color={COLORS.info} />
+                <Text style={styles.metaText}>{t('owner.properties.reservations_count', { count: (prop as Property & { reservation_count?: number }).reservation_count || 0 })}</Text>
+              </View>
+            </View>
+
+            {prop.ical_url && (
+              <TouchableOpacity
+                testID={`sync-ical-${prop.id}`}
+                style={styles.syncBtn}
+                onPress={() => handleSync(prop.id)}
+                disabled={syncing === prop.id}
+              >
+                {syncing === prop.id ? (
+                  <ActivityIndicator size="small" color={COLORS.info} />
+                ) : (
+                  <Ionicons name="sync-outline" size={16} color={COLORS.info} />
+                )}
+                <Text style={styles.syncText}>{t('owner.properties.sync_ical')}</Text>
+              </TouchableOpacity>
+            )}
+          </TouchableOpacity>
         )}
-        <View style={{ height: 100 }} />
-      </ScrollView>
+      />
     </SafeAreaView>
   );
 }

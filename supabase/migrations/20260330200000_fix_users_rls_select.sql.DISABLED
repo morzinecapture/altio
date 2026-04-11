@@ -1,0 +1,111 @@
+-- ══════════════════════════════════════════════════════════════════════
+-- SECURITY FIX: users table SELECT RLS
+--
+-- Problème : la policy "Authenticated read all profiles" avait
+-- USING(true), ce qui exposait TOUTES les colonnes de TOUS les users
+-- à n'importe quel utilisateur authentifié :
+--   siren, vat_number, billing_address, stripe_account_id,
+--   google_calendar_token, google_calendar_refresh_token,
+--   expo_push_token, company_name, is_vat_exempt, etc.
+--
+-- Correction :
+--   1. users_select_own   → un user voit TOUTES ses propres colonnes
+--   2. users_select_admin → les admins voient tout (via is_admin())
+--   3. Plus de USING(true) sur la table de base
+--   4. Vue public_user_profiles (security_invoker=false) → expose
+--      uniquement les colonnes publiques pour les lectures cross-user
+--
+-- ⚠️  BREAKING CHANGES — les jointures PostgREST cross-user sur la
+-- table users ne retourneront plus de données pour les autres users.
+-- Les requêtes suivantes doivent être migrées vers la vue
+-- public_user_profiles ou vers des fonctions SECURITY DEFINER :
+--
+--   src/api/profile.ts:77    getProviders()         → users!inner(id, name, picture, role)
+--   src/api/profile.ts:208   getProviderProfile()   → users.select('name, picture')
+--   src/api/partners.ts:102  getFavoriteProviders()  → users!...(id, name, picture)
+--   src/api/reviews.ts:40                            → users!...(name, picture)
+--   src/api/missions.ts:221,339,545,568              → users!...(name, picture, name)
+--   src/api/missions.ts:775                          → users!...(name, picture, email, siren, company_name)
+--   src/api/emergencies.ts:42                        → users!inner(expo_push_token)
+--   src/api/emergencies.ts:78,126                    → users!...(name, picture)
+--   src/api/emergencies.ts:143                       → users!...(name, picture, company_name, siren, ...)
+--   src/api/messaging.ts:9                           → users!...(name, picture)
+--   src/api/payments.ts:111,122                      → users!...(name, company_name, siren, ...)
+--   src/api/notifications.ts:104,111,128             → users!...(name)
+--
+-- Les requêtes admin (admin.ts) continuent de fonctionner grâce à
+-- users_select_admin.
+-- Les lectures du propre profil (profile.ts getProfile(),
+-- completeOwnerOnboarding(), updateBillingInfo(), etc.) continuent
+-- de fonctionner grâce à users_select_own.
+-- ══════════════════════════════════════════════════════════════════════
+
+BEGIN;
+
+-- ── 1. Supprimer TOUTES les policies SELECT existantes sur users ────
+-- (accumulées depuis plusieurs migrations)
+DROP POLICY IF EXISTS "Authenticated read public profiles"  ON users;
+DROP POLICY IF EXISTS "Authenticated read all profiles"     ON users;
+DROP POLICY IF EXISTS "Users read own profile"              ON users;
+DROP POLICY IF EXISTS "Admins read all users"               ON users;
+
+-- ── 2. users_select_own ─────────────────────────────────────────────
+-- Chaque user voit TOUTES les colonnes de sa propre ligne.
+-- Couvre : getProfile(), completeOwnerOnboarding(), updateBillingInfo(),
+-- getMarketingConsent(), completeProviderOnboarding(), deleteAccount()
+CREATE POLICY "users_select_own" ON users
+  FOR SELECT TO authenticated
+  USING (id = auth.uid());
+
+-- ── 3. users_select_admin ───────────────────────────────────────────
+-- Les admins voient TOUTES les colonnes de TOUS les users.
+-- Utilise la fonction SECURITY DEFINER is_admin() pour éviter la
+-- récursion RLS (la fonction lit is_admin sans déclencher les policies).
+-- Couvre : getAdminUsers(), getAdminUserDetail(), getAdminInvoices(),
+-- getAdminEmergencies(), getDisputes(), resolveDispute()
+CREATE POLICY "users_select_admin" ON users
+  FOR SELECT TO authenticated
+  USING (public.is_admin());
+
+-- ── 4. Vue public_user_profiles ─────────────────────────────────────
+-- Vue avec security_invoker=false (exécutée en tant que owner = postgres,
+-- donc bypass RLS) qui n'expose que les colonnes publiques.
+-- Le frontend DOIT utiliser cette vue pour toute lecture cross-user
+-- (cartes prestataires, jointures missions/bids/favoris/messaging).
+--
+-- Colonnes exposées (publiques) :
+--   id, name, picture, role, onboarding_completed, created_at
+--
+-- Colonnes exclues (sensibles) :
+--   email, siren, vat_number, company_name, billing_address,
+--   is_vat_exempt, stripe_account_id, google_calendar_token,
+--   google_calendar_refresh_token, expo_push_token, is_admin,
+--   suspended, suspended_at, suspended_reason, cgu_accepted_at,
+--   mandate_accepted_at, dsa_certified_at, marketing_consent_at,
+--   is_auto_entrepreneur, owner_type
+DROP VIEW IF EXISTS public_profiles;
+DROP VIEW IF EXISTS public_user_profiles;
+
+CREATE VIEW public_user_profiles WITH (security_invoker = false) AS
+  SELECT
+    id,
+    name,
+    picture,
+    role,
+    onboarding_completed,
+    created_at
+  FROM users;
+
+-- Accès en lecture pour les utilisateurs authentifiés
+GRANT SELECT ON public_user_profiles TO authenticated;
+-- Accès pour le rôle anon (utilisé par certaines Edge Functions)
+GRANT SELECT ON public_user_profiles TO anon;
+
+-- Alias pour compatibilité avec le code existant qui référence public_profiles
+CREATE VIEW public_profiles AS
+  SELECT * FROM public_user_profiles;
+
+GRANT SELECT ON public_profiles TO authenticated;
+GRANT SELECT ON public_profiles TO anon;
+
+COMMIT;

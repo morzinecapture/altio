@@ -1,28 +1,28 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { COLORS, FONTS, SPACING, RADIUS, SHADOWS } from '../../src/theme';
+import { getServiceTypeLabel } from '../../src/utils/serviceLabels';
 import { AdminGuard } from '../../src/components/AdminGuard';
 import { getAdminEmergencies } from '../../src/api';
+import type { EmergencyRequest } from '../../src/types/api';
 import { supabase } from '../../src/lib/supabase';
+import type { RealtimeChannel } from '@supabase/supabase-js';
 
-const EMERGENCY_STATUS_LABELS: Record<string, string> = {
-  open: 'En attente',
-  bids_open: 'Candidatures ouvertes',
-  bid_accepted: 'Prestataire sélectionné',
-  provider_accepted: 'En route',
-  displacement_paid: 'En route',
-  on_site: 'Sur place',
-  quote_sent: 'Devis envoyé',
-  quote_submitted: 'Devis soumis',
-  quote_paid: 'Travaux en cours',
-  quote_accepted: 'Travaux en cours',
-  in_progress: 'En cours',
-  quote_refused: 'Devis refusé',
-  completed: 'Terminée',
-};
+interface AdminEmergencyItem {
+  id: string;
+  owner_id: string;
+  service_type: string;
+  description?: string;
+  status: string;
+  created_at: string;
+  property?: { name?: string; address?: string; latitude?: number; longitude?: number };
+  owner?: { name?: string };
+}
 
 const EMERGENCY_STATUS_COLORS: Record<string, { bg: string; text: string }> = {
   open:             { bg: COLORS.urgencySoft, text: COLORS.urgency },
@@ -39,38 +39,48 @@ const EMERGENCY_STATUS_COLORS: Record<string, { bg: string; text: string }> = {
   completed:        { bg: COLORS.successSoft, text: COLORS.success },
 };
 
-function formatRelative(dateStr: string): string {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 60) return `il y a ${mins}min`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `il y a ${hrs}h`;
-  return new Date(dateStr).toLocaleDateString('fr-FR');
-}
-
 export default function AdminEmergencies() {
+  const { t } = useTranslation();
   const router = useRouter();
-  const [emergencies, setEmergencies] = useState<any[]>([]);
-  const [loading, setLoading]         = useState(true);
-  const [refreshing, setRefreshing]   = useState(false);
-  const channelRef = useRef<any>(null);
+  const queryClient = useQueryClient();
+  const channelRef = useRef<RealtimeChannel | null>(null);
 
-  const fetchData = async () => {
-    try {
-      const result = await getAdminEmergencies();
-      setEmergencies(result);
-    } catch (e) { console.error(e); }
-    finally { setLoading(false); setRefreshing(false); }
+  const { data: emergencies = [] as EmergencyRequest[], isLoading: loading, refetch } = useQuery({
+    queryKey: ['admin-emergencies'],
+    queryFn: getAdminEmergencies,
+  });
+
+  const EMERGENCY_STATUS_LABELS: Record<string, string> = {
+    open: t('admin.emergencies.status_open'),
+    bids_open: t('admin.emergencies.status_bids_open'),
+    bid_accepted: t('admin.emergencies.status_bid_accepted'),
+    provider_accepted: t('admin.emergencies.status_provider_accepted'),
+    displacement_paid: t('admin.emergencies.status_displacement_paid'),
+    on_site: t('admin.emergencies.status_on_site'),
+    quote_sent: t('admin.emergencies.status_quote_sent'),
+    quote_submitted: t('admin.emergencies.status_quote_submitted'),
+    quote_paid: t('admin.emergencies.status_quote_paid'),
+    quote_accepted: t('admin.emergencies.status_quote_accepted'),
+    in_progress: t('admin.emergencies.status_in_progress'),
+    quote_refused: t('admin.emergencies.status_quote_refused'),
+    completed: t('admin.emergencies.status_completed'),
   };
 
-  useFocusEffect(useCallback(() => {
-    fetchData();
+  function formatRelative(dateStr: string): string {
+    const diff = Date.now() - new Date(dateStr).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 60) return t('admin.emergencies.time_ago_min', { count: mins });
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return t('admin.emergencies.time_ago_hours', { count: hrs });
+    return new Date(dateStr).toLocaleDateString('fr-FR');
+  }
 
-    // Realtime subscription
+  // Realtime subscription to invalidate query on changes
+  useEffect(() => {
     channelRef.current = supabase
       .channel('admin-emergencies')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'emergency_requests' }, () => {
-        fetchData();
+        queryClient.invalidateQueries({ queryKey: ['admin-emergencies'] });
       })
       .subscribe();
 
@@ -80,7 +90,7 @@ export default function AdminEmergencies() {
         channelRef.current = null;
       }
     };
-  }, []));
+  }, [queryClient]);
 
   const active = emergencies.filter(e => !['completed', 'cancelled'].includes(e.status));
   const history = emergencies.filter(e => ['completed', 'cancelled'].includes(e.status));
@@ -94,10 +104,10 @@ export default function AdminEmergencies() {
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
           <View>
-            <Text style={styles.title}>Urgences</Text>
+            <Text style={styles.title}>{t('admin.emergencies.title')}</Text>
             <View style={styles.realtimeBadge}>
               <View style={styles.realtimeDot} />
-              <Text style={styles.realtimeText}>Temps réel</Text>
+              <Text style={styles.realtimeText}>{t('admin.emergencies.realtime')}</Text>
             </View>
           </View>
           {active.length > 0 && (
@@ -109,25 +119,25 @@ export default function AdminEmergencies() {
 
         <ScrollView
           showsVerticalScrollIndicator={false}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchData(); }} />}
+          refreshControl={<RefreshControl refreshing={false} onRefresh={() => refetch()} />}
         >
           {active.length === 0 && history.length === 0 ? (
             <View style={styles.empty}>
               <Ionicons name="checkmark-circle-outline" size={50} color={COLORS.success} />
-              <Text style={styles.emptyText}>Aucune urgence active</Text>
+              <Text style={styles.emptyText}>{t('admin.emergencies.no_active')}</Text>
             </View>
           ) : (
             <>
               {active.length > 0 && (
                 <>
-                  <Text style={styles.sectionTitle}>Actives ({active.length})</Text>
-                  {active.map(e => <EmergencyCard key={e.id} item={e} router={router} />)}
+                  <Text style={styles.sectionTitle}>{t('admin.emergencies.active', { count: active.length })}</Text>
+                  {active.map(e => <EmergencyCard key={e.id} item={e} router={router} statusLabels={EMERGENCY_STATUS_LABELS} formatRelative={formatRelative} propertyDefault={t('admin.emergencies.property_default')} />)}
                 </>
               )}
               {history.length > 0 && (
                 <>
-                  <Text style={styles.sectionTitle}>Historique ({history.length})</Text>
-                  {history.slice(0, 10).map(e => <EmergencyCard key={e.id} item={e} router={router} />)}
+                  <Text style={styles.sectionTitle}>{t('admin.emergencies.history', { count: history.length })}</Text>
+                  {history.slice(0, 10).map(e => <EmergencyCard key={e.id} item={e} router={router} statusLabels={EMERGENCY_STATUS_LABELS} formatRelative={formatRelative} propertyDefault={t('admin.emergencies.property_default')} />)}
                 </>
               )}
             </>
@@ -139,7 +149,7 @@ export default function AdminEmergencies() {
   );
 }
 
-function EmergencyCard({ item: e, router }: { item: any; router: any }) {
+function EmergencyCard({ item: e, router, statusLabels, formatRelative, propertyDefault }: { item: { id: string; status: string; service_type: string; description?: string; property_name?: string; provider_name?: string; created_at: string; property?: { name?: string; address?: string } | null; owner?: { name?: string; email?: string } | null }; router: ReturnType<typeof useRouter>; statusLabels: Record<string, string>; formatRelative: (d: string) => string; propertyDefault: string }) {
   const colors = EMERGENCY_STATUS_COLORS[e.status] || { bg: COLORS.warningSoft, text: COLORS.warning };
   return (
     <TouchableOpacity
@@ -150,12 +160,12 @@ function EmergencyCard({ item: e, router }: { item: any; router: any }) {
       <View style={styles.cardTop}>
         <View style={[styles.chip, { backgroundColor: colors.bg }]}>
           <Text style={[styles.chipText, { color: colors.text }]}>
-            {EMERGENCY_STATUS_LABELS[e.status] || e.status}
+            {statusLabels[e.status] || e.status}
           </Text>
         </View>
         <Text style={styles.cardTime}>{formatRelative(e.created_at)}</Text>
       </View>
-      <Text style={styles.cardTitle}>{e.property?.name || 'Logement'}</Text>
+      <Text style={styles.cardTitle}>{e.property?.name || propertyDefault}</Text>
       {e.property?.address && <Text style={styles.cardAddr}>{e.property.address}</Text>}
       <View style={styles.cardMeta}>
         {e.owner && (
@@ -167,7 +177,7 @@ function EmergencyCard({ item: e, router }: { item: any; router: any }) {
         {e.service_type && (
           <View style={styles.metaItem}>
             <Ionicons name="construct-outline" size={13} color={COLORS.textTertiary} />
-            <Text style={styles.metaText}>{e.service_type}</Text>
+            <Text style={styles.metaText}>{getServiceTypeLabel(e.service_type)}</Text>
           </View>
         )}
       </View>

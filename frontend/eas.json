@@ -18,7 +18,29 @@
         "preview": {
             "distribution": "internal"
         },
-        "production": {}
+        "testflight": {
+            "distribution": "store",
+            "autoIncrement": true,
+            "env": {
+                "APP_ENV": "production"
+            },
+            "ios": {
+                "resourceClass": "m-medium"
+            }
+        },
+        "production": {
+            "distribution": "store",
+            "autoIncrement": true,
+            "env": {
+                "APP_ENV": "production"
+            },
+            "ios": {
+                "resourceClass": "m-medium"
+            },
+            "android": {
+                "buildType": "app-bundle"
+            }
+        }
     },
     "submit": {
         "production": {}

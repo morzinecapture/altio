@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, TextInput } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, TextInput, Switch } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -57,6 +57,7 @@ export default function OnboardingProvider() {
   const [baseAddress, setBaseAddress] = useState('');
   const [radiusKm, setRadiusKm] = useState(20);
   const [availability, setAvailability] = useState<string[]>([]);
+  const [notifyZone, setNotifyZone] = useState(true);
   const [saving, setSaving] = useState(false);
 
   // Step 3 — Insurance & documents
@@ -113,6 +114,7 @@ export default function OnboardingProvider() {
         cgu_accepted_at:     new Date().toISOString(),
         mandate_accepted_at: new Date().toISOString(),
         dsa_certified_at:    new Date().toISOString(),
+        notify_new_missions_in_zone: notifyZone,
       });
       router.replace('/tutorial?role=provider');
     } catch (e) {
@@ -281,6 +283,24 @@ export default function OnboardingProvider() {
                   <Text style={[styles.chipText, availability.includes(d.id) && styles.chipTextSelected]}>{t(d.labelKey)}</Text>
                 </TouchableOpacity>
               ))}
+            </View>
+
+            {/* Opt-in — push alerts for new missions/emergencies in zone */}
+            <View style={styles.notifyCard}>
+              <View style={{ flex: 1, marginRight: SPACING.md }}>
+                <Text style={styles.notifyTitle}>
+                  {t('onboarding.provider.notify_zone_title', { defaultValue: 'Alertes nouvelles missions' })}
+                </Text>
+                <Text style={styles.notifyDesc}>
+                  {t('onboarding.provider.notify_zone_desc', { defaultValue: 'Recevoir une notification quand une mission ou urgence est publiée près de chez vous (max 2/heure).' })}
+                </Text>
+              </View>
+              <Switch
+                value={notifyZone}
+                onValueChange={setNotifyZone}
+                trackColor={{ false: COLORS.subtle, true: COLORS.brandPrimary }}
+                thumbColor={COLORS.textInverse}
+              />
             </View>
 
             <View style={styles.summaryCard}>
@@ -527,6 +547,9 @@ const styles = StyleSheet.create({
   chipText: { ...FONTS.bodySmall, color: COLORS.textSecondary },
   chipTextSelected: { color: COLORS.textInverse },
   dayChip: { width: 46, height: 46, borderRadius: 12, backgroundColor: COLORS.paper, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: COLORS.border },
+  notifyCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.paper, padding: SPACING.lg, borderRadius: RADIUS.lg, marginTop: SPACING.xl, borderWidth: 2, borderColor: COLORS.border, ...SHADOWS.card },
+  notifyTitle: { ...FONTS.bodySmall, color: COLORS.textPrimary, fontWeight: '700', marginBottom: 4 },
+  notifyDesc: { ...FONTS.bodySmall, color: COLORS.textSecondary, lineHeight: 18 },
   summaryCard: { backgroundColor: COLORS.infoSoft, padding: SPACING.lg, borderRadius: RADIUS.lg, marginTop: SPACING.xl, gap: SPACING.sm },
   summaryTitle: { ...FONTS.bodySmall, color: COLORS.info, fontWeight: '700', marginBottom: SPACING.xs },
   summaryLine: { ...FONTS.body, color: COLORS.textPrimary },

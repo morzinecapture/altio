@@ -6,9 +6,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONTS, SPACING, RADIUS, SHADOWS } from '../src/theme';
 import { useAuth } from '../src/auth';
 import { setRole } from '../src/api';
+import { useTranslation } from 'react-i18next';
 
 export default function RoleSelectScreen() {
   const router = useRouter();
+  const { t } = useTranslation();
   const { user, setUser } = useAuth();
   const [selected, setSelected] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -34,22 +36,22 @@ export default function RoleSelectScreen() {
     {
       id: 'owner',
       icon: 'home-outline' as const,
-      title: 'Propriétaire',
-      desc: 'Gérez vos logements, planifiez les missions et trouvez des prestataires',
+      title: t('role_select.owner_title'),
+      desc: t('role_select.owner_desc'),
     },
     {
       id: 'provider',
       icon: 'construct-outline' as const,
-      title: 'Prestataire',
-      desc: 'Recevez des missions, envoyez des devis et développez votre activité',
+      title: t('role_select.provider_title'),
+      desc: t('role_select.provider_desc'),
     },
   ];
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
-        <Text style={styles.greeting}>Bienvenue, {user?.name?.split(' ')[0]} !</Text>
-        <Text style={styles.subtitle}>Choisissez votre profil</Text>
+        <Text style={styles.greeting}>{t('role_select.greeting', { name: user?.name?.split(' ')[0] })}</Text>
+        <Text style={styles.subtitle}>{t('role_select.subtitle')}</Text>
 
         <View style={styles.cards}>
           {roles.map((role) => (
@@ -90,7 +92,7 @@ export default function RoleSelectScreen() {
           {saving ? (
             <ActivityIndicator color={COLORS.textInverse} />
           ) : (
-            <Text style={styles.confirmBtnText}>Continuer</Text>
+            <Text style={styles.confirmBtnText}>{t('role_select.confirm')}</Text>
           )}
         </TouchableOpacity>
       </View>

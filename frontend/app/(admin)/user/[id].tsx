@@ -1,17 +1,21 @@
-import React, { useState, useCallback } from 'react';
+import React from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
-import { COLORS, FONTS, SPACING, RADIUS, SHADOWS, STATUS_LABELS, STATUS_COLORS, MISSION_TYPE_LABELS } from '../../../src/theme';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useTranslation } from 'react-i18next';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { COLORS, FONTS, SPACING, RADIUS, SHADOWS, STATUS_LABELS, STATUS_COLORS } from '../../../src/theme';
+import { getMissionTypeLabel } from '../../../src/utils/serviceLabels';
 import { AdminGuard } from '../../../src/components/AdminGuard';
 import { getAdminUserDetail, suspendUser, reactivateUser, approveProviderDocument, rejectProviderDocument } from '../../../src/api';
 import { useAuth } from '../../../src/auth';
+import type { AdminUserDetail as AdminUserDetailType, ProviderDocument, AuditLogEntry } from '../../../src/types/api';
 
 function InfoRow({ icon, label, value }: { icon: string; label: string; value: string }) {
   return (
     <View style={styles.infoRow}>
-      <Ionicons name={icon as any} size={16} color={COLORS.textTertiary} />
+      <Ionicons name={icon as keyof typeof Ionicons.glyphMap} size={16} color={COLORS.textTertiary} />
       <View style={styles.infoText}>
         <Text style={styles.infoLabel}>{label}</Text>
         <Text style={styles.infoValue}>{value || '—'}</Text>
@@ -21,38 +25,52 @@ function InfoRow({ icon, label, value }: { icon: string; label: string; value: s
 }
 
 export default function AdminUserDetail() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user: adminUser } = useAuth();
-  const [data, setData]           = useState<any>(null);
-  const [loading, setLoading]     = useState(true);
-  const [actionLoading, setActionLoading] = useState(false);
+  const queryClient = useQueryClient();
 
-  const fetchData = async () => {
-    try {
-      const result = await getAdminUserDetail(id);
-      setData(result);
-    } catch (e) { console.error(e); }
-    finally { setLoading(false); }
-  };
+  const { data, isLoading: loading } = useQuery({
+    queryKey: ['admin-user', id],
+    queryFn: () => getAdminUserDetail(id),
+    enabled: !!id,
+  });
 
-  useFocusEffect(useCallback(() => { fetchData(); }, [id]));
+  const suspendMut = useMutation({
+    mutationFn: (params: { userId: string; reason: string }) => suspendUser(params.userId, params.reason),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['admin-user', id] }); },
+  });
+
+  const reactivateMut = useMutation({
+    mutationFn: (userId: string) => reactivateUser(userId),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['admin-user', id] }); },
+  });
+
+  const approveDocMut = useMutation({
+    mutationFn: (params: { providerId: string; docType: string }) => approveProviderDocument(params.providerId, params.docType),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['admin-user', id] }); },
+  });
+
+  const rejectDocMut = useMutation({
+    mutationFn: (params: { providerId: string; docType: string; reason: string }) => rejectProviderDocument(params.providerId, params.docType, params.reason),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['admin-user', id] }); },
+  });
+
+  const actionLoading = suspendMut.isPending || reactivateMut.isPending || approveDocMut.isPending || rejectDocMut.isPending;
 
   const handleSuspend = () => {
     Alert.alert(
-      'Suspendre ce compte ?',
-      `${data?.user?.name || 'Cet utilisateur'} ne pourra plus se connecter.`,
+      t('admin.user_detail.suspend_confirm_title'),
+      t('admin.user_detail.suspend_confirm_msg', { name: data?.user?.name || t('admin.user_detail.user_default') }),
       [
-        { text: 'Annuler', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Suspendre', style: 'destructive', onPress: async () => {
-            setActionLoading(true);
+          text: t('admin.user_detail.suspend'), style: 'destructive', onPress: async () => {
             try {
-              await suspendUser(id, 'Suspendu manuellement par admin');
-              Alert.alert('Compte suspendu');
-              fetchData();
-            } catch (e: any) { Alert.alert('Erreur', e.message); }
-            finally { setActionLoading(false); }
+              await suspendMut.mutateAsync({ userId: id, reason: 'Suspendu manuellement par admin' });
+              Alert.alert(t('admin.user_detail.account_suspended'));
+            } catch (e: unknown) { Alert.alert(t('common.error'), e instanceof Error ? e.message : String(e)); }
           }
         }
       ]
@@ -60,37 +78,28 @@ export default function AdminUserDetail() {
   };
 
   const handleReactivate = async () => {
-    setActionLoading(true);
     try {
-      await reactivateUser(id);
-      Alert.alert('Compte réactivé');
-      fetchData();
-    } catch (e: any) { Alert.alert('Erreur', e.message); }
-    finally { setActionLoading(false); }
+      await reactivateMut.mutateAsync(id);
+      Alert.alert(t('admin.user_detail.account_reactivated'));
+    } catch (e: unknown) { Alert.alert(t('common.error'), e instanceof Error ? e.message : String(e)); }
   };
 
   const handleApproveDoc = async (docType: string) => {
-    setActionLoading(true);
     try {
-      await approveProviderDocument(data?.provider?.provider_id, docType);
-      Alert.alert('Document approuvé');
-      fetchData();
-    } catch (e: any) { Alert.alert('Erreur', e.message); }
-    finally { setActionLoading(false); }
+      await approveDocMut.mutateAsync({ providerId: data?.provider?.provider_id || '', docType });
+      Alert.alert(t('admin.user_detail.doc_approved_alert'));
+    } catch (e: unknown) { Alert.alert(t('common.error'), e instanceof Error ? e.message : String(e)); }
   };
 
   const handleRejectDoc = (docType: string) => {
-    Alert.alert('Refuser ce document ?', 'Le prestataire sera notifié.', [
-      { text: 'Annuler', style: 'cancel' },
+    Alert.alert(t('admin.user_detail.reject_doc_title'), t('admin.user_detail.reject_doc_msg'), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Refuser', style: 'destructive', onPress: async () => {
-          setActionLoading(true);
+        text: t('admin.user_detail.doc_rejected_alert'), style: 'destructive', onPress: async () => {
           try {
-            await rejectProviderDocument(data?.provider?.provider_id, docType, 'Document invalide');
-            Alert.alert('Document refusé');
-            fetchData();
-          } catch (e: any) { Alert.alert('Erreur', e.message); }
-          finally { setActionLoading(false); }
+            await rejectDocMut.mutateAsync({ providerId: data?.provider?.provider_id || '', docType, reason: 'Document invalide' });
+            Alert.alert(t('admin.user_detail.doc_rejected_alert'));
+          } catch (e: unknown) { Alert.alert(t('common.error'), e instanceof Error ? e.message : String(e)); }
         }
       }
     ]);
@@ -113,10 +122,10 @@ export default function AdminUserDetail() {
           <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
             <Ionicons name="arrow-back" size={22} color="#1E3A5F" />
           </TouchableOpacity>
-          <Text style={styles.title} numberOfLines={1}>{u?.name || 'Utilisateur'}</Text>
+          <Text style={styles.title} numberOfLines={1}>{u?.name || t('admin.user_detail.user_default')}</Text>
           {u?.suspended && (
             <View style={styles.suspendedBadge}>
-              <Text style={styles.suspendedBadgeText}>SUSPENDU</Text>
+              <Text style={styles.suspendedBadgeText}>{t('admin.user_detail.suspended_badge')}</Text>
             </View>
           )}
         </View>
@@ -129,12 +138,12 @@ export default function AdminUserDetail() {
                 <Text style={styles.avatarBigLetter}>{(u?.name || '?')[0].toUpperCase()}</Text>
               </View>
               <View style={styles.avatarInfo}>
-                <Text style={styles.userName}>{u?.name || 'Sans nom'}</Text>
+                <Text style={styles.userName}>{u?.name || t('admin.user_detail.no_name')}</Text>
                 <Text style={styles.userEmail}>{u?.email}</Text>
                 {u?.role && (
                   <View style={[styles.chip, { backgroundColor: u.role === 'owner' ? COLORS.infoSoft : COLORS.purpleSoft, marginTop: SPACING.xs }]}>
                     <Text style={[styles.chipText, { color: u.role === 'owner' ? COLORS.info : COLORS.purple }]}>
-                      {u.role === 'owner' ? 'Propriétaire' : 'Prestataire'}
+                      {u.role === 'owner' ? t('admin.user_detail.role_owner') : t('admin.user_detail.role_provider')}
                     </Text>
                   </View>
                 )}
@@ -144,31 +153,31 @@ export default function AdminUserDetail() {
 
           {/* Infos compte */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Informations compte</Text>
+            <Text style={styles.sectionTitle}>{t('admin.user_detail.account_info')}</Text>
             <View style={styles.card}>
-              <InfoRow icon="calendar-outline"    label="Inscrit le"         value={u?.created_at ? new Date(u.created_at).toLocaleDateString('fr-FR') : '—'} />
-              <InfoRow icon="checkmark-circle-outline" label="Onboarding"   value={u?.onboarding_completed ? 'Terminé' : 'En cours'} />
-              {u?.owner_type && <InfoRow icon="home-outline" label="Type owner" value={u.owner_type} />}
-              <InfoRow icon="shield-outline"      label="Admin"              value={u?.is_admin ? 'Oui' : 'Non'} />
+              <InfoRow icon="calendar-outline"    label={t('admin.user_detail.registered_on')}         value={u?.created_at ? new Date(u.created_at).toLocaleDateString('fr-FR') : '—'} />
+              <InfoRow icon="checkmark-circle-outline" label={t('admin.user_detail.onboarding')}   value={u?.onboarding_completed ? t('admin.user_detail.onboarding_done') : t('admin.user_detail.onboarding_pending')} />
+              {u?.owner_type && <InfoRow icon="home-outline" label={t('admin.user_detail.owner_type')} value={u.owner_type} />}
+              <InfoRow icon="shield-outline"      label={t('admin.user_detail.is_admin')}              value={u?.is_admin ? t('admin.user_detail.yes') : t('admin.user_detail.no')} />
             </View>
           </View>
 
           {/* Profil prestataire */}
           {provider && (
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Profil prestataire</Text>
+              <Text style={styles.sectionTitle}>{t('admin.user_detail.provider_profile')}</Text>
               <View style={styles.card}>
-                <InfoRow icon="star-outline"      label="Note"               value={`${provider.rating ?? '—'} / 5 (${provider.total_reviews ?? 0} avis)`} />
-                <InfoRow icon="cash-outline"      label="Gains totaux"       value={`${provider.total_earnings ?? 0}€`} />
-                <InfoRow icon="checkmark-done-outline" label="Vérifié"       value={provider.verified ? 'Oui' : 'Non'} />
-                {provider.bio && <InfoRow icon="document-text-outline" label="Bio" value={provider.bio} />}
+                <InfoRow icon="star-outline"      label={t('admin.user_detail.rating')}               value={`${provider.rating ?? '—'} / 5 (${provider.total_reviews ?? 0} ${t('admin.user_detail.reviews')})`} />
+                <InfoRow icon="cash-outline"      label={t('admin.user_detail.total_earnings')}       value={`${provider.total_earnings ?? 0}€`} />
+                <InfoRow icon="checkmark-done-outline" label={t('admin.user_detail.verified')}       value={provider.verified ? t('admin.user_detail.yes') : t('admin.user_detail.no')} />
+                {provider.bio && <InfoRow icon="document-text-outline" label={t('admin.user_detail.bio')} value={provider.bio} />}
               </View>
 
               {/* Documents */}
               {provider.documents && Array.isArray(provider.documents) && provider.documents.length > 0 && (
                 <>
-                  <Text style={[styles.sectionTitle, { marginTop: SPACING.md }]}>Documents</Text>
-                  {provider.documents.map((doc: any) => (
+                  <Text style={[styles.sectionTitle, { marginTop: SPACING.md }]}>{t('admin.user_detail.documents')}</Text>
+                  {provider.documents.map((doc: ProviderDocument) => (
                     <View key={doc.type} style={[styles.card, styles.docRow]}>
                       <Ionicons name="document-outline" size={20} color={COLORS.info} />
                       <View style={{ flex: 1 }}>
@@ -179,7 +188,7 @@ export default function AdminUserDetail() {
                           <Text style={[styles.docStatusText, {
                             color: doc.status === 'approved' ? COLORS.success : doc.status === 'rejected' ? COLORS.urgency : COLORS.warning
                           }]}>
-                            {doc.status === 'approved' ? 'Approuvé' : doc.status === 'rejected' ? 'Refusé' : 'En attente'}
+                            {doc.status === 'approved' ? t('admin.user_detail.doc_approved') : doc.status === 'rejected' ? t('admin.user_detail.doc_rejected') : t('admin.user_detail.doc_pending')}
                           </Text>
                         </View>
                       </View>
@@ -203,11 +212,11 @@ export default function AdminUserDetail() {
           {/* Historique missions */}
           {missions.length > 0 && (
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Missions récentes ({missions.length})</Text>
-              {missions.slice(0, 5).map((m: any) => (
-                <TouchableOpacity key={m.id} style={[styles.card, { marginBottom: SPACING.sm }]} onPress={() => router.push(`/mission/${m.id}` as any)}>
+              <Text style={styles.sectionTitle}>{t('admin.user_detail.recent_missions', { count: missions.length })}</Text>
+              {missions.slice(0, 5).map((m) => (
+                <TouchableOpacity key={m.id} style={[styles.card, { marginBottom: SPACING.sm }]} onPress={() => router.push(`/mission/${m.id}` as never)}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Text style={styles.missionTitle}>{MISSION_TYPE_LABELS[m.mission_type] || m.mission_type}</Text>
+                    <Text style={styles.missionTitle}>{getMissionTypeLabel(m.mission_type)}</Text>
                     <View style={[styles.chip, { backgroundColor: (STATUS_COLORS[m.status] || STATUS_COLORS.pending).bg }]}>
                       <Text style={[styles.chipText, { color: (STATUS_COLORS[m.status] || STATUS_COLORS.pending).text }]}>
                         {STATUS_LABELS[m.status] || m.status}
@@ -220,9 +229,30 @@ export default function AdminUserDetail() {
             </View>
           )}
 
+          {/* Historique audit log */}
+          {auditHistory.length > 0 && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>{t('admin.user_detail.action_history', { count: auditHistory.length })}</Text>
+              {auditHistory.map((entry: AuditLogEntry) => (
+                <View key={entry.id} style={[styles.card, { marginBottom: SPACING.sm, flexDirection: 'row', alignItems: 'flex-start', gap: SPACING.sm }]}>
+                  <Ionicons
+                    name={entry.action === 'suspend_user' ? 'ban-outline' : entry.action === 'reactivate_user' ? 'checkmark-circle-outline' : 'clipboard-outline'}
+                    size={16}
+                    color={entry.action === 'suspend_user' ? COLORS.urgency : entry.action === 'reactivate_user' ? COLORS.success : COLORS.textTertiary}
+                  />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.auditAction}>{entry.action}</Text>
+                    {entry.metadata?.reason ? <Text style={styles.auditMeta}>{t('admin.user_detail.reason')} : {String(entry.metadata.reason)}</Text> : null}
+                    <Text style={styles.auditDate}>{new Date(entry.created_at).toLocaleString('fr-FR')}</Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          )}
+
           {/* Actions admin */}
           <View style={[styles.section, { paddingBottom: 100 }]}>
-            <Text style={styles.sectionTitle}>Actions admin</Text>
+            <Text style={styles.sectionTitle}>{t('admin.user_detail.admin_actions')}</Text>
             {u?.suspended ? (
               <TouchableOpacity
                 style={[styles.actionBtn, { backgroundColor: COLORS.success }]}
@@ -231,7 +261,7 @@ export default function AdminUserDetail() {
               >
                 {actionLoading ? <ActivityIndicator color={COLORS.textInverse} /> : (
                   <><Ionicons name="checkmark-circle-outline" size={18} color={COLORS.textInverse} />
-                  <Text style={styles.actionBtnText}>Réactiver le compte</Text></>
+                  <Text style={styles.actionBtnText}>{t('admin.user_detail.reactivate')}</Text></>
                 )}
               </TouchableOpacity>
             ) : (
@@ -242,7 +272,7 @@ export default function AdminUserDetail() {
               >
                 {actionLoading ? <ActivityIndicator color={COLORS.textInverse} /> : (
                   <><Ionicons name="ban-outline" size={18} color={COLORS.textInverse} />
-                  <Text style={styles.actionBtnText}>Suspendre le compte</Text></>
+                  <Text style={styles.actionBtnText}>{t('admin.user_detail.suspend')}</Text></>
                 )}
               </TouchableOpacity>
             )}
@@ -285,4 +315,7 @@ const styles = StyleSheet.create({
   missionDate: { ...FONTS.bodySmall, color: COLORS.textTertiary, marginTop: 4 },
   actionBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.sm, paddingVertical: SPACING.md, borderRadius: RADIUS.lg, marginBottom: SPACING.sm },
   actionBtnText: { ...FONTS.bodySmall, color: COLORS.textInverse, fontWeight: '600' },
+  auditAction: { fontFamily: 'Inter_600SemiBold', fontSize: 13, color: '#1E3A5F', textTransform: 'capitalize' },
+  auditMeta: { ...FONTS.bodySmall, color: COLORS.textSecondary, marginTop: 2 },
+  auditDate: { ...FONTS.caption, color: COLORS.textTertiary, marginTop: 4 },
 });

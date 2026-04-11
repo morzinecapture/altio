@@ -1,10 +1,24 @@
-import { Tabs } from 'expo-router';
+import { Tabs, Redirect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { BlurView } from 'expo-blur';
-import { StyleSheet, Platform } from 'react-native';
-import { COLORS, FONTS } from '../../src/theme';
+import { ActivityIndicator, View } from 'react-native';
+import { COLORS } from '../../src/theme';
+import { useAuth } from '../../src/auth';
 
 export default function OwnerTabLayout() {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F8FAFC' }}>
+        <ActivityIndicator size="large" color={COLORS.brandPrimary} />
+      </View>
+    );
+  }
+
+  if (!user || user.role !== 'owner') {
+    return <Redirect href="/" />;
+  }
+
   return (
     <Tabs
       screenOptions={{
@@ -53,10 +67,17 @@ export default function OwnerTabLayout() {
         }}
       />
       <Tabs.Screen
-        name="providers-map"
+        name="planning"
         options={{
-          title: 'Carte',
-          tabBarIcon: ({ color, size }) => <Ionicons name="map-outline" size={size} color={color} />,
+          title: 'Planning',
+          tabBarIcon: ({ color, size }) => <Ionicons name="calendar-outline" size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="invoices"
+        options={{
+          title: 'Factures',
+          tabBarIcon: ({ color, size }) => <Ionicons name="receipt-outline" size={size} color={color} />,
         }}
       />
       <Tabs.Screen
@@ -81,6 +102,13 @@ export default function OwnerTabLayout() {
         }}
       />
       <Tabs.Screen
+        name="providers-map"
+        options={{
+          href: null,
+          tabBarStyle: { display: 'none' }
+        }}
+      />
+      <Tabs.Screen
         name="catalogue"
         options={{
           href: null,
@@ -89,6 +117,13 @@ export default function OwnerTabLayout() {
       />
       <Tabs.Screen
         name="partner/[id]"
+        options={{
+          href: null,
+          tabBarStyle: { display: 'none' }
+        }}
+      />
+      <Tabs.Screen
+        name="favorites"
         options={{
           href: null,
           tabBarStyle: { display: 'none' }

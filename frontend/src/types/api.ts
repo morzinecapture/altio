@@ -21,7 +21,6 @@ export type MissionStatus =
   | 'quote_refused';
 
 export type EmergencyStatus =
-  | 'open'
   | 'bids_open'
   | 'provider_accepted'
   | 'bid_accepted'
@@ -32,12 +31,13 @@ export type EmergencyStatus =
   | 'quote_accepted'
   | 'quote_refused'
   | 'in_progress'
-  | 'completed';
+  | 'completed'
+  | 'cancelled';
 
-export type ApplicationStatus = 'pending' | 'accepted' | 'rejected';
-export type BidStatus = 'pending' | 'accepted' | 'rejected';
+export type ApplicationStatus = 'pending' | 'accepted' | 'rejected' | 'declined';
+export type BidStatus = 'pending' | 'accepted' | 'rejected' | 'cancelled';
 export type QuoteStatus = 'pending' | 'sent' | 'accepted' | 'refused';
-export type InvoiceType = 'mandate' | 'owner_fee' | 'provider_commission';
+export type InvoiceType = 'service' | 'service_fee' | 'commission';
 export type UserRole = 'owner' | 'provider' | 'admin';
 
 // ─── Property ────────────────────────────────────────────────────────────────
@@ -79,6 +79,8 @@ export interface CreatePropertyPayload {
   ical_url?: string;
   ical_airbnb_url?: string;
   ical_booking_url?: string;
+  latitude?: number;
+  longitude?: number;
 }
 
 export type UpdatePropertyPayload = Partial<CreatePropertyPayload>;
@@ -136,7 +138,10 @@ export interface ProviderProfile {
   rc_pro_doc_url?: string;
   decennale_doc_url?: string;
   documents?: ProviderDocument[];
-  user?: { id?: string; name?: string; picture?: string; email?: string; [key: string]: unknown };
+  location_label?: string;
+  hourly_rate?: number;
+  notify_new_missions_in_zone?: boolean;
+  user?: { id?: string; name?: string; picture?: string; email?: string; role?: string; city?: string; specialties?: string[] };
 }
 
 export interface ProviderDocument {
@@ -166,6 +171,8 @@ export interface UpdateProviderProfilePayload {
   documents?: ProviderDocument[];
   rc_pro_doc_url?: string;
   decennale_doc_url?: string;
+  hourly_rate?: number;
+  notify_new_missions_in_zone?: boolean;
 }
 
 // ─── Mission ─────────────────────────────────────────────────────────────────
@@ -192,13 +199,15 @@ export interface Mission {
   dispute_resolution?: string | null;
   dispute_resolved_at?: string | null;
   dispute_resolved_by?: string | null;
+  require_photos?: boolean;
   created_at: string;
   updated_at?: string;
 }
 
 /** Enriched mission returned by getMissions (merged with property data) */
-export interface MergedMission extends Mission {
+export interface MergedMission extends Omit<Mission, 'status'> {
   mission_id: string;
+  status: MissionStatus | EmergencyStatus;
   property_name?: string;
   property_address?: string;
   property_city?: string;
@@ -213,8 +222,14 @@ export interface MergedMission extends Mission {
   mode?: string;
   /** Number of applications received */
   applications_count?: number;
+  /** Broadcast radius in km chosen by the owner (default 10, up to 30) */
+  zone_radius_km?: number;
+  /** Max number of applications accepted for this mission (default 3) */
+  max_applications?: number;
   /** Only present on mapped emergencies */
   raw_status?: string;
+  /** Bid status for current provider on this emergency */
+  my_bid_status?: string;
   /** Joined property object from Supabase */
   property?: {
     name?: string;
@@ -230,6 +245,10 @@ export interface MergedMission extends Mission {
   applications?: MissionApplicationEnriched[];
   /** Joined photos for detail view */
   photos?: MissionPhoto[];
+  /** Name of the directly assigned provider (no application row) */
+  assigned_provider_name?: string;
+  /** Picture of the directly assigned provider */
+  assigned_provider_picture?: string;
 }
 
 export interface MissionPhoto {
@@ -246,6 +265,10 @@ export interface CreateMissionPayload {
   assigned_provider_id?: string | null;
   mode?: string;
   status?: string;
+  require_photos?: boolean;
+  reservation_id?: string;
+  max_applications?: number;
+  show_address?: boolean;
 }
 
 // ─── Mission Application ─────────────────────────────────────────────────────
@@ -278,6 +301,22 @@ export interface ApplyToMissionPayload {
   message?: string;
 }
 
+// ─── Day Schedule (provider day view) ───────────────────────────────────────
+
+export interface DayMission {
+  id: string;
+  status: string;
+  scheduled_date: string;
+  mission_type: string;
+  property: {
+    id: string;
+    name: string;
+    address: string;
+    latitude: number | null;
+    longitude: number | null;
+  } | null;
+}
+
 // ─── Emergency ───────────────────────────────────────────────────────────────
 
 export interface EmergencyRequest {
@@ -294,6 +333,9 @@ export interface EmergencyRequest {
   response_deadline?: string;
   quote_payment_id?: string | null;
   completed_at?: string | null;
+  photos?: string[];
+  target_provider_id?: string | null;
+  scheduled_date?: string | null;
   created_at: string;
   updated_at?: string;
   /** Joined property */
@@ -324,6 +366,9 @@ export interface CreateEmergencyPayload {
   property_id: string;
   service_type: string;
   description?: string;
+  photos?: string[];
+  target_provider_id?: string;
+  scheduled_date?: string;
 }
 
 export interface AcceptEmergencyPayload {
@@ -356,6 +401,8 @@ export interface EmergencyBidEnriched extends EmergencyBid {
   provider_siret?: string;
   provider_company?: string;
   provider_tva_status?: string;
+  provider_is_vat_exempt?: boolean;
+  provider_is_auto_entrepreneur?: boolean;
   provider?: {
     name?: string;
     picture?: string;
@@ -381,6 +428,7 @@ export interface Quote {
   quote_number?: string | null;
   quote_document_url?: string | null;
   refusal_reason?: string | null;
+  accepted_at?: string | null;
   created_at: string;
 }
 
@@ -431,6 +479,7 @@ export interface QuoteDetailEnriched extends QuoteWithLineItems {
   provider_company?: string;
   provider_tva_status?: string;
   tva_rate?: number;
+  is_vat_exempt?: boolean;
   valid_until?: string;
   expires_at?: string;
   quote_document_url?: string;
@@ -524,6 +573,7 @@ export interface ScheduleItem {
   check_out?: string;
   scheduled_at: string;
   duration_minutes: number | null;
+  status?: string;
 }
 
 // ─── Dashboard types ─────────────────────────────────────────────────────────

@@ -6,10 +6,10 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 export const COLORS = {
   // Backgrounds — near-white, clean, professional
-  background: '#F8FAFC',
+  background: '#F1F5F9',
   paper: '#FFFFFF',
-  subtle: '#F1F5F9',
-  surfaceGlass: 'rgba(255, 255, 255, 0.92)',
+  subtle: '#E2E8F0',
+  surfaceGlass: 'rgba(255, 255, 255, 0.85)',
 
   // Text — Slate palette, high contrast
   textPrimary: '#1E293B',
@@ -26,31 +26,31 @@ export const COLORS = {
 
   // Functional
   urgency: '#EF4444',
-  urgencySoft: '#FEF2F2',
+  urgencySoft: '#FEE2E2',
   success: '#10B981',
-  successSoft: '#ECFDF5',
+  successSoft: '#D1FAE5',
   warning: '#F59E0B',
-  warningSoft: '#FFFBEB',
+  warningSoft: '#FEF3C7',
   info: '#2563EB',
-  infoSoft: '#EFF6FF',
+  infoSoft: '#DBEAFE',
 
   // Accent — orange CTA recommandé B2B, violet uniquement pour admin
   coral: '#F97316',
-  coralSoft: '#FFF7ED',
+  coralSoft: '#FFEDD5',
   purple: '#7C3AED',
-  purpleSoft: '#F5F3FF',
+  purpleSoft: '#EDE9FE',
 
-  // Border — Slate 200/300
-  border: '#E2E8F0',
-  borderActive: '#CBD5E1',
+  // Border — Slate 300/400
+  border: '#CBD5E1',
+  borderActive: '#94A3B8',
 };
 
 export const GRADIENT = {
-  header: ['#F8FAFC', '#EFF6FF', '#F8FAFC'] as const,
+  header: ['#EFF6FF', '#DBEAFE', '#EFF6FF'] as const,
   brandButton: ['#2563EB', '#3B82F6'] as const,
   urgencyButton: ['#EF4444', '#F87171'] as const,
   successButton: ['#10B981', '#34D399'] as const,
-  warmBanner: ['#F97316', '#FB923C'] as const,
+  warmBanner: ['#EA580C', '#F97316'] as const,
 };
 
 export const SPACING = {
@@ -78,21 +78,21 @@ export const SHADOWS = {
   card: {
     shadowColor: '#0F172A',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
+    shadowOpacity: 0.10,
     shadowRadius: 6,
     elevation: 2,
   },
   cardHover: {
     shadowColor: '#0F172A',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.10,
+    shadowOpacity: 0.16,
     shadowRadius: 12,
     elevation: 4,
   },
   float: {
     shadowColor: '#0F172A',
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.14,
+    shadowOpacity: 0.20,
     shadowRadius: 16,
     elevation: 6,
   },
@@ -126,14 +126,28 @@ export const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
   pending: { bg: COLORS.warningSoft, text: COLORS.warning },
   urgent: { bg: COLORS.urgencySoft, text: COLORS.urgency },
   open: { bg: COLORS.urgencySoft, text: COLORS.urgency },
+  bids_open: { bg: COLORS.warningSoft, text: COLORS.warning },
   in_progress: { bg: COLORS.infoSoft, text: COLORS.info },
   assigned: { bg: COLORS.purpleSoft, text: COLORS.purple },
   accepted: { bg: COLORS.successSoft, text: COLORS.success },
   rejected: { bg: COLORS.urgencySoft, text: COLORS.urgency },
   awaiting_payment: { bg: COLORS.coralSoft, text: COLORS.coral },
   pending_provider_approval: { bg: COLORS.warningSoft, text: COLORS.warning },
-  cancelled: { bg: COLORS.urgencySoft, text: COLORS.urgency },
-  refunded: { bg: COLORS.warningSoft, text: COLORS.warning },
+  validated: { bg: COLORS.successSoft, text: COLORS.success },
+  paid: { bg: COLORS.successSoft, text: COLORS.success },
+  expired: { bg: COLORS.warningSoft, text: COLORS.warning },
+  dispute: { bg: COLORS.urgencySoft, text: COLORS.urgency },
+  cancelled: { bg: '#FECACA', text: '#DC2626' },
+  refunded: { bg: '#FFEDD5', text: '#D97706' },
+  // Urgence — états intermédiaires
+  bid_accepted: { bg: COLORS.infoSoft, text: COLORS.info },
+  provider_accepted: { bg: COLORS.infoSoft, text: COLORS.info },
+  displacement_paid: { bg: COLORS.infoSoft, text: COLORS.info },
+  on_site: { bg: COLORS.infoSoft, text: COLORS.info },
+  quote_submitted: { bg: COLORS.coralSoft, text: COLORS.coral },
+  quote_sent: { bg: COLORS.coralSoft, text: COLORS.coral },
+  quote_accepted: { bg: COLORS.infoSoft, text: COLORS.info },
+  quote_refused: { bg: COLORS.urgencySoft, text: COLORS.urgency },
 };
 
 export const MISSION_TYPE_LABELS: Record<string, string> = {
@@ -151,29 +165,47 @@ export const SERVICE_TYPE_LABELS: Record<string, string> = {
 };
 
 export const STATUS_LABELS: Record<string, string> = {
-  pending: 'En attente',
-  assigned: 'Assignée',
-  in_progress: 'En cours',
+  pending: 'En recherche de prestataire',
+  assigned: 'Prestataire confirmé',
+  in_progress: 'Intervention en cours',
   completed: 'Terminée',
-  awaiting_payment: 'À payer',
-  open: 'Ouverte',
-  accepted: 'Accepté',
+  awaiting_payment: 'À régler',
+  open: 'En recherche',
+  accepted: 'Acceptée',
   rejected: 'Refusée',
-  pending_provider_approval: 'Proposition Directe',
+  pending_provider_approval: 'En attente de sa réponse',
+  validated: 'Validée',
+  paid: 'Payée',
+  expired: 'Expirée',
+  dispute: 'Litige en cours',
   cancelled: 'Annulée',
   refunded: 'Remboursée',
+  bids_open: 'En recherche de prestataire',
+  bid_accepted: 'Prestataire en route',
+  provider_accepted: 'Prestataire en route',
+  displacement_paid: 'Prestataire en route',
+  on_site: 'Prestataire sur place',
+  quote_submitted: 'Devis à valider',
+  quote_sent: 'Devis à valider',
+  quote_accepted: 'Travaux en cours',
+  quote_paid: 'Travaux en cours',
+  quote_refused: 'Devis refusé',
 };
 
 export const EMERGENCY_STATUS_LABELS: Record<string, string> = {
-  open: 'Ouverte',
-  bids_open: 'Candidatures ouvertes',
-  bid_accepted: 'Prestataire sélectionné',
-  provider_accepted: 'En route',
-  on_site: 'Sur place',
-  quote_submitted: 'Devis soumis',
-  quote_sent: 'Devis envoyé',
-  quote_accepted: 'Devis accepté',
-  completed: 'Terminée',
+  bids_open: 'Recherche en cours',
+  bid_accepted: 'Prestataire en route',
+  provider_accepted: 'Prestataire en route',
+  displacement_paid: 'Prestataire en route',
+  on_site: 'Prestataire sur place',
+  quote_submitted: 'Devis à valider',
+  quote_sent: 'Devis à valider',
+  quote_accepted: 'Travaux en cours',
+  quote_refused: 'Devis refusé',
+  in_progress: 'Travaux en cours',
+  completed: 'Intervention terminée',
+  cancelled: 'Annulée',
+  refunded: 'Remboursée',
 };
 
 export { SCREEN_WIDTH, SCREEN_HEIGHT };

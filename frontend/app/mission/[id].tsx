@@ -1,23 +1,31 @@
 import React, { useState, useEffect, ComponentProps } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, Alert, AlertButton, Image, Platform, TextInput, Modal } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, Alert, AlertButton, Image, Platform, TextInput, Modal, Linking } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { COLORS, FONTS, SPACING, RADIUS, SHADOWS, STATUS_COLORS, STATUS_LABELS, MISSION_TYPE_LABELS, GRADIENT } from '../../src/theme';
+import { COLORS, FONTS, SPACING, RADIUS, SHADOWS, STATUS_COLORS, STATUS_LABELS, GRADIENT } from '../../src/theme';
+import { getMissionTypeLabel } from '../../src/utils/serviceLabels';
 import { useAuth } from '../../src/auth';
-import { getMission, handleApplication, startMission, completeMission, applyToMission, uploadMissionPhoto, addMissionPhoto, createPaymentIntent, addFavoriteProvider, completeMissionPayment, addMissionExtraHours, submitReview, getMissionReview, cancelMission, validateMission, openDispute, republishMission, getProfile } from '../../src/api';
+import { getMission, handleApplication, startMission, completeMission, applyToMission, declineBroadcastMission, expandMissionZone, uploadMissionPhoto, addMissionPhoto, createPaymentIntent, addFavoriteProvider, completeMissionPayment, addMissionExtraHours, submitReview, getMissionReview, cancelMission, validateMission, openDispute, republishMission, getProfile, enableAutoCleaning, syncIcal, acceptDirectMission, rejectDirectMission, haversineKm } from '../../src/api';
+import { geocodeAddress } from '../../src/api/profile';
+import MapView, { Marker, PROVIDER_DEFAULT } from 'react-native-maps';
 import * as ImagePicker from 'expo-image-picker';
 import { useStripe } from '@stripe/stripe-react-native';
+import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { ownerMultiplier, providerMultiplier } from '../../src/config/billing';
+import { supabase } from '../../src/lib/supabase';
 import type { MergedMission, MissionApplicationEnriched, MissionPhoto, Review, ProviderProfile } from '../../src/types/api';
+import ProviderMissionReview from '../../src/components/missions/ProviderMissionReview';
+import { missionKeys } from '../../src/hooks/useMissions';
 
 export default function MissionDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
   const [mission, setMission] = useState<MergedMission | null>(null);
   const [loading, setLoading] = useState(true);
   const [uploadingPhotos, setUploadingPhotos] = useState(false);
@@ -34,6 +42,9 @@ export default function MissionDetailScreen() {
   const [disputeReason, setDisputeReason] = useState('');
   const [submittingDispute, setSubmittingDispute] = useState(false);
   const [providerProfile, setProviderProfile] = useState<ProviderProfile | null>(null);
+  const [providerSiren, setProviderSiren] = useState<string | null>(null);
+  const [quoteId, setQuoteId] = useState<string | null>(null);
+  const [geocodedCoords, setGeocodedCoords] = useState<{ lat: number; lng: number } | null>(null);
   const { initPaymentSheet, presentPaymentSheet } = useStripe();
 
   useEffect(() => { fetchData(); }, [id]);
@@ -46,11 +57,41 @@ export default function MissionDetailScreen() {
         user?.role === 'provider' ? getProfile().catch(() => null) : Promise.resolve(null),
       ]);
       setMission(data);
+
+      // Auto-geocode si les coordonnées GPS sont manquantes (propriétés créées avant le géocodage)
+      if (data && user?.role === 'provider' && !data.property_lat) {
+        const addr = data.property_address || (data.property_city ? `${data.property_city}, France` : null);
+        if (addr) {
+          geocodeAddress(addr).then(async (coords) => {
+            if (!coords) return;
+            setGeocodedCoords(coords);
+            // Persist exact coordinates in DB only when we have the full address
+            if (data.property_address && data.property_id) {
+              await supabase.from('properties')
+                .update({ latitude: coords.lat, longitude: coords.lng })
+                .eq('id', data.property_id);
+            }
+          });
+        }
+      }
+
       setExistingReview(review);
       if (profileData?.provider_profile) {
         const pp = Array.isArray(profileData.provider_profile) ? profileData.provider_profile[0] : profileData.provider_profile;
         setProviderProfile(pp);
       }
+      if (profileData?.siren) {
+        setProviderSiren(profileData.siren);
+      }
+      // Fetch associated quote if any
+      const { data: quoteRow } = await supabase
+        .from('mission_quotes')
+        .select('id')
+        .eq('mission_id', id!)
+        .limit(1)
+        .maybeSingle();
+      setQuoteId(quoteRow?.id || null);
+
       // Auto-trigger rating modal if mission paid but no review yet (owner only)
       if (data && data.status === 'paid' && !review && user?.role === 'owner') {
         setModalRating(0);
@@ -61,12 +102,31 @@ export default function MissionDetailScreen() {
     finally { setLoading(false); }
   };
 
-  const handleAcceptApp = async (appId: string) => {
+  const confirmAcceptApp = async (appId: string) => {
     try {
       await handleApplication(id!, appId, 'accept');
       Alert.alert('Prestataire confirmé !', 'Il a été notifié et connaît les détails de la mission.');
       fetchData();
     } catch (e) { Alert.alert(t('common.error'), e instanceof Error ? e.message : String(e)); }
+  };
+
+  const handleAcceptApp = (appId: string, proposedRate: number | null | undefined) => {
+    const base = Number(proposedRate) || 0;
+    if (base <= 0) {
+      // Fallback : pas de tarif disponible, accepter directement
+      confirmAcceptApp(appId);
+      return;
+    }
+    const fee = Math.round(base * 0.10 * 100) / 100;
+    const total = Math.round(base * ownerMultiplier * 100) / 100;
+    Alert.alert(
+      'Assigner ce prestataire',
+      `Tarif de la mission : ${base.toFixed(2)}€\nFrais de service Altio : ${fee.toFixed(2)}€\n\nTotal (paiement après validation) : ${total.toFixed(2)}€ TTC`,
+      [
+        { text: t('common.cancel'), style: 'cancel' },
+        { text: 'Assigner', onPress: () => confirmAcceptApp(appId) },
+      ]
+    );
   };
 
   const handleRejectApp = async (appId: string) => {
@@ -78,12 +138,34 @@ export default function MissionDetailScreen() {
 
   const handleApply = async () => {
     try {
-      console.log('APPLY: calling applyToMission', { missionId: id, proposed_rate: mission?.fixed_rate });
       await applyToMission(id!, { proposed_rate: mission?.fixed_rate, message: 'Disponible' });
-      Alert.alert('Candidature envoyée !', 'Le propriétaire va examiner votre profil. Vous serez notifié dès qu\'il aura fait son choix.');
+      const isBroadcast = !mission?.assigned_provider_id;
+      Alert.alert(
+        isBroadcast ? 'Votre disponibilité a été enregistrée' : 'Candidature envoyée !',
+        'Le propriétaire a été notifié. Vous serez averti dès qu\'il aura fait son choix.'
+      );
       fetchData();
     } catch (e) {
-      console.log('APPLY ERROR:', e);
+      Alert.alert(t('common.error'), e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const handleDeclineBroadcast = async () => {
+    try {
+      await declineBroadcastMission(id!);
+      Alert.alert('Indisponibilité enregistrée', 'Le propriétaire a été informé que vous n\'êtes pas disponible.');
+      fetchData();
+    } catch (e) {
+      Alert.alert(t('common.error'), e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const handleExpandZone = async () => {
+    try {
+      await expandMissionZone(id!);
+      Alert.alert('Zone élargie', 'La mission est maintenant visible dans un rayon de 30 km. Vous ne recevrez pas plus de 3 candidatures.');
+      fetchData();
+    } catch (e) {
       Alert.alert(t('common.error'), e instanceof Error ? e.message : String(e));
     }
   };
@@ -151,6 +233,48 @@ export default function MissionDetailScreen() {
               // Step 3: Complete payment + generate invoices (pass PI ID for invoice linking)
               await completeMissionPayment(id as string, paymentIntentId);
               await fetchData();
+
+              // Step 4: If first validated cleaning, propose auto-cleaning
+              if (mission?.mission_type === 'cleaning' && mission?.property_id) {
+                try {
+                  const { data: propData } = await supabase
+                    .from('properties')
+                    .select('validated_cleaning_count')
+                    .eq('id', mission.property_id)
+                    .single();
+
+                  const prevCount = propData?.validated_cleaning_count || 0;
+                  await supabase
+                    .from('properties')
+                    .update({ validated_cleaning_count: prevCount + 1 })
+                    .eq('id', mission.property_id);
+
+                  if (prevCount === 0) {
+                    Alert.alert(
+                      '🎉 Premier ménage validé !',
+                      'Ça s\'est bien passé ? Voulez-vous automatiser les prochains ménages pour ce logement ? Les missions seront créées automatiquement à chaque nouvelle réservation.',
+                      [
+                        {
+                          text: 'Oui, automatiser',
+                          onPress: async () => {
+                            try {
+                              await enableAutoCleaning(mission.property_id, true);
+                              await syncIcal(mission.property_id);
+                              Alert.alert('Automatisation activée !', 'Les missions ménage seront créées automatiquement pour chaque départ.');
+                            } catch (err) {
+                              Alert.alert(t('common.error'), err instanceof Error ? err.message : String(err));
+                            }
+                          }
+                        },
+                        { text: 'Pas maintenant', style: 'cancel' }
+                      ]
+                    );
+                  }
+                } catch (_) {
+                  // Non-blocking: don't break the payment flow if auto-cleaning check fails
+                }
+              }
+
               setModalRating(0);
               setModalComment('');
               setShowRatingModal(true);
@@ -247,10 +371,11 @@ export default function MissionDetailScreen() {
   };
 
   const handleComplete = async () => {
-    // R7: Photos obligatoires — si des photos existent déjà, on peut compléter directement
+    // R7: Photos obligatoires — sauf si le propriétaire a désactivé l'obligation
+    const photosNotRequired = mission?.require_photos === false;
     const hasExistingPhotos = mission?.photos && mission.photos.length > 0;
 
-    if (hasExistingPhotos) {
+    if (photosNotRequired || hasExistingPhotos) {
       Alert.alert(t('mission.photo_title'), t('mission.photo_subtitle'), [
         { text: t('common.cancel'), style: 'cancel' },
         {
@@ -308,6 +433,47 @@ export default function MissionDetailScreen() {
   if (loading) return <View style={styles.center}><ActivityIndicator size="large" color={COLORS.brandPrimary} /></View>;
   if (!mission) return <View style={styles.center}><Text>{t('mission.not_found')}</Text></View>;
 
+  // Favorite provider review screen
+  if (
+    mission.status === 'pending_provider_approval' &&
+    mission.assigned_provider_id === user?.id
+  ) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+            <Ionicons name="arrow-back" size={24} color="#1E3A5F" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Proposition de mission</Text>
+          <View style={{ width: 44 }} />
+        </View>
+        <ProviderMissionReview
+          mission={mission}
+          onAccept={async () => {
+            try {
+              await acceptDirectMission(id!);
+              await queryClient.invalidateQueries({ queryKey: missionKeys.all });
+              Alert.alert('Mission acceptée !', 'Le propriétaire a été notifié. Consultez les détails de la mission.');
+              fetchData();
+            } catch (e) {
+              Alert.alert(t('common.error'), e instanceof Error ? e.message : String(e));
+            }
+          }}
+          onDecline={async () => {
+            try {
+              await rejectDirectMission(id!);
+              await queryClient.invalidateQueries({ queryKey: missionKeys.all });
+              Alert.alert('Mission déclinée', 'Le propriétaire a été informé.');
+              router.back();
+            } catch (e) {
+              Alert.alert(t('common.error'), e instanceof Error ? e.message : String(e));
+            }
+          }}
+        />
+      </SafeAreaView>
+    );
+  }
+
   const isOwner = user?.role === 'owner';
   const isProvider = user?.role === 'provider';
   const statusColor = STATUS_COLORS[mission.status] || STATUS_COLORS.pending;
@@ -333,7 +499,7 @@ export default function MissionDetailScreen() {
           <View style={[styles.pillStrict, { backgroundColor: statusColor.bg }]}>
             <Text style={[styles.pillStrictText, { color: statusColor.text }]}>{STATUS_LABELS[mission.status] || mission.status}</Text>
           </View>
-          <Text style={styles.cardStrictCategory}>{(MISSION_TYPE_LABELS[mission.mission_type] || mission.mission_type).toUpperCase()}</Text>
+          <Text style={styles.cardStrictCategory}>{getMissionTypeLabel(mission.mission_type).toUpperCase()}</Text>
         </View>
 
         {/* Info Card */}
@@ -345,7 +511,7 @@ export default function MissionDetailScreen() {
             />
             <View>
               <Text style={styles.cardStrictTitle}>{mission.property_name}</Text>
-              {mission.property_address && (isOwner || (isProvider && mission.assigned_provider_id === user?.id && !['pending'].includes(mission.status))) ? (
+              {mission.property_address && (isOwner || (isProvider && mission.assigned_provider_id === user?.id && !['pending', 'pending_provider_approval'].includes(mission.status))) ? (
                 <Text style={styles.providerTextStrict}>{mission.property_address}</Text>
               ) : mission.property_city ? (
                 <Text style={styles.providerTextStrict}>{mission.property_city}</Text>
@@ -353,6 +519,10 @@ export default function MissionDetailScreen() {
             </View>
           </View>
           {mission.description && <Text style={[styles.providerTextStrict, { marginBottom: SPACING.lg }]}>{mission.description}</Text>}
+
+          {mission.property_address && isOwner && (
+            <Text style={{ color: '#64748B', fontSize: 13, marginTop: 4, marginBottom: 4 }}>{mission.property_address}</Text>
+          )}
 
           <View style={styles.metaGrid}>
             <MetaItem icon="calendar-outline" label={t('mission.date_time')} value={mission.scheduled_date ? `${new Date(mission.scheduled_date).toLocaleDateString('fr-FR')} à ${new Date(mission.scheduled_date).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}` : t('mission.not_planned')} />
@@ -362,8 +532,107 @@ export default function MissionDetailScreen() {
           </View>
         </View>
 
+        {/* Mini-carte localisation — provider only */}
+        {(() => {
+          if (!isProvider) return null;
+          const mapLat = mission.property_lat ?? geocodedCoords?.lat ?? null;
+          const mapLng = mission.property_lng ?? geocodedCoords?.lng ?? null;
+          if (mapLat == null || mapLng == null) return null;
+          const isApprox = !mission.property_lat && !!geocodedCoords;
+          const isAssignedToMe = mission.assigned_provider_id === user?.id &&
+            ['assigned', 'in_progress', 'awaiting_payment'].includes(mission.status);
+
+          const openNavigation = () => {
+            const label = encodeURIComponent(mission.property_name || 'Mission');
+            const googleUrl = `https://www.google.com/maps/dir/?api=1&destination=${mapLat},${mapLng}&travelmode=driving`;
+            const appleUrl = `maps://?daddr=${mapLat},${mapLng}&dirflg=d`;
+            if (Platform.OS === 'ios') {
+              Alert.alert('Navigation', 'Choisissez votre application de navigation', [
+                { text: 'Plans (Apple)', onPress: () => Linking.openURL(appleUrl) },
+                { text: 'Google Maps', onPress: () => Linking.openURL(googleUrl) },
+                { text: 'Annuler', style: 'cancel' },
+              ]);
+            } else {
+              Linking.openURL(googleUrl);
+            }
+          };
+
+          return (
+            <View style={styles.cardStrict}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                <Text style={styles.sectionTitle}>Localisation</Text>
+                {isApprox && (
+                  <View style={{ backgroundColor: '#FEF3C7', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 }}>
+                    <Text style={{ fontFamily: 'PlusJakartaSans_500Medium', fontSize: 11, color: '#92400E' }}>Zone approximative</Text>
+                  </View>
+                )}
+              </View>
+              <View style={{ borderRadius: 16, overflow: 'hidden', height: 160 }}>
+                <MapView
+                  style={{ flex: 1 }}
+                  provider={PROVIDER_DEFAULT}
+                  initialRegion={{
+                    latitude: mapLat,
+                    longitude: mapLng,
+                    latitudeDelta: isApprox ? 0.05 : 0.02,
+                    longitudeDelta: isApprox ? 0.05 : 0.02,
+                  }}
+                  scrollEnabled={false}
+                  zoomEnabled={false}
+                  rotateEnabled={false}
+                  pitchEnabled={false}
+                  toolbarEnabled={false}
+                  showsUserLocation={false}
+                  showsMyLocationButton={false}
+                  showsCompass={false}
+                  showsScale={false}
+                >
+                  <Marker
+                    coordinate={{ latitude: mapLat, longitude: mapLng }}
+                    pinColor={COLORS.brandPrimary}
+                  />
+                </MapView>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10 }}>
+                <Ionicons name="location-outline" size={16} color="#64748B" />
+                <Text style={{ fontFamily: 'PlusJakartaSans_400Regular', fontSize: 13, color: '#64748B', flex: 1 }}>
+                  {mission.property_address || mission.property_city || 'Adresse non disponible'}
+                </Text>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 }}>
+                <Ionicons name="navigate-outline" size={16} color="#64748B" />
+                <Text style={{ fontFamily: 'PlusJakartaSans_400Regular', fontSize: 13, color: '#64748B' }}>
+                  {haversineKm(46.1796, 6.7092, mapLat, mapLng).toFixed(1)} km depuis Morzine centre
+                </Text>
+              </View>
+              {isAssignedToMe && (
+                <TouchableOpacity
+                  onPress={openNavigation}
+                  style={{ marginTop: 12, backgroundColor: COLORS.brandPrimary, borderRadius: 12, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+                >
+                  <Ionicons name="navigate" size={18} color="#fff" />
+                  <Text style={{ fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 15, color: '#fff' }}>Me rendre sur cette mission</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          );
+        })()}
+
+        {/* View quote — both roles */}
+        {quoteId && (
+          <TouchableOpacity
+            style={[styles.applyBtnStrict, { backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0', marginBottom: SPACING.lg, marginTop: 0 }]}
+            onPress={() => router.push(`/quote/${quoteId}`)}
+          >
+            <Ionicons name="document-text-outline" size={20} color={COLORS.brandPrimary} />
+            <Text style={[styles.applyTextStrict, { color: COLORS.brandPrimary }]}>
+              {isOwner ? 'Voir le devis' : 'Voir mon devis'}
+            </Text>
+          </TouchableOpacity>
+        )}
+
         {/* Chat (Owner view) — only after assignment */}
-        {isOwner && mission.assigned_provider_id && !['pending', 'cancelled', 'expired'].includes(mission.status) && (
+        {isOwner && mission.assigned_provider_id && !['pending', 'pending_provider_approval', 'cancelled', 'expired'].includes(mission.status) && (
           <TouchableOpacity testID="chat-btn-owner" style={[styles.applyBtnStrict, { backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0', marginBottom: SPACING.lg, marginTop: 0 }]} onPress={() => router.push(`/chat/${id}?type=mission&receiverId=${mission.assigned_provider_id}&title=Discussion+Prestataire`)}>
             <Ionicons name="chatbubbles-outline" size={20} color="#3B82F6" />
             <Text style={[styles.applyTextStrict, { color: '#3B82F6' }]}>{t('mission.discuss_provider')}</Text>
@@ -531,15 +800,24 @@ export default function MissionDetailScreen() {
         )}
 
         {/* R2: Pending provider approval — rassurer le proprio */}
-        {isOwner && mission.status === 'pending_provider_approval' && (
+        {isOwner && mission.status === 'pending_provider_approval' && !mission.assigned_provider_id && (
           <View style={[styles.cardStrict, { borderLeftWidth: 3, borderLeftColor: COLORS.info }]}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginBottom: SPACING.sm }}>
               <Ionicons name="search-outline" size={20} color={COLORS.info} />
               <Text style={{ fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 15, color: COLORS.info }}>En recherche de prestataire</Text>
             </View>
             <Text style={{ fontFamily: 'PlusJakartaSans_400Regular', fontSize: 13, color: '#64748B' }}>
-              Votre mission est visible par les prestataires de votre zone. {(mission.applications_count ?? 0) > 0 ? `${mission.applications_count} candidature${(mission.applications_count ?? 0) > 1 ? 's' : ''} reçue${(mission.applications_count ?? 0) > 1 ? 's' : ''}.` : 'Vous serez notifié dès qu\'un prestataire postule.'}
+              Votre mission est visible par les prestataires de votre zone ({mission.zone_radius_km ?? 10} km). {(mission.applications_count ?? 0) > 0 ? `${mission.applications_count} candidature${(mission.applications_count ?? 0) > 1 ? 's' : ''} reçue${(mission.applications_count ?? 0) > 1 ? 's' : ''}.` : 'Vous serez notifié dès qu\'un prestataire postule.'}
             </Text>
+            {!mission.assigned_provider_id && (mission.zone_radius_km ?? 10) < 30 && (
+              <TouchableOpacity
+                testID="expand-zone-btn"
+                style={[styles.applyBtnStrict, { marginTop: SPACING.sm, backgroundColor: COLORS.brandPrimary }]}
+                onPress={handleExpandZone}
+              >
+                <Text style={styles.applyTextStrict}>Élargir la zone à 30 km</Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
 
@@ -573,14 +851,14 @@ export default function MissionDetailScreen() {
                       </View>
                     </View>
                   </TouchableOpacity>
-                  <Text style={styles.appRate}>{app.proposed_rate}€</Text>
+                  <Text style={styles.appRate}>{`${(Number(app.proposed_rate || 0) * ownerMultiplier).toFixed(2)}€ TTC`}</Text>
                 </View>
                 {app.message && <Text style={styles.appMessage}>{app.message}</Text>}
                 {app.status === 'pending' && (
                   <View style={styles.appActions}>
-                    <TouchableOpacity testID={`accept-app-${app.id}`} style={styles.acceptBtn} onPress={() => handleAcceptApp(app.id)}>
+                    <TouchableOpacity testID={`accept-app-${app.id}`} style={styles.acceptBtn} onPress={() => handleAcceptApp(app.id, app.proposed_rate)}>
                       <Ionicons name="checkmark" size={18} color={COLORS.textInverse} />
-                      <Text style={styles.actionBtnText}>Choisir {app.provider_name?.split(' ')[0] || ''}</Text>
+                      <Text style={styles.actionBtnText}>Assigner ce prestataire</Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={styles.rejectBtn} onPress={() => handleRejectApp(app.id)}>
                       <Ionicons name="close" size={18} color={COLORS.urgency} />
@@ -597,6 +875,42 @@ export default function MissionDetailScreen() {
                 )}
               </View>
             ))}
+          </View>
+        )}
+
+        {/* Direct assignment — no application row exists */}
+        {isOwner && mission.status === 'pending_provider_approval' && !!mission.assigned_provider_id && (!mission.applications || mission.applications.length === 0) && (
+          <View style={styles.cardStrict}>
+            <Text style={styles.sectionTitle}>Prestataire assigné</Text>
+            <View style={styles.appItem}>
+              <View style={styles.appTop}>
+                <TouchableOpacity
+                  style={styles.appInfo}
+                  onPress={() => router.push(`/provider/${mission.assigned_provider_id}`)}
+                >
+                  <View style={styles.appAvatar}>
+                    {mission.assigned_provider_picture ? (
+                      <Image source={{ uri: mission.assigned_provider_picture }} style={{ width: 40, height: 40, borderRadius: 20 }} />
+                    ) : (
+                      <Text style={styles.appAvatarText}>{mission.assigned_provider_name?.[0] || 'P'}</Text>
+                    )}
+                  </View>
+                  <View>
+                    <Text style={styles.appName}>{mission.assigned_provider_name || 'Prestataire'}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, marginTop: 2 }}>
+                      <Ionicons name="star" size={11} color={COLORS.warning} />
+                      <Text style={{ fontFamily: 'PlusJakartaSans_400Regular', fontSize: 11, color: COLORS.textSecondary }}>Assigné directement</Text>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+                <View style={{ backgroundColor: COLORS.infoSoft, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 }}>
+                  <Text style={{ fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 11, color: COLORS.brandPrimary }}>⭐ Favori</Text>
+                </View>
+              </View>
+              <Text style={{ fontFamily: 'PlusJakartaSans_400Regular', fontSize: 13, color: COLORS.textSecondary, marginTop: SPACING.xs }}>
+                En attente de confirmation du prestataire
+              </Text>
+            </View>
           </View>
         )}
 
@@ -674,8 +988,8 @@ export default function MissionDetailScreen() {
           </View>
         )}
 
-        {/* Owner: Cancel button (pending or assigned) */}
-        {isOwner && ['pending', 'assigned'].includes(mission.status) && (
+        {/* Owner: Cancel button — all cancellable statuses per state machine */}
+        {isOwner && ['pending', 'pending_provider_approval', 'assigned'].includes(mission.status) && (
           <TouchableOpacity
             testID="cancel-btn"
             style={[styles.mainAction, { backgroundColor: COLORS.urgency }]}
@@ -688,53 +1002,127 @@ export default function MissionDetailScreen() {
 
         {/* Provider Actions */}
         {isProvider && mission.status === 'pending_provider_approval' && (() => {
-          const myApp = mission.applications?.find((a: MissionApplicationEnriched) => a.provider_id === user?.id);
-          if (myApp) {
+          // Direct assignment — owner chose this provider directly (no application)
+          if (mission.assigned_provider_id === user?.id && (!mission.applications || mission.applications.length === 0)) {
             return (
-              <View style={[styles.cardStrict, { borderLeftWidth: 3, borderLeftColor: COLORS.success }]}>
+              <View style={[styles.cardStrict, { borderLeftWidth: 3, borderLeftColor: COLORS.brandPrimary }]}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginBottom: SPACING.sm }}>
+                  <Ionicons name="star" size={20} color={COLORS.brandPrimary} />
+                  <Text style={{ fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 15, color: COLORS.brandPrimary }}>
+                    Un propriétaire vous a confié cette mission
+                  </Text>
+                </View>
+                <Text style={{ fontFamily: 'PlusJakartaSans_400Regular', fontSize: 13, color: COLORS.textSecondary, marginBottom: SPACING.md }}>
+                  Vous avez été sélectionné directement par le propriétaire. Acceptez ou refusez cette mission.
+                </Text>
+                <View style={{ flexDirection: 'row', gap: SPACING.sm }}>
+                  <TouchableOpacity
+                    style={[styles.acceptBtn, { flex: 1 }]}
+                    onPress={async () => {
+                      // Fix: acceptDirectMission transitions pending_provider_approval → assigned
+                      // handleStart/startMission expected 'assigned' status → silent failure
+                      try {
+                        await acceptDirectMission(id!);
+                        Alert.alert('Mission acceptée !', 'Le propriétaire a été notifié. Vous pouvez démarrer l\'intervention.');
+                        fetchData();
+                      } catch (e) { Alert.alert(t('common.error'), e instanceof Error ? e.message : String(e)); }
+                    }}
+                  >
+                    <Ionicons name="checkmark" size={18} color={COLORS.textInverse} />
+                    <Text style={styles.actionBtnText}>Accepter</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.rejectBtn, { flex: 1 }]}
+                    onPress={async () => {
+                      // Fix: rejectDirectMission transitions pending_provider_approval → rejected
+                      // handleCancel/cancelMission checked owner_id → failed for provider
+                      try {
+                        await rejectDirectMission(id!);
+                        Alert.alert('Mission refusée', 'Le propriétaire a été notifié.');
+                        fetchData();
+                      } catch (e) { Alert.alert(t('common.error'), e instanceof Error ? e.message : String(e)); }
+                    }}
+                  >
+                    <Ionicons name="close" size={18} color={COLORS.urgency} />
+                    <Text style={[styles.actionBtnText, { color: COLORS.urgency }]}>Refuser</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            );
+          }
+
+          const myApp = mission.applications?.find((a: MissionApplicationEnriched) => a.provider_id === user?.id);
+          const isBroadcast = !mission.assigned_provider_id;
+          if (myApp) {
+            const declined = myApp.status === 'declined';
+            const title = declined
+              ? 'Indisponibilité enregistrée'
+              : isBroadcast
+                ? 'Votre disponibilité a été enregistrée'
+                : 'Candidature envoyée';
+            const subtitle = declined
+              ? 'Le propriétaire a été informé que vous n\'êtes pas disponible.'
+              : 'Le propriétaire a été notifié. Vous serez averti dès qu\'il aura fait son choix.';
+            const color = declined ? COLORS.textSecondary : COLORS.success;
+            return (
+              <View style={[styles.cardStrict, { borderLeftWidth: 3, borderLeftColor: color }]}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACING.sm }}>
-                  <Ionicons name="checkmark-circle" size={20} color={COLORS.success} />
-                  <Text style={{ fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 15, color: COLORS.success }}>
-                    Candidature envoyée
+                  <Ionicons name={declined ? 'close-circle' : 'checkmark-circle'} size={20} color={color} />
+                  <Text style={{ fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 15, color }}>
+                    {title}
                   </Text>
                 </View>
                 <Text style={{ fontFamily: 'PlusJakartaSans_400Regular', fontSize: 13, color: COLORS.textSecondary, marginTop: SPACING.xs }}>
-                  Le propriétaire examinera votre profil. Vous serez notifié de sa décision.
+                  {subtitle}
                 </Text>
               </View>
             );
           }
 
-          // Check provider document verification status
-          const hasSiret = !!providerProfile?.siret;
-          const hasRcPro = !!providerProfile?.rc_pro_verified;
-          const hasDecennale = !!providerProfile?.decennale_verified;
-          const isVerified = !!providerProfile?.verified;
-          const allDocsReady = hasSiret && hasRcPro && hasDecennale && isVerified;
-          const docsPending = hasSiret && (providerProfile?.documents?.some((d) => d.status === 'pending'));
+          // Check provider profile completeness (SIREN from users table + RC Pro from provider_profiles)
+          const hasSiren = !!providerSiren;
+          const hasRcPro = !!providerProfile?.rc_pro_doc_url;
+          const profileComplete = hasSiren && hasRcPro;
 
-          if (!allDocsReady) {
+          if (!profileComplete) {
             return (
               <View style={[styles.cardStrict, { borderLeftWidth: 3, borderLeftColor: COLORS.warning }]}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACING.sm }}>
                   <Ionicons name="alert-circle" size={20} color={COLORS.warning} />
                   <Text style={{ fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 15, color: COLORS.warning }}>
-                    {docsPending ? 'Documents en cours de vérification' : 'Profil incomplet'}
+                    Profil incomplet
                   </Text>
                 </View>
                 <Text style={{ fontFamily: 'PlusJakartaSans_400Regular', fontSize: 13, color: COLORS.textSecondary, marginTop: SPACING.xs }}>
-                  {docsPending
-                    ? 'Vos documents sont en cours de vérification par notre équipe. Vous pourrez postuler dès leur validation.'
-                    : 'Complétez votre profil (SIRET, RC Pro, assurance décennale) pour pouvoir postuler aux missions.'}
+                  Complétez votre SIRET et assurance RC Pro pour pouvoir postuler aux missions.
                 </Text>
-                {!docsPending && (
-                  <TouchableOpacity
-                    style={[styles.applyBtnStrict, { marginTop: SPACING.sm, backgroundColor: COLORS.warning }]}
-                    onPress={() => router.push('/(provider)/profile')}
-                  >
-                    <Text style={styles.applyTextStrict}>Compléter mon profil</Text>
-                  </TouchableOpacity>
-                )}
+                <TouchableOpacity
+                  style={[styles.applyBtnStrict, { marginTop: SPACING.sm, backgroundColor: COLORS.warning }]}
+                  onPress={() => router.push('/(provider)/profile')}
+                >
+                  <Text style={styles.applyTextStrict}>Compléter mon profil</Text>
+                </TouchableOpacity>
+              </View>
+            );
+          }
+
+          if (isBroadcast) {
+            return (
+              <View style={{ flexDirection: 'row', gap: SPACING.sm }}>
+                <TouchableOpacity
+                  testID="apply-btn"
+                  onPress={handleApply}
+                  style={[styles.applyBtnStrict, { flex: 1 }]}
+                >
+                  <Text style={styles.applyTextStrict}>{t('mission.apply_btn')}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  testID="decline-broadcast-btn"
+                  onPress={handleDeclineBroadcast}
+                  style={[styles.applyBtnStrict, { flex: 1, backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0' }]}
+                >
+                  <Text style={[styles.applyTextStrict, { color: COLORS.textSecondary }]}>Non disponible</Text>
+                </TouchableOpacity>
               </View>
             );
           }
@@ -795,6 +1183,7 @@ export default function MissionDetailScreen() {
             onPress={async () => {
               try {
                 await addFavoriteProvider(mission.assigned_provider_id!);
+                queryClient.invalidateQueries({ queryKey: ['favorite-providers'] });
                 Alert.alert(t('mission.favorite_added'), t('mission.favorite_added_msg'));
               } catch (e) {
                 const msg = e instanceof Error ? e.message : String(e);

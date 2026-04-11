@@ -1,21 +1,15 @@
-import React, { useState, useCallback } from 'react';
+import React from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, RefreshControl, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
+import { useQuery } from '@tanstack/react-query';
 import { COLORS, FONTS, SPACING, RADIUS, SHADOWS } from '../../src/theme';
 import { AdminGuard } from '../../src/components/AdminGuard';
 import { getAuditLog } from '../../src/api';
 import { useAuth } from '../../src/auth';
-
-const ACTION_LABELS: Record<string, string> = {
-  suspend_user:     'Utilisateur suspendu',
-  reactivate_user:  'Utilisateur réactivé',
-  approve_doc:      'Document approuvé',
-  reject_doc:       'Document refusé',
-  export_csv:       'Export CSV',
-  generate_invoice: 'Facture générée',
-};
+import type { AuditLogEntry } from '../../src/types/api';
 
 function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString('fr-FR', {
@@ -24,26 +18,28 @@ function formatDate(dateStr: string): string {
 }
 
 export default function AdminSettings() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { user, handleLogout } = useAuth();
-  const [audit, setAudit]       = useState<any[]>([]);
-  const [loading, setLoading]   = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
 
-  const fetchData = async () => {
-    try {
-      const result = await getAuditLog();
-      setAudit(result);
-    } catch (e) { console.error(e); }
-    finally { setLoading(false); setRefreshing(false); }
+  const ACTION_LABELS: Record<string, string> = {
+    suspend_user:     t('admin.settings.audit_suspend_user'),
+    reactivate_user:  t('admin.settings.audit_reactivate_user'),
+    approve_doc:      t('admin.settings.audit_approve_doc'),
+    reject_doc:       t('admin.settings.audit_reject_doc'),
+    export_csv:       t('admin.settings.audit_export_csv'),
+    generate_invoice: t('admin.settings.audit_generate_invoice'),
   };
 
-  useFocusEffect(useCallback(() => { fetchData(); }, []));
+  const { data: audit = [] as AuditLogEntry[], isLoading: loading, refetch } = useQuery({
+    queryKey: ['admin-audit-log'],
+    queryFn: () => getAuditLog(),
+  });
 
   const confirmLogout = () => {
-    Alert.alert('Déconnexion', 'Confirmer la déconnexion ?', [
-      { text: 'Annuler', style: 'cancel' },
-      { text: 'Déconnexion', style: 'destructive', onPress: handleLogout }
+    Alert.alert(t('admin.settings.logout_title'), t('admin.settings.logout_confirm'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      { text: t('common.logout'), style: 'destructive', onPress: handleLogout }
     ]);
   };
 
@@ -51,12 +47,12 @@ export default function AdminSettings() {
     <AdminGuard>
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
-          <Text style={styles.title}>Paramètres</Text>
+          <Text style={styles.title}>{t('admin.settings.title')}</Text>
         </View>
 
         <ScrollView
           showsVerticalScrollIndicator={false}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchData(); }} />}
+          refreshControl={<RefreshControl refreshing={false} onRefresh={() => refetch()} />}
         >
           {/* Profil admin */}
           <View style={styles.profileCard}>
@@ -67,23 +63,23 @@ export default function AdminSettings() {
               <Text style={styles.profileName}>{user?.name || 'Admin'}</Text>
               <Text style={styles.profileEmail}>{user?.email}</Text>
               <View style={styles.adminBadge}>
-                <Text style={styles.adminBadgeText}>ADMINISTRATEUR</Text>
+                <Text style={styles.adminBadgeText}>{t('admin.settings.administrator')}</Text>
               </View>
             </View>
           </View>
 
           {/* Navigation rapide */}
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Navigation</Text>
+            <Text style={styles.sectionTitle}>{t('admin.settings.navigation')}</Text>
           </View>
           {[
-            { label: 'Partenaires locaux', icon: 'storefront-outline', route: '/(admin)/partners', color: COLORS.purple },
-            { label: 'Gestion utilisateurs', icon: 'people-outline', route: '/(admin)/users', color: COLORS.brandPrimary },
-            { label: 'Finances & export', icon: 'bar-chart-outline', route: '/(admin)/finances', color: COLORS.success },
+            { label: t('admin.settings.local_partners'), icon: 'storefront-outline', route: '/(admin)/partners', color: COLORS.purple },
+            { label: t('admin.settings.user_management'), icon: 'people-outline', route: '/(admin)/users', color: COLORS.brandPrimary },
+            { label: t('admin.settings.finances_export'), icon: 'bar-chart-outline', route: '/(admin)/finances', color: COLORS.success },
           ].map(item => (
-            <TouchableOpacity key={item.label} style={styles.menuRow} onPress={() => router.push(item.route as any)}>
+            <TouchableOpacity key={item.label} style={styles.menuRow} onPress={() => router.push(item.route as never)}>
               <View style={[styles.menuIcon, { backgroundColor: item.color + '20' }]}>
-                <Ionicons name={item.icon as any} size={20} color={item.color} />
+                <Ionicons name={item.icon as keyof typeof Ionicons.glyphMap} size={20} color={item.color} />
               </View>
               <Text style={styles.menuLabel}>{item.label}</Text>
               <Ionicons name="chevron-forward" size={18} color={COLORS.textTertiary} />
@@ -92,12 +88,12 @@ export default function AdminSettings() {
 
           {/* Audit log */}
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Journal d'audit ({audit.length})</Text>
+            <Text style={styles.sectionTitle}>{t('admin.settings.audit_log')} ({audit.length})</Text>
           </View>
           {loading ? (
             <ActivityIndicator color={COLORS.purple} style={{ marginTop: SPACING.lg }} />
           ) : audit.length === 0 ? (
-            <Text style={styles.emptyText}>Aucune action enregistrée</Text>
+            <Text style={styles.emptyText}>{t('admin.settings.no_action_recorded')}</Text>
           ) : (
             audit.map(a => (
               <View key={a.id} style={styles.auditRow}>
@@ -117,7 +113,7 @@ export default function AdminSettings() {
           <View style={[styles.sectionHeader, { marginTop: SPACING.xl }]}>
             <TouchableOpacity style={styles.logoutBtn} onPress={confirmLogout}>
               <Ionicons name="log-out-outline" size={20} color={COLORS.urgency} />
-              <Text style={styles.logoutText}>Se déconnecter</Text>
+              <Text style={styles.logoutText}>{t('admin.settings.logout')}</Text>
             </TouchableOpacity>
           </View>
 

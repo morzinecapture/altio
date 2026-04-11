@@ -14,30 +14,58 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import * as ImagePicker from 'expo-image-picker';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '../../src/theme';
-import { supabase } from '../../src/lib/supabase';
-import { createPartner, updatePartner, uploadPartnerFile } from '../../src/api';
-
-const CATEGORIES = [
-  { id: 'restaurant', label: 'Restaurant', icon: 'restaurant-outline' },
-  { id: 'activite',   label: 'Activité',   icon: 'bicycle-outline'   },
-  { id: 'spa',        label: 'Spa',        icon: 'sparkles-outline'  },
-  { id: 'transport',  label: 'Transport',  icon: 'car-outline'       },
-  { id: 'shopping',   label: 'Shopping',   icon: 'bag-outline'       },
-  { id: 'location',   label: 'Location',   icon: 'key-outline'       },
-  { id: 'autre',      label: 'Autre',      icon: 'ellipsis-horizontal-outline' },
-];
+import { createPartner, updatePartner, uploadPartnerFile, getPartner } from '../../src/api';
 
 const ZONES = ['Morzine', 'Chamonix', 'Megève', 'Courchevel', "Val d'Isère", 'Les Gets', 'Autre'];
 
 export default function PartnerForm() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id?: string }>();
   const isEdit = !!id;
 
-  const [loading, setLoading] = useState(isEdit);
-  const [saving, setSaving] = useState(false);
+  const CATEGORIES = [
+    { id: 'restaurant', label: t('admin.partner_form.category_restaurant'), icon: 'restaurant-outline' },
+    { id: 'activite',   label: t('admin.partner_form.category_activite'),   icon: 'bicycle-outline'   },
+    { id: 'spa',        label: t('admin.partner_form.category_spa'),        icon: 'sparkles-outline'  },
+    { id: 'transport',  label: t('admin.partner_form.category_transport'),  icon: 'car-outline'       },
+    { id: 'shopping',   label: t('admin.partner_form.category_shopping'),   icon: 'bag-outline'       },
+    { id: 'location',   label: t('admin.partner_form.category_location'),   icon: 'key-outline'       },
+    { id: 'autre',      label: t('admin.partner_form.category_autre'),      icon: 'ellipsis-horizontal-outline' },
+  ];
+
+  const { data: partnerData, isLoading: loading } = useQuery({
+    queryKey: ['partner', id],
+    queryFn: () => getPartner(id!),
+    enabled: isEdit,
+  });
+
+  type PartnerPayload = {
+    name: string;
+    category: string;
+    zone: string;
+    description?: string;
+    phone?: string;
+    website?: string;
+    address?: string;
+    is_active?: boolean;
+    logo_url?: string;
+    brochure_url?: string;
+  };
+
+  const saveMut = useMutation({
+    mutationFn: async (payload: { partnerId: string; data: PartnerPayload; isEdit: boolean }) => {
+      if (payload.isEdit) {
+        await updatePartner(payload.partnerId, payload.data);
+      } else {
+        await createPartner(payload.data);
+      }
+    },
+  });
 
   const [name, setName]             = useState('');
   const [category, setCategory]     = useState('autre');
@@ -52,23 +80,18 @@ export default function PartnerForm() {
   const [brochureUrl, setBrochureUrl]           = useState<string>('');
 
   useEffect(() => {
-    if (!isEdit) return;
-    supabase.from('local_partners').select('*').eq('id', id).single()
-      .then(({ data }) => {
-        if (!data) return;
-        setName(data.name || '');
-        setCategory(data.category || 'autre');
-        setZone(data.zone || ZONES[0]);
-        setDesc(data.description || '');
-        setPhone(data.phone || '');
-        setWebsite(data.website || '');
-        setAddress(data.address || '');
-        setIsActive(data.is_active ?? true);
-        setExistingLogoUrl(data.logo_url || null);
-        setBrochureUrl(data.brochure_url || '');
-      })
-      .finally(() => setLoading(false));
-  }, [id]);
+    if (!partnerData) return;
+    setName(partnerData.name || '');
+    setCategory(partnerData.category || 'autre');
+    setZone(partnerData.zone || ZONES[0]);
+    setDesc(partnerData.description || '');
+    setPhone(partnerData.phone || '');
+    setWebsite(partnerData.website || '');
+    setAddress(partnerData.address || '');
+    setIsActive(partnerData.is_active ?? true);
+    setExistingLogoUrl(partnerData.logo_url || null);
+    setBrochureUrl(partnerData.brochure_url || '');
+  }, [partnerData]);
 
   const pickLogo = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -81,11 +104,10 @@ export default function PartnerForm() {
   };
 
 const handleSave = async () => {
-    if (!name.trim()) { Alert.alert('Erreur', 'Le nom est requis.'); return; }
+    if (!name.trim()) { Alert.alert(t('common.error'), t('admin.partner_form.error_name_required')); return; }
 
-    setSaving(true);
     try {
-      const partnerId = isEdit ? id! : crypto.randomUUID();
+      const partnerId = isEdit ? id! : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16); });
 
       let logo_url = existingLogoUrl;
       if (logoUri) {
@@ -107,17 +129,11 @@ const handleSave = async () => {
         brochure_url: brochure_url || undefined,
       };
 
-      if (isEdit) {
-        await updatePartner(id!, payload);
-      } else {
-        await createPartner(payload);
-      }
+      await saveMut.mutateAsync({ partnerId, data: payload, isEdit });
 
       router.back();
-    } catch (e: any) {
-      Alert.alert('Erreur', e.message || 'Impossible de sauvegarder.');
-    } finally {
-      setSaving(false);
+    } catch (e: unknown) {
+      Alert.alert(t('common.error'), e instanceof Error ? e.message : t('admin.partner_form.error_save'));
     }
   };
 
@@ -136,9 +152,9 @@ const handleSave = async () => {
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
           <Ionicons name="arrow-back" size={22} color="#1E3A5F" />
         </TouchableOpacity>
-        <Text style={styles.title}>{isEdit ? 'Modifier' : 'Nouveau partenaire'}</Text>
-        <TouchableOpacity style={[styles.saveBtn, saving && { opacity: 0.6 }]} onPress={handleSave} disabled={saving}>
-          {saving ? <ActivityIndicator size="small" color="#FFF" /> : <Text style={styles.saveBtnText}>Enregistrer</Text>}
+        <Text style={styles.title}>{isEdit ? t('admin.partner_form.title_edit') : t('admin.partner_form.title_new')}</Text>
+        <TouchableOpacity style={[styles.saveBtn, saveMut.isPending && { opacity: 0.6 }]} onPress={handleSave} disabled={saveMut.isPending}>
+          {saveMut.isPending ? <ActivityIndicator size="small" color="#FFF" /> : <Text style={styles.saveBtnText}>{t('admin.partner_form.save')}</Text>}
         </TouchableOpacity>
       </View>
 
@@ -146,14 +162,14 @@ const handleSave = async () => {
 
         {/* Logo */}
         <View style={styles.section}>
-          <Text style={styles.label}>Logo</Text>
+          <Text style={styles.label}>{t('admin.partner_form.logo')}</Text>
           <TouchableOpacity style={styles.logoPicker} onPress={pickLogo}>
             {(logoUri || existingLogoUrl) ? (
               <Image source={{ uri: logoUri || existingLogoUrl! }} style={styles.logoPreview} resizeMode="contain" />
             ) : (
               <>
                 <Ionicons name="image-outline" size={28} color="#94A3B8" />
-                <Text style={styles.logoPickerText}>Choisir une image</Text>
+                <Text style={styles.logoPickerText}>{t('admin.partner_form.choose_image')}</Text>
               </>
             )}
           </TouchableOpacity>
@@ -161,19 +177,19 @@ const handleSave = async () => {
 
         {/* Nom */}
         <View style={styles.section}>
-          <Text style={styles.label}>Nom *</Text>
+          <Text style={styles.label}>{t('admin.partner_form.name_label')}</Text>
           <TextInput
             style={styles.input}
             value={name}
             onChangeText={setName}
-            placeholder="Nom du partenaire"
+            placeholder={t('admin.partner_form.name_placeholder')}
             placeholderTextColor="#94A3B8"
           />
         </View>
 
         {/* Catégorie */}
         <View style={styles.section}>
-          <Text style={styles.label}>Catégorie *</Text>
+          <Text style={styles.label}>{t('admin.partner_form.category_label')}</Text>
           <View style={styles.grid}>
             {CATEGORIES.map(c => (
               <TouchableOpacity
@@ -181,7 +197,7 @@ const handleSave = async () => {
                 style={[styles.gridItem, category === c.id && styles.gridItemActive]}
                 onPress={() => setCategory(c.id)}
               >
-                <Ionicons name={c.icon as any} size={18} color={category === c.id ? '#FFF' : '#64748B'} />
+                <Ionicons name={c.icon as keyof typeof Ionicons.glyphMap} size={18} color={category === c.id ? '#FFF' : '#64748B'} />
                 <Text style={[styles.gridItemText, category === c.id && styles.gridItemTextActive]}>{c.label}</Text>
               </TouchableOpacity>
             ))}
@@ -190,7 +206,7 @@ const handleSave = async () => {
 
         {/* Zone */}
         <View style={styles.section}>
-          <Text style={styles.label}>Zone *</Text>
+          <Text style={styles.label}>{t('admin.partner_form.zone_label')}</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: SPACING.sm }}>
             {ZONES.map(z => (
               <TouchableOpacity
@@ -206,12 +222,12 @@ const handleSave = async () => {
 
         {/* Description */}
         <View style={styles.section}>
-          <Text style={styles.label}>Description</Text>
+          <Text style={styles.label}>{t('admin.partner_form.description_label')}</Text>
           <TextInput
             style={[styles.input, styles.textarea]}
             value={description}
             onChangeText={setDesc}
-            placeholder="Décrivez le partenaire…"
+            placeholder={t('admin.partner_form.description_placeholder')}
             placeholderTextColor="#94A3B8"
             multiline
             numberOfLines={3}
@@ -221,7 +237,7 @@ const handleSave = async () => {
 
         {/* Téléphone */}
         <View style={styles.section}>
-          <Text style={styles.label}>Téléphone</Text>
+          <Text style={styles.label}>{t('admin.partner_form.phone_label')}</Text>
           <TextInput
             style={styles.input}
             value={phone}
@@ -234,7 +250,7 @@ const handleSave = async () => {
 
         {/* Site web */}
         <View style={styles.section}>
-          <Text style={styles.label}>Site web</Text>
+          <Text style={styles.label}>{t('admin.partner_form.website_label')}</Text>
           <TextInput
             style={styles.input}
             value={website}
@@ -248,19 +264,19 @@ const handleSave = async () => {
 
         {/* Adresse */}
         <View style={styles.section}>
-          <Text style={styles.label}>Adresse</Text>
+          <Text style={styles.label}>{t('admin.partner_form.address_label')}</Text>
           <TextInput
             style={styles.input}
             value={address}
             onChangeText={setAddress}
-            placeholder="123 rue des Alpes, Morzine"
+            placeholder={t('admin.partner_form.address_placeholder')}
             placeholderTextColor="#94A3B8"
           />
         </View>
 
         {/* Brochure PDF URL */}
         <View style={styles.section}>
-          <Text style={styles.label}>URL Brochure (PDF)</Text>
+          <Text style={styles.label}>{t('admin.partner_form.brochure_label')}</Text>
           <TextInput
             style={styles.input}
             value={brochureUrl}
@@ -270,14 +286,14 @@ const handleSave = async () => {
             keyboardType="url"
             autoCapitalize="none"
           />
-          <Text style={styles.inputHint}>Uploadez le PDF sur Supabase Storage et collez l'URL publique.</Text>
+          <Text style={styles.inputHint}>{t('admin.partner_form.brochure_hint')}</Text>
         </View>
 
         {/* Actif */}
         <View style={styles.switchRow}>
           <View>
-            <Text style={styles.switchLabel}>Visible dans le catalogue</Text>
-            <Text style={styles.switchSub}>Les propriétaires pourront voir ce partenaire</Text>
+            <Text style={styles.switchLabel}>{t('admin.partner_form.visible_label')}</Text>
+            <Text style={styles.switchSub}>{t('admin.partner_form.visible_desc')}</Text>
           </View>
           <Switch
             value={isActive}

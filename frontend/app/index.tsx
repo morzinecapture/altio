@@ -5,13 +5,16 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import { supabase } from '../src/lib/supabase';
 import { COLORS, FONTS, SPACING, RADIUS, SHADOWS } from '../src/theme';
 import { useAuth } from '../src/auth';
+import { useTranslation } from 'react-i18next';
 
 export default function LoginScreen() {
   const router = useRouter();
   const { user, loading } = useAuth();
+  const { t } = useTranslation();
   const [processing, setProcessing] = useState(false);
 
   // Resets the processing state when the component mounts or the app regains focus
@@ -28,9 +31,7 @@ export default function LoginScreen() {
 
   // Redirect authenticated users
   useEffect(() => {
-    console.log(`[Index] Checking redirect - loading: ${loading}, user: ${!!user}, processing: ${processing}, role: ${user?.role}`);
     if (!loading && user && !processing) {
-      console.log('[Index] Conditions met! Proceeding to redirect...');
       setTimeout(() => {
         if (!user.role) {
           router.replace('/welcome');
@@ -61,9 +62,7 @@ export default function LoginScreen() {
         return;
       }
 
-      // We want to avoid routing directly to a non-existent 'auth/callback' screen logic
-      const redirectUrl = Linking.createURL('');
-      console.log('Redirect URL:', redirectUrl);
+      const redirectUrl = Linking.createURL('auth/callback');
 
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
@@ -80,11 +79,7 @@ export default function LoginScreen() {
         // We must use 'exp://...' as the base origin if using Expo Go Native since that's what Supabase accepts
         const browserRes = await WebBrowser.openAuthSessionAsync(data.url, redirectUrl);
 
-        console.log('WebBrowser result:', browserRes.type);
-
         if (browserRes.type === 'success' && browserRes.url) {
-          console.log('Returned URL for parsing:', browserRes.url);
-
           let access_token = null;
           let refresh_token = null;
 
@@ -105,25 +100,42 @@ export default function LoginScreen() {
             refresh_token = hashMap.get('refresh_token');
           }
 
-          console.log('[Index] Tokens extracted:', { hasAccessToken: !!access_token, hasRefreshToken: !!refresh_token });
-
           if (access_token && refresh_token) {
-            console.log('[Index] Calling setSession...');
             const { error: sessionErr } = await supabase.auth.setSession({ access_token, refresh_token });
-            if (sessionErr) console.error('[Index] Failed to set session:', sessionErr);
-            console.log('[Index] setSession completed.');
-
-            // Force processing to false early so router unblocks
+            if (sessionErr) throw sessionErr;
             setProcessing(false);
-          } else {
-            console.error('[Index] Could not find tokens in redirect URL');
           }
         }
       }
-    } catch (err: any) {
-      console.error('[Index] Google login error:', err);
+    } catch (err: unknown) {
+      Alert.alert('Erreur', err instanceof Error ? err.message : 'Connexion Google échouée');
     } finally {
-      console.log('[Index] Releasing processing state...');
+      setProcessing(false);
+    }
+  };
+
+  const handleAppleLogin = async () => {
+    setProcessing(true);
+    try {
+      const credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+      });
+
+      if (!credential.identityToken) throw new Error('No identity token returned');
+
+      const { error } = await supabase.auth.signInWithIdToken({
+        provider: 'apple',
+        token: credential.identityToken,
+      });
+      if (error) throw error;
+    } catch (err: unknown) {
+      if ((err as Record<string, unknown>)?.code !== 'ERR_REQUEST_CANCELED') {
+        Alert.alert('Erreur', err instanceof Error ? err.message : 'Connexion Apple échouée');
+      }
+    } finally {
       setProcessing(false);
     }
   };
@@ -133,7 +145,7 @@ export default function LoginScreen() {
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={COLORS.brandPrimary} />
         <Text style={styles.loadingText}>
-          {processing ? 'Connexion en cours...' : 'Chargement...'}
+          {processing ? t('common.connecting') : t('common.loading')}
         </Text>
       </View>
     );
@@ -147,16 +159,16 @@ export default function LoginScreen() {
           <View style={styles.logoCircle}>
             <Ionicons name="snow" size={40} color={COLORS.textInverse} />
           </View>
-          <Text style={styles.appName}>MontRTO</Text>
-          <Text style={styles.tagline}>Gestion opérationnelle{'\n'}de vos locations en montagne</Text>
+          <Text style={styles.appName}>{t('auth.app_name')}</Text>
+          <Text style={styles.tagline}>{t('auth.tagline')}</Text>
         </View>
 
         {/* Features — Trust & Authority signals */}
         <View style={styles.features}>
           {[
-            { icon: 'calendar-outline' as const, text: 'Sync automatique Airbnb/Booking', badge: null },
-            { icon: 'shield-checkmark-outline' as const, text: 'Prestataires vérifiés et assurés', badge: 'Certifié' },
-            { icon: 'warning-outline' as const, text: 'Urgences traitées en moins de 2h', badge: null },
+            { icon: 'calendar-outline' as const, text: t('auth.feature_sync'), badge: null },
+            { icon: 'shield-checkmark-outline' as const, text: t('auth.feature_verified'), badge: t('common.certified') },
+            { icon: 'warning-outline' as const, text: t('auth.feature_emergency'), badge: null },
           ].map((f, i) => (
             <View key={i} style={styles.featureRow}>
               <View style={styles.featureIcon}>
@@ -172,7 +184,7 @@ export default function LoginScreen() {
           ))}
         </View>
 
-        {/* Login Button */}
+        {/* Login Buttons */}
         <TouchableOpacity
           testID="google-login-btn"
           style={styles.googleButton}
@@ -180,11 +192,40 @@ export default function LoginScreen() {
           activeOpacity={0.8}
         >
           <Ionicons name="logo-google" size={22} color={COLORS.textInverse} />
-          <Text style={styles.googleButtonText}>Continuer avec Google</Text>
+          <Text style={styles.googleButtonText}>{t('auth.continue_google')}</Text>
+        </TouchableOpacity>
+
+        {Platform.OS === 'ios' && (
+          <TouchableOpacity
+            testID="apple-login-btn"
+            style={styles.appleButton}
+            onPress={handleAppleLogin}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="logo-apple" size={22} color={COLORS.textInverse} />
+            <Text style={styles.appleButtonText}>{t('auth.continue_apple', { defaultValue: 'Continuer avec Apple' })}</Text>
+          </TouchableOpacity>
+        )}
+
+        <TouchableOpacity
+          testID="email-login-btn"
+          style={styles.emailButton}
+          onPress={() => router.push('/auth/login')}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="mail-outline" size={22} color={COLORS.brandPrimary} />
+          <Text style={styles.emailButtonText}>{t('auth.continue_email')}</Text>
         </TouchableOpacity>
 
         <Text style={styles.disclaimer}>
-          En continuant, vous acceptez nos conditions d&apos;utilisation
+          {t('auth.cgu_notice', { defaultValue: 'En continuant, vous acceptez les ' })}
+          <Text
+            style={{ color: COLORS.brandPrimary, textDecorationLine: 'underline' }}
+            onPress={() => router.push('/legal')}
+          >
+            {t('auth.cgu_link', { defaultValue: 'CGU, CGV et la Politique de confidentialité' })}
+          </Text>
+          {t('auth.cgu_notice_end', { defaultValue: ' d\'Altio.' })}
         </Text>
       </View>
 
@@ -294,6 +335,38 @@ const styles = StyleSheet.create({
   googleButtonText: {
     ...FONTS.h3,
     color: COLORS.textInverse,
+  },
+  appleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#000',
+    paddingVertical: SPACING.lg,
+    borderRadius: RADIUS.lg,
+    gap: SPACING.md,
+    marginTop: SPACING.md,
+    ...SHADOWS.float,
+  },
+  appleButtonText: {
+    ...FONTS.h3,
+    color: '#FFF',
+  },
+  emailButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.paper,
+    paddingVertical: SPACING.lg,
+    borderRadius: RADIUS.lg,
+    gap: SPACING.md,
+    marginTop: SPACING.md,
+    borderWidth: 1.5,
+    borderColor: COLORS.brandPrimary,
+    ...SHADOWS.card,
+  },
+  emailButtonText: {
+    ...FONTS.h3,
+    color: COLORS.brandPrimary,
   },
   disclaimer: {
     ...FONTS.bodySmall,
