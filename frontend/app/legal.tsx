@@ -11,6 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONTS, SPACING, RADIUS } from '../src/theme';
+import { LEGAL_CONFIG } from '../src/config/legal';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -89,7 +90,7 @@ export default function LegalScreen() {
       >
         {activeTab === 'cgu' && <CGU />}
         {activeTab === 'cgv' && <CGV />}
-        {activeTab === 'privacy' && <Privacy />}
+        {activeTab === 'privacy' && <Privacy openLink={openLink} />}
         {activeTab === 'mentions' && <MentionsLegales openLink={openLink} />}
         {activeTab === 'mediation' && <Mediation openLink={openLink} />}
       </ScrollView>
@@ -617,10 +618,18 @@ function CGV() {
 // Politique de confidentialite / RGPD
 // ---------------------------------------------------------------------------
 
-function Privacy() {
+function Privacy({ openLink }: { openLink: (url: string) => void }) {
   return (
     <>
       <LastUpdate />
+
+      <TouchableOpacity
+        onPress={() => openLink(LEGAL_CONFIG.PRIVACY_POLICY_URL)}
+        accessibilityRole="link"
+        accessibilityLabel="Voir la politique de confidentialité en ligne"
+      >
+        <Text style={styles.link}>Voir en ligne : {LEGAL_CONFIG.PRIVACY_POLICY_URL}</Text>
+      </TouchableOpacity>
 
       <Section title="Article 1 — Responsable du traitement">
         <P>
@@ -828,6 +837,27 @@ function MentionsLegales({ openLink }: { openLink: (url: string) => void }) {
           Directeur de la publication : Maxime, President{'\n'}
           Email : contact@altio.app
         </P>
+      </Section>
+
+      <Section title="Support">
+        <P>
+          Pour toute question, demande d'aide ou signalement concernant l'application,
+          notre equipe support est a votre disposition.
+        </P>
+        <TouchableOpacity
+          onPress={() => openLink(LEGAL_CONFIG.SUPPORT_URL)}
+          accessibilityRole="link"
+          accessibilityLabel="Ouvrir le site de support Altio"
+        >
+          <Text style={styles.link}>{LEGAL_CONFIG.SUPPORT_URL}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => openLink(`mailto:${LEGAL_CONFIG.SUPPORT_EMAIL}`)}
+          accessibilityRole="link"
+          accessibilityLabel="Envoyer un email au support Altio"
+        >
+          <Text style={styles.link}>{LEGAL_CONFIG.SUPPORT_EMAIL}</Text>
+        </TouchableOpacity>
       </Section>
 
       <Section title="Hebergement">
@@ -1095,6 +1125,12 @@ const styles = StyleSheet.create({
   bold: {
     fontFamily: 'PlusJakartaSans_700Bold',
     color: COLORS.textPrimary,
+  },
+  link: {
+    ...FONTS.body,
+    color: COLORS.brandPrimary,
+    marginTop: SPACING.sm,
+    textDecorationLine: 'underline',
   },
   linkButton: {
     flexDirection: 'row',

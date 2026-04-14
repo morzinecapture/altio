@@ -11,14 +11,21 @@ export const LEGAL_CONFIG = {
   // — Identité Altio —
   COMPANY_NAME: 'Altio SAS',
   COMPANY_FORM: 'SAS (Société par Actions Simplifiée)',
-  COMPANY_SIREN: 'XXX_SIREN_XXX', // TODO: renseigner après immatriculation
-  COMPANY_SIRET: 'XXX_SIRET_XXX', // TODO: renseigner après immatriculation
-  COMPANY_RCS: 'XXX_RCS_XXX', // TODO: confirmer ville du greffe
-  COMPANY_TVA: 'XXX_TVA_INTRACOM_XXX', // TODO: renseigner après immatriculation
-  COMPANY_CAPITAL: 'XXX_CAPITAL_XXX', // TODO: confirmer capital social
+  COMPANY_SIREN: '', // À renseigner après immatriculation
+  COMPANY_SIRET: '', // À renseigner après immatriculation
+  COMPANY_RCS: '', // À renseigner après immatriculation (ville du greffe incluse)
+  COMPANY_TVA: '', // À renseigner après immatriculation
+  COMPANY_CAPITAL: '', // À renseigner après immatriculation
   COMPANY_ADDRESS: 'Morzine, 74110 Haute-Savoie, France',
   COMPANY_EMAIL: 'contact@altio.app',
   COMPANY_PHONE: '', // TODO: renseigner
+
+  // — Support utilisateur —
+  SUPPORT_URL: 'https://altio.app/support',
+  SUPPORT_EMAIL: 'support@altio.app',
+
+  // — Pages légales publiques (GitHub Pages — exigence App Store / Play Store) —
+  PRIVACY_POLICY_URL: 'https://morzinecapture.github.io/altio-legal/',
 
   // — DPO / RGPD —
   DPO_EMAIL: 'dpo@altio.app',
@@ -56,8 +63,5 @@ export const LEGAL_CONFIG = {
  * Vérifie que les identifiants société sont configurés (pas les placeholders)
  */
 export function isCompanyRegistered(): boolean {
-  return (
-    LEGAL_CONFIG.COMPANY_SIREN !== 'XXX_SIREN_XXX' &&
-    LEGAL_CONFIG.COMPANY_TVA !== 'XXX_TVA_INTRACOM_XXX'
-  );
+  return LEGAL_CONFIG.COMPANY_SIREN !== '' && LEGAL_CONFIG.COMPANY_TVA !== '';
 }
