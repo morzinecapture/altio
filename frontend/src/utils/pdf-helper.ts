@@ -23,15 +23,25 @@ export const viewOrShareDocument = async (params: {
     try {
       const Print = require('expo-print');
       const Sharing = require('expo-sharing');
+      const FileSystem = require('expo-file-system');
 
       const response = await fetch(url);
       if (!response.ok) throw new Error('Impossible de charger le document.');
       const html = await response.text();
 
-      const { uri: pdfUri } = await Print.printToFileAsync({ html, base64: false });
+      const { uri: tempUri } = await Print.printToFileAsync({ html, base64: false });
+
+      // iOS "Enregistrer dans Fichiers" n'apparaît que si le PDF vit dans
+      // documentDirectory avec une extension + nom lisible. Le fichier
+      // retourné par printToFileAsync est dans le cache avec un nom
+      // aléatoire, d'où l'absence de l'option dans la Share Sheet.
+      const safeName = title.replace(/[^a-zA-Z0-9-_]+/g, '-').slice(0, 60) || 'document';
+      const finalUri = `${FileSystem.documentDirectory}${safeName}.pdf`;
+      try { await FileSystem.deleteAsync(finalUri, { idempotent: true }); } catch {}
+      await FileSystem.copyAsync({ from: tempUri, to: finalUri });
 
       if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(pdfUri, {
+        await Sharing.shareAsync(finalUri, {
           mimeType: 'application/pdf',
           dialogTitle: title,
           UTI: 'com.adobe.pdf',
