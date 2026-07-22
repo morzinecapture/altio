@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Audit Altio — Mars 2026</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: #f0f4f8; color: #1a1d2e; line-height: 1.6; }
+
+  .header { background: linear-gradient(135deg, #1B3A4B 0%, #48A9A6 100%); color: white; padding: 40px 32px; }
+  .header h1 { font-size: 28px; font-weight: 700; margin-bottom: 8px; }
+  .header p { opacity: 0.85; font-size: 15px; }
+  .header .date { opacity: 0.7; font-size: 13px; margin-top: 4px; }
+
+  .container { max-width: 960px; margin: 0 auto; padding: 24px 16px 60px; }
+
+  /* Score cards */
+  .scores { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin: -40px 0 32px; position: relative; z-index: 10; }
+  .score-card { background: white; border-radius: 16px; padding: 20px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); text-align: center; }
+  .score-card .grade { font-size: 42px; font-weight: 800; }
+  .score-card .label { font-size: 13px; color: #64748b; margin-top: 4px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+  .score-card .detail { font-size: 12px; color: #94a3b8; margin-top: 8px; }
+  .grade-a { color: #10b981; }
+  .grade-b { color: #48A9A6; }
+  .grade-c { color: #f59e0b; }
+  .grade-d { color: #ef4444; }
+
+  /* Sections */
+  .section { background: white; border-radius: 16px; padding: 28px; margin-bottom: 20px; box-shadow: 0 1px 6px rgba(0,0,0,0.06); }
+  .section h2 { font-size: 20px; font-weight: 700; margin-bottom: 16px; display: flex; align-items: center; gap: 10px; }
+  .section h3 { font-size: 16px; font-weight: 600; margin: 20px 0 10px; color: #334155; }
+
+  /* Severity badges */
+  .badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+  .badge-critical { background: #fef2f2; color: #dc2626; }
+  .badge-high { background: #fff7ed; color: #ea580c; }
+  .badge-medium { background: #fffbeb; color: #d97706; }
+  .badge-low { background: #f0fdf4; color: #16a34a; }
+  .badge-ok { background: #f0f9ff; color: #0284c7; }
+
+  /* Issue cards */
+  .issue { border-left: 4px solid #e2e8f0; padding: 12px 16px; margin: 10px 0; border-radius: 0 8px 8px 0; background: #f8fafc; }
+  .issue-critical { border-left-color: #dc2626; background: #fef2f2; }
+  .issue-high { border-left-color: #ea580c; background: #fff7ed; }
+  .issue-medium { border-left-color: #d97706; background: #fffbeb; }
+  .issue-low { border-left-color: #16a34a; background: #f0fdf4; }
+  .issue .title { font-weight: 600; font-size: 14px; margin-bottom: 4px; }
+  .issue .file { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; color: #64748b; }
+  .issue .desc { font-size: 13px; color: #475569; margin-top: 6px; }
+
+  /* Stats */
+  .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin: 16px 0; }
+  .stat { background: #f8fafc; border-radius: 10px; padding: 14px; border: 1px solid #e2e8f0; }
+  .stat .num { font-size: 24px; font-weight: 700; color: #1B3A4B; }
+  .stat .lbl { font-size: 12px; color: #64748b; margin-top: 2px; }
+
+  /* Progress bars */
+  .progress-row { display: flex; align-items: center; gap: 12px; margin: 8px 0; }
+  .progress-label { font-size: 13px; min-width: 140px; color: #475569; }
+  .progress-bar { flex: 1; height: 8px; background: #e2e8f0; border-radius: 4px; overflow: hidden; }
+  .progress-fill { height: 100%; border-radius: 4px; transition: width 0.3s; }
+  .progress-val { font-size: 12px; color: #64748b; min-width: 40px; text-align: right; }
+
+  /* Sprint timeline */
+  .sprint-timeline { display: flex; flex-direction: column; gap: 8px; margin: 16px 0; }
+  .sprint { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-radius: 10px; background: #f8fafc; border: 1px solid #e2e8f0; }
+  .sprint.active { background: #f0f9ff; border-color: #48A9A6; }
+  .sprint.done { background: #f0fdf4; border-color: #10b981; }
+  .sprint .dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .sprint .dot.green { background: #10b981; }
+  .sprint .dot.blue { background: #48A9A6; }
+  .sprint .dot.gray { background: #cbd5e1; }
+  .sprint .name { font-weight: 600; font-size: 14px; flex: 1; }
+  .sprint .status { font-size: 12px; color: #64748b; }
+
+  /* Table */
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13px; }
+  th { background: #f1f5f9; text-align: left; padding: 10px 12px; font-weight: 600; color: #475569; border-bottom: 2px solid #e2e8f0; }
+  td { padding: 10px 12px; border-bottom: 1px solid #f1f5f9; }
+  tr:hover td { background: #f8fafc; }
+
+  /* Collapsible */
+  details { margin: 8px 0; }
+  summary { cursor: pointer; font-weight: 600; font-size: 14px; padding: 8px 0; color: #334155; }
+  summary:hover { color: #48A9A6; }
+
+  .emoji { font-size: 20px; }
+  .check { color: #10b981; }
+  .warn { color: #f59e0b; }
+  .cross { color: #ef4444; }
+
+  .action-list { list-style: none; padding: 0; }
+  .action-list li { padding: 8px 12px; margin: 6px 0; background: #f8fafc; border-radius: 8px; font-size: 13px; border: 1px solid #e2e8f0; display: flex; align-items: flex-start; gap: 8px; }
+  .action-list .priority { font-weight: 700; font-size: 11px; min-width: 18px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Audit Complet — Altio</h1>
+  <p>Marketplace de services pour la gestion locative saisonnière</p>
+  <div class="date">29 mars 2026 — Sprint 1 (Stabilisation) en cours</div>
+</div>
+
+<div class="container">
+
+<!-- SCORE CARDS -->
+<div class="scores">
+  <div class="score-card">
+    <div class="grade grade-b">B+</div>
+    <div class="label">Structure</div>
+    <div class="detail">Conventions solides, quelques gros fichiers</div>
+  </div>
+  <div class="score-card">
+    <div class="grade grade-d">D</div>
+    <div class="label">Sécurité</div>
+    <div class="detail">6 vulnérabilités critiques à corriger</div>
+  </div>
+  <div class="score-card">
+    <div class="grade grade-c">C+</div>
+    <div class="label">Logique métier</div>
+    <div class="detail">Solide mais bugs de mapping status</div>
+  </div>
+  <div class="score-card">
+    <div class="grade grade-b">B</div>
+    <div class="label">Infrastructure</div>
+    <div class="detail">18 Edge Functions, 60 migrations OK</div>
+  </div>
+</div>
+
+<!-- VUE D'ENSEMBLE -->
+<div class="section">
+  <h2><span class="emoji">📊</span> Vue d'ensemble du projet</h2>
+  <div class="stat-grid">
+    <div class="stat"><div class="num">~29 600</div><div class="lbl">Lignes de code total</div></div>
+    <div class="stat"><div class="num">73</div><div class="lbl">Fichiers source (.ts/.tsx)</div></div>
+    <div class="stat"><div class="num">18</div><div class="lbl">Edge Functions Supabase</div></div>
+    <div class="stat"><div class="num">60</div><div class="lbl">Migrations SQL</div></div>
+    <div class="stat"><div class="num">38</div><div class="lbl">Écrans (app/)</div></div>
+    <div class="stat"><div class="num">8</div><div class="lbl">Hooks React Query</div></div>
+    <div class="stat"><div class="num">12</div><div class="lbl">Modules API</div></div>
+    <div class="stat"><div class="num">4</div><div class="lbl">Fichiers de test (4.3%)</div></div>
+  </div>
+
+  <h3>Répartition du code</h3>
+  <div class="progress-row">
+    <span class="progress-label">app/ (écrans)</span>
+    <div class="progress-bar"><div class="progress-fill" style="width:70%;background:#48A9A6"></div></div>
+    <span class="progress-val">20 730</span>
+  </div>
+  <div class="progress-row">
+    <span class="progress-label">src/api/</span>
+    <div class="progress-bar"><div class="progress-fill" style="width:12%;background:#1B3A4B"></div></div>
+    <span class="progress-val">3 652</span>
+  </div>
+  <div class="progress-row">
+    <span class="progress-label">src/i18n/</span>
+    <div class="progress-bar"><div class="progress-fill" style="width:8%;background:#f59e0b"></div></div>
+    <span class="progress-val">2 348</span>
+  </div>
+  <div class="progress-row">
+    <span class="progress-label">src/types/</span>
+    <div class="progress-bar"><div class="progress-fill" style="width:3%;background:#8b5cf6"></div></div>
+    <span class="progress-val">758</span>
+  </div>
+  <div class="progress-row">
+    <span class="progress-label">src/hooks/</span>
+    <div class="progress-bar"><div class="progress-fill" style="width:3%;background:#10b981"></div></div>
+    <span class="progress-val">756</span>
+  </div>
+  <div class="progress-row">
+    <span class="progress-label">src/services/</span>
+    <div class="progress-bar"><div class="progress-fill" style="width:2%;background:#ec4899"></div></div>
+    <span class="progress-val">698</span>
+  </div>
+</div>
+
+<!-- AVANCEMENT SPRINTS -->
+<div class="section">
+  <h2><span class="emoji">🏃</span> Avancement Sprints</h2>
+  <div class="sprint-timeline">
+    <div class="sprint active">
+      <div class="dot blue"></div>
+      <div class="name">Sprint 1 — Stabilisation</div>
+      <div class="status"><span class="badge badge-ok">En cours</span> bugs critiques, status mapping, annulations</div>
+    </div>
+    <div class="sprint">
+      <div class="dot gray"></div>
+      <div class="name">Sprint 2 — RGPD</div>
+      <div class="status">Suppression compte + auth email</div>
+    </div>
+    <div class="sprint">
+      <div class="dot gray"></div>
+      <div class="name">Sprint 3 — Calendriers</div>
+      <div class="status">iCal Airbnb/Booking + Google Calendar</div>
+    </div>
+    <div class="sprint">
+      <div class="dot gray"></div>
+      <div class="name">Sprint 4 — Facturation</div>
+      <div class="status"><span class="badge badge-critical">Deadline sept 2026</span> Factur-X obligatoire</div>
+    </div>
+    <div class="sprint">
+      <div class="dot gray"></div>
+      <div class="name">Sprint 5 — i18n FR/EN</div>
+      <div class="status">Extraction chaînes + toggle langue</div>
+    </div>
+    <div class="sprint">
+      <div class="dot gray"></div>
+      <div class="name">Sprint 6 — Pré-production</div>
+      <div class="status">Audit RLS, Sentry, CGU/RGPD, rate limiting</div>
+    </div>
+    <div class="sprint">
+      <div class="dot gray"></div>
+      <div class="name">Sprint 7 — Launch</div>
+      <div class="status">Supabase prod, Stripe live, TestFlight, Play Store</div>
+    </div>
+  </div>
+</div>
+
+<!-- SÉCURITÉ -->
+<div class="section">
+  <h2><span class="emoji">🔒</span> Sécurité — <span class="badge badge-critical">6 critiques</span></h2>
+
+  <div class="issue issue-critical">
+    <div class="title">1. getProviders() expose TOUS les champs utilisateur</div>
+    <div class="file">src/api/profile.ts — ligne 77</div>
+    <div class="desc"><code>user:users!inner(*)</code> renvoie stripe_account_id, google_calendar_token, siren, billing_address… à n'importe quel utilisateur authentifié. <strong>Fix :</strong> sélectionner explicitement id, name, picture, email.</div>
+  </div>
+
+  <div class="issue issue-critical">
+    <div class="title">2. getProperties() et getReservations() sans filtre owner_id</div>
+    <div class="file">src/api/properties.ts — lignes 10-17, 88-95</div>
+    <div class="desc">N'importe quel utilisateur peut lister TOUTES les propriétés et réservations de la plateforme (noms de locataires, codes d'accès, dates). <strong>Fix :</strong> ajouter <code>.eq('owner_id', session.user.id)</code>.</div>
+  </div>
+
+  <div class="issue issue-critical">
+    <div class="title">3. Fonctions admin sans vérification is_admin</div>
+    <div class="file">src/api/admin.ts — lignes 64-100</div>
+    <div class="desc">suspendUser(), rejectProviderDocument(), getAdminStats() ne vérifient pas que l'utilisateur est admin. <strong>Fix :</strong> vérifier <code>session.user.is_admin</code> en début de chaque fonction.</div>
+  </div>
+
+  <div class="issue issue-critical">
+    <div class="title">4. RLS "read all profiles" trop permissive</div>
+    <div class="file">migration 20260321000006 — lignes 17-19</div>
+    <div class="desc">Policy <code>USING (true)</code> sur la table users permet à tout authentifié de lire tous les profils (SIREN, TVA, etc.). <strong>Fix :</strong> restreindre aux champs publics ou au propre profil.</div>
+  </div>
+
+  <div class="issue issue-critical">
+    <div class="title">5. Partner CRUD sans authentification</div>
+    <div class="file">src/api/partners.ts — lignes 19-66</div>
+    <div class="desc">createPartner(), updatePartner(), deletePartner() n'ont aucun check auth. N'importe qui peut manipuler les partenaires. <strong>Fix :</strong> ajouter vérification admin.</div>
+  </div>
+
+  <div class="issue issue-critical">
+    <div class="title">6. Service role key stockée en config DB</div>
+    <div class="file">migration 20260318000003 — lignes 29, 48-50</div>
+    <div class="desc">Le service_role_key est accessible via <code>current_setting('app.service_role_key')</code> depuis n'importe quelle fonction PostgreSQL. Escalade de privilèges possible.</div>
+  </div>
+
+  <details>
+    <summary>+ 7 vulnérabilités High/Medium</summary>
+    <div class="issue issue-high">
+      <div class="title">7. Race condition — acceptEmergencyBid()</div>
+      <div class="file">src/api/emergencies.ts — lignes 339-382</div>
+      <div class="desc">Deux bids peuvent être acceptés simultanément. Fix : ajouter WHERE status = 'pending' sur l'update.</div>
+    </div>
+    <div class="issue issue-high">
+      <div class="title">8. cancelMission() sans contrainte de statut</div>
+      <div class="file">src/api/missions.ts — lignes 660-664</div>
+      <div class="desc">L'update ne filtre pas sur le statut actuel — une mission completed ou paid peut être annulée. Fix : ajouter <code>.in('status', ['pending', 'assigned'])</code>.</div>
+    </div>
+    <div class="issue issue-high">
+      <div class="title">9. checkPaymentStatus() retourne toujours 'paid'</div>
+      <div class="file">src/api/payments.ts — ligne 87</div>
+      <div class="desc">Fonction stub qui ne vérifie jamais Stripe. Risque de faux positifs sur les paiements.</div>
+    </div>
+    <div class="issue issue-high">
+      <div class="title">10. Calcul montant imprécis (floating point)</div>
+      <div class="file">src/api/emergencies.ts — lignes 210-211</div>
+      <div class="desc"><code>baseCost * 1.10 * 100</code> peut produire des centimes incorrects. Fix : <code>Math.round(baseCost * 110)</code>.</div>
+    </div>
+    <div class="issue issue-medium">
+      <div class="title">11. Notifications push échouent silencieusement en prod</div>
+      <div class="file">src/api/notifications.ts — lignes 32-44</div>
+      <div class="desc">Erreurs RPC + Edge Function catchées sans logging Sentry. Aucun feedback utilisateur.</div>
+    </div>
+    <div class="issue issue-medium">
+      <div class="title">12. String interpolation dans filtre admin</div>
+      <div class="file">src/api/admin.ts — ligne 27</div>
+      <div class="desc"><code>or(`name.ilike.%${search}%`)</code> — injection PostgREST théoriquement possible.</div>
+    </div>
+    <div class="issue issue-medium">
+      <div class="title">13. Email confirmation désactivée</div>
+      <div class="file">supabase/config.toml</div>
+      <div class="desc">Les utilisateurs peuvent s'inscrire avec n'importe quelle email sans vérification.</div>
+    </div>
+  </details>
+</div>
+
+<!-- LOGIQUE MÉTIER -->
+<div class="section">
+  <h2><span class="emoji">⚙️</span> Logique métier</h2>
+
+  <h3>Bugs de mapping de statut (partiellement corrigés)</h3>
+  <div class="issue issue-high">
+    <div class="title">Status fallthrough dans getMissions() et getOwnerDashboard()</div>
+    <div class="file">src/api/missions.ts — lignes 39-47, 607-617</div>
+    <div class="desc">Le mapping urgences avait un <code>else mappedStatus = 'in_progress'</code> qui attrapait cancelled, refunded, et tous les statuts inconnus. <strong>Partiellement corrigé</strong> dans getMissions() mais le mapping de getOwnerDashboard() est encore incomplet (manque quote_paid, quote_refused, on_site, displacement_paid).</div>
+  </div>
+
+  <h3>Points forts</h3>
+  <table>
+    <tr><th>Composant</th><th>Statut</th><th>Note</th></tr>
+    <tr><td>State machine missions</td><td><span class="check">✓</span></td><td>MISSION_TRANSITIONS bien défini, assertMissionTransition() utilisé</td></tr>
+    <tr><td>State machine urgences</td><td><span class="check">✓</span></td><td>EMERGENCY_TRANSITIONS avec cancelled ajouté récemment</td></tr>
+    <tr><td>Workflow urgence complet</td><td><span class="check">✓</span></td><td>bid → accept → displacement → on_site → quote → complete</td></tr>
+    <tr><td>Stripe Connect</td><td><span class="warn">⚠</span></td><td>Edge Function diagnostique déployée, erreur persistante côté client</td></tr>
+    <tr><td>Factur-X / generate-invoice</td><td><span class="check">✓</span></td><td>XML CII conforme, prêt pour réforme sept 2026</td></tr>
+    <tr><td>Webhook deduplication</td><td><span class="check">✓</span></td><td>Table webhook_events_processed avec unique constraint</td></tr>
+    <tr><td>Notification server-side</td><td><span class="check">✓</span></td><td>DB triggers pour missions + urgences</td></tr>
+    <tr><td>Annulation urgences</td><td><span class="check">✓</span></td><td>Ajouté récemment : rejette bids pending, met à jour status</td></tr>
+    <tr><td>Avis + favoris</td><td><span class="check">✓</span></td><td>Reviews sur missions ET urgences, favorite_providers créé</td></tr>
+  </table>
+
+  <h3>Performance — Patterns N+1</h3>
+  <div class="issue issue-medium">
+    <div class="title">getMissions() fait 3-4 requêtes séquentielles côté provider</div>
+    <div class="file">src/api/missions.ts — lignes 75-130</div>
+    <div class="desc">Provider profile + favorites + emergency bids séparément. Regroupable en jointures.</div>
+  </div>
+  <div class="issue issue-medium">
+    <div class="title">getProviderStats() fait 10 requêtes en parallèle</div>
+    <div class="file">src/api/profile.ts — lignes 223-243</div>
+    <div class="desc">Promise.all avec 10 requêtes individuelles. Optimisable avec des agrégations SQL.</div>
+  </div>
+</div>
+
+<!-- STRUCTURE -->
+<div class="section">
+  <h2><span class="emoji">🏗️</span> Structure & conventions</h2>
+
+  <h3>Points forts</h3>
+  <table>
+    <tr><th>Aspect</th><th>Statut</th><th>Détail</th></tr>
+    <tr><td>Naming conventions</td><td><span class="check">✓</span></td><td>PascalCase composants, camelCase hooks, kebab-case routes — 100% cohérent</td></tr>
+    <tr><td>TypeScript strict</td><td><span class="check">✓</span></td><td>noImplicitAny, strictNullChecks actifs</td></tr>
+    <tr><td>Barrel exports</td><td><span class="check">✓</span></td><td>src/api/index.ts et src/hooks/index.ts</td></tr>
+    <tr><td>i18n FR/EN</td><td><span class="check">✓</span></td><td>2 348 lignes de traductions, ~90% couverture</td></tr>
+    <tr><td>Design system</td><td><span class="check">✓</span></td><td>theme.ts centralisé (COLORS, FONTS, STATUS_LABELS, etc.)</td></tr>
+    <tr><td>React Query v5</td><td><span class="check">✓</span></td><td>Hooks bien structurés avec invalidation de cache</td></tr>
+    <tr><td>Deps à jour</td><td><span class="check">✓</span></td><td>React 19.1, RN 0.81, Expo 54, TS 5.9</td></tr>
+  </table>
+
+  <h3>Points d'attention</h3>
+  <div class="issue issue-medium">
+    <div class="title">8 écrans dépassent 800 lignes (max 1 365 pour emergency.tsx)</div>
+    <div class="desc">emergency.tsx (1 365), mission/[id].tsx (1 173), legal.tsx (1 114), reclamation.tsx (1 080), profile.tsx (1 071), quote/create.tsx (1 040). Candidats à découper en sous-composants.</div>
+  </div>
+  <div class="issue issue-low">
+    <div class="title">Couverture de tests : 4.3% (4 fichiers sur 73)</div>
+    <div class="desc">Seuls state-machine, offline-queue, _client et billing sont testés. Aucun test sur les API, hooks ou écrans.</div>
+  </div>
+  <div class="issue issue-low">
+    <div class="title">Pas de .env.example</div>
+    <div class="desc">Les .env existent mais pas de template documenté pour les contributeurs.</div>
+  </div>
+  <div class="issue issue-low">
+    <div class="title">6 TODOs dans src/config/legal.ts</div>
+    <div class="desc">SIREN, SIRET, RCS, TVA, capital, médiateur — à remplir avant mise en prod.</div>
+  </div>
+</div>
+
+<!-- EDGE FUNCTIONS -->
+<div class="section">
+  <h2><span class="emoji">⚡</span> Edge Functions (18)</h2>
+  <table>
+    <tr><th>Fonction</th><th>Auth</th><th>Erreurs</th><th>CORS</th><th>Statut</th></tr>
+    <tr><td>annual-report</td><td><span class="check">✓</span> JWT+admin</td><td><span class="check">✓</span></td><td><span class="check">✓</span></td><td><span class="badge badge-ok">OK</span></td></tr>
+    <tr><td>capture-payment</td><td><span class="check">✓</span> Stripe</td><td><span class="check">✓</span></td><td><span class="check">✓</span></td><td><span class="badge badge-ok">OK</span></td></tr>
+    <tr><td>connect-google-calendar</td><td><span class="check">✓</span> JWT</td><td><span class="check">✓</span></td><td><span class="check">✓</span></td><td><span class="badge badge-ok">OK</span></td></tr>
+    <tr><td>create-connect-account</td><td><span class="check">✓</span> JWT+RLS</td><td><span class="check">✓</span></td><td><span class="check">✓</span></td><td><span class="badge badge-high">Bug client</span></td></tr>
+    <tr><td>create-payment-intent</td><td><span class="check">✓</span> Rate limit</td><td><span class="check">✓</span></td><td><span class="check">✓</span></td><td><span class="badge badge-ok">OK</span></td></tr>
+    <tr><td>delete-account</td><td><span class="check">✓</span> JWT+limit</td><td><span class="warn">⚠</span> Swallow</td><td><span class="check">✓</span></td><td><span class="badge badge-medium">Partiel</span></td></tr>
+    <tr><td>export-user-data</td><td><span class="check">✓</span> JWT</td><td><span class="check">✓</span></td><td><span class="check">✓</span></td><td><span class="badge badge-ok">OK</span></td></tr>
+    <tr><td>generate-credit-note</td><td><span class="check">✓</span> Service</td><td><span class="check">✓</span></td><td><span class="check">✓</span></td><td><span class="badge badge-ok">OK</span></td></tr>
+    <tr><td>generate-invoice</td><td><span class="check">✓</span> Service</td><td><span class="check">✓</span></td><td><span class="check">✓</span></td><td><span class="badge badge-ok">OK</span></td></tr>
+    <tr><td>generate-quote</td><td><span class="check">✓</span> Service</td><td><span class="check">✓</span></td><td><span class="check">✓</span></td><td><span class="badge badge-ok">OK</span></td></tr>
+    <tr><td>google-calendar-callback</td><td><span class="check">✓</span> Params</td><td><span class="check">✓</span></td><td><span class="warn">⚠</span></td><td><span class="badge badge-ok">OK</span></td></tr>
+    <tr><td>notify-admin-new-provider</td><td><span class="check">✓</span> Webhook</td><td><span class="check">✓</span></td><td><span class="check">✓</span></td><td><span class="badge badge-ok">OK</span></td></tr>
+    <tr><td>send-push</td><td><span class="warn">⚠</span> userId</td><td><span class="check">✓</span></td><td><span class="check">✓</span></td><td><span class="badge badge-medium">Auth faible</span></td></tr>
+    <tr><td>send-welcome-email</td><td><span class="check">✓</span> Email</td><td><span class="check">✓</span></td><td><span class="check">✓</span></td><td><span class="badge badge-ok">OK</span></td></tr>
+    <tr><td>stripe-redirect</td><td><span class="check">✓</span> Params</td><td><span class="warn">⚠</span></td><td><span class="check">✓</span></td><td><span class="badge badge-ok">OK</span></td></tr>
+    <tr><td>stripe-webhook</td><td><span class="check">✓</span> Signature</td><td><span class="warn">⚠</span></td><td><span class="check">✓</span></td><td><span class="badge badge-ok">OK</span></td></tr>
+    <tr><td>sync-google-calendar</td><td><span class="check">✓</span> Rate limit</td><td><span class="check">✓</span></td><td><span class="check">✓</span></td><td><span class="badge badge-ok">OK</span></td></tr>
+    <tr><td>sync-ical</td><td><span class="check">✓</span> Owner</td><td><span class="check">✓</span></td><td><span class="check">✓</span></td><td><span class="badge badge-ok">OK</span></td></tr>
+  </table>
+</div>
+
+<!-- MIGRATIONS -->
+<div class="section">
+  <h2><span class="emoji">🗃️</span> Base de données (60 migrations)</h2>
+
+  <h3>Points forts</h3>
+  <table>
+    <tr><th>Aspect</th><th>Détail</th></tr>
+    <tr><td>CHECK constraints</td><td>Bien définis sur emergency_bids.status, reviews (has_reference)</td></tr>
+    <tr><td>State machine DB</td><td>check_emergency_status_transition() avec RAISE EXCEPTION défensif</td></tr>
+    <tr><td>Cascade deletes</td><td>Corrigés récemment (migration 20260327200000)</td></tr>
+    <tr><td>Realtime</td><td>emergency_bids ajouté à la publication supabase_realtime</td></tr>
+    <tr><td>Notification triggers</td><td>trg_notify_mission_status + emergency trigger fonctionnels</td></tr>
+  </table>
+
+  <h3>Points d'attention</h3>
+  <div class="issue issue-medium">
+    <div class="title">2 migrations dupliquées (reapply après échec)</div>
+    <div class="desc">20260328000001 + 20260328104704 (cancelled bids) et 20260328000002 + 20260328104705 (RLS policy). Pas grave mais indicateur de fragilité du pipeline de migration.</div>
+  </div>
+  <div class="issue issue-medium">
+    <div class="title">Index manquants sur FK fréquemment filtrées</div>
+    <div class="desc">invoices.mission_id, invoices.emergency_id, emergency_requests.owner_id, emergency_bids.emergency_request_id, reviews.emergency_request_id — risque de full table scans.</div>
+  </div>
+</div>
+
+<!-- PLAN D'ACTION -->
+<div class="section">
+  <h2><span class="emoji">🎯</span> Plan d'action recommandé</h2>
+
+  <h3>Sprint 1.5 — Sécurité (à faire AVANT la production)</h3>
+  <ul class="action-list">
+    <li><span class="priority cross">P0</span> Restreindre getProviders() : sélectionner uniquement id, name, picture, email, specialties, rating</li>
+    <li><span class="priority cross">P0</span> Ajouter .eq('owner_id') sur getProperties() et getReservations()</li>
+    <li><span class="priority cross">P0</span> Ajouter vérification is_admin sur TOUTES les fonctions admin.ts</li>
+    <li><span class="priority cross">P0</span> Ajouter auth check sur partner CRUD (partners.ts)</li>
+    <li><span class="priority cross">P0</span> Restreindre RLS policy "read all profiles" aux champs publics uniquement</li>
+    <li><span class="priority cross">P0</span> Supprimer service_role_key de la config DB (utiliser env vars Edge Functions)</li>
+  </ul>
+
+  <h3>Sprint 1 — Reste à corriger (stabilisation)</h3>
+  <ul class="action-list">
+    <li><span class="priority warn">P1</span> Corriger le mapping status dans getOwnerDashboard() (incomplet : manque on_site, quote_paid, etc.)</li>
+    <li><span class="priority warn">P1</span> Résoudre le bug Stripe Connect (create-connect-account) — erreur côté client</li>
+    <li><span class="priority warn">P1</span> Ajouter .in('status', ['pending','assigned']) dans cancelMission()</li>
+    <li><span class="priority warn">P1</span> Implémenter checkPaymentStatus() au lieu du stub 'paid'</li>
+    <li><span class="priority warn">P1</span> Ajouter WHERE status='pending' sur acceptEmergencyBid() (race condition)</li>
+    <li><span class="priority warn">P1</span> Corriger calcul montant : Math.round(baseCost * 110) dans emergencies.ts</li>
+  </ul>
+
+  <h3>Sprint 2+ — Améliorations</h3>
+  <ul class="action-list">
+    <li><span class="priority" style="color:#48A9A6">P2</span> Activer email confirmation dans config.toml</li>
+    <li><span class="priority" style="color:#48A9A6">P2</span> Créer les index manquants sur FK (invoices, emergency_bids, reviews)</li>
+    <li><span class="priority" style="color:#48A9A6">P2</span> Optimiser N+1 queries (getMissions, getProviderStats)</li>
+    <li><span class="priority" style="color:#48A9A6">P2</span> Découper les gros écrans (emergency.tsx 1365 lignes → composants)</li>
+    <li><span class="priority" style="color:#48A9A6">P2</span> Ajouter Sentry logging sur échecs notifications silencieux</li>
+    <li><span class="priority" style="color:#48A9A6">P2</span> Créer .env.example</li>
+    <li><span class="priority" style="color:#48A9A6">P2</span> Augmenter couverture tests (objectif 30% avant prod)</li>
+    <li><span class="priority" style="color:#48A9A6">P2</span> Remplir les 6 TODOs légaux dans config/legal.ts</li>
+    <li><span class="priority" style="color:#48A9A6">P2</span> Supprimer console.log debug (missions.ts ligne 330)</li>
+  </ul>
+</div>
+
+<!-- CONCLUSION -->
+<div class="section">
+  <h2><span class="emoji">💡</span> Conclusion</h2>
+  <p style="font-size:15px;color:#334155;line-height:1.8">
+    Le projet Altio est <strong>solide sur le plan architectural</strong> : conventions cohérentes, stack moderne (React 19, RN 0.81, Expo 54), TypeScript strict, design system centralisé, et logique métier complexe bien structurée (state machines, 18 Edge Functions, Factur-X prêt).
+  </p>
+  <p style="font-size:15px;color:#334155;line-height:1.8;margin-top:12px">
+    Les <strong>progrès récents sont significatifs</strong> : annulation d'urgences, avis/favoris, cascade deletes, notifications server-side, planning provider avec statuts. Le sprint 1 avance bien.
+  </p>
+  <p style="font-size:15px;color:#334155;line-height:1.8;margin-top:12px">
+    Le <strong>point bloquant principal est la sécurité</strong> : 6 vulnérabilités critiques (exposition de données, fonctions admin non protégées, RLS trop permissive) doivent être corrigées avant toute mise en production. La bonne nouvelle : ce sont des fixes rapides (ajout de filtres et checks auth), pas des refactos architecturaux.
+  </p>
+  <p style="font-size:15px;color:#334155;line-height:1.8;margin-top:12px">
+    <strong>Priorité immédiate :</strong> terminer Sprint 1 (bugs status) + insérer un Sprint 1.5 sécurité avant de continuer vers RGPD et facturation.
+  </p>
+</div>
+
+</div>
+</body>
+</html>

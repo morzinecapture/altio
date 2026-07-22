@@ -77,7 +77,8 @@ agenthub/agents/youtube/db
 .cache/
 .metro-cache/
 npm-cache/
-.claude/
+.claude/settings.local.json
+.claude/*.local.json
 test_reports/
 
 # Accidental files
