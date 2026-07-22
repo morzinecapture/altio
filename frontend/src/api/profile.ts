@@ -135,6 +135,9 @@ export const completeProviderOnboarding = async (data: {
   company_type: string;
   radius_km: number;
   weekly_availability: string[];
+  siren?: string;
+  rc_pro_doc_url?: string;
+  decennale_doc_url?: string;
   latitude?: number;
   longitude?: number;
   location_label?: string;
@@ -155,6 +158,7 @@ export const completeProviderOnboarding = async (data: {
   if (data.cgu_accepted_at) userUpdate.cgu_accepted_at = data.cgu_accepted_at;
   if (data.mandate_accepted_at) userUpdate.mandate_accepted_at = data.mandate_accepted_at;
   if (data.dsa_certified_at) userUpdate.dsa_certified_at = data.dsa_certified_at;
+  if (data.siren) userUpdate.siren = data.siren.replace(/\s/g, '');
   const { error: userError } = await supabase
     .from('users')
     .update(userUpdate)
@@ -170,6 +174,8 @@ export const completeProviderOnboarding = async (data: {
   if (data.longitude !== undefined) profileUpdate.longitude = data.longitude;
   if (data.location_label !== undefined) profileUpdate.location_label = data.location_label;
   if (data.notify_new_missions_in_zone !== undefined) profileUpdate.notify_new_missions_in_zone = data.notify_new_missions_in_zone;
+  if (data.rc_pro_doc_url !== undefined) profileUpdate.rc_pro_doc_url = data.rc_pro_doc_url;
+  if (data.decennale_doc_url !== undefined) profileUpdate.decennale_doc_url = data.decennale_doc_url;
   const { data: updated, error } = await supabase
     .from('provider_profiles')
     .update(profileUpdate)

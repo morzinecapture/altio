@@ -29,14 +29,18 @@ const STATUS_STYLE: Record<string, { bg: string; text: string }> = {
 
 const INVOICE_TYPE_LABEL: Record<string, string> = {
   service: 'Ma facture de prestation',
+  displacement: 'Déplacement et diagnostic',
   service_fee: 'Frais de service',
   commission: 'Commission plateforme Altio',
+  credit_note: 'Avoir',
 };
 
 const INVOICE_ISSUER: Record<string, string> = {
   service: 'Émise en votre nom par Altio (mandat)',
+  displacement: 'Émise en votre nom par Altio (mandat)',
   service_fee: 'Émise par Altio',
   commission: 'Émise par Altio',
+  credit_note: 'Avoir',
 };
 
 const formatDate = (iso: string) => {
@@ -51,6 +55,7 @@ const formatAmount = (amount: number) => {
 const PROVIDER_FILTERS: { label: string; value: string | null }[] = [
   { label: 'Toutes', value: null },
   { label: 'Mes prestations', value: 'service' },
+  { label: 'Déplacements', value: 'displacement' },
   { label: 'Commissions Altio', value: 'commission' },
 ];
 
@@ -133,7 +138,7 @@ export default function ProviderInvoices() {
             const typeLabel = INVOICE_TYPE_LABEL[invoice.invoice_type] || 'Prestation';
             const issuerLabel = INVOICE_ISSUER[invoice.invoice_type] || '';
             const isCommission = invoice.invoice_type === 'commission';
-            const isMyInvoice = invoice.invoice_type === 'service';
+            const isMyInvoice = invoice.invoice_type === 'service' || invoice.invoice_type === 'displacement';
 
             return (
               <TouchableOpacity key={invoice.id} style={styles.card} onPress={() => handleViewDetail(invoice.id)} activeOpacity={0.7}>

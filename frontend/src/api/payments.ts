@@ -103,6 +103,49 @@ export const createStripeConnectAccount = async () => {
 
 export const checkPaymentStatus = async (_sessionId: string) => ({ status: 'paid' as const });
 
+type InvoiceDocumentFields = {
+  pdf_url?: string | null;
+  facturx_url?: string | null;
+};
+
+const signedInvoiceUrlTtlSeconds = 60 * 60;
+
+const extractInvoiceObjectPath = (value?: string | null) => {
+  if (!value) return null;
+  if (!/^https?:\/\//.test(value)) return value;
+
+  try {
+    const path = decodeURIComponent(new URL(value).pathname);
+    const publicMarker = '/storage/v1/object/public/invoices/';
+    const signedMarker = '/storage/v1/object/sign/invoices/';
+    const marker = path.includes(publicMarker) ? publicMarker : path.includes(signedMarker) ? signedMarker : null;
+    if (!marker) return null;
+    return path.slice(path.indexOf(marker) + marker.length);
+  } catch {
+    return null;
+  }
+};
+
+const resolveInvoiceDocumentUrl = async (value?: string | null) => {
+  const objectPath = extractInvoiceObjectPath(value);
+  if (!objectPath) return value ?? undefined;
+
+  const { data, error } = await supabase.storage
+    .from('invoices')
+    .createSignedUrl(objectPath, signedInvoiceUrlTtlSeconds);
+  if (error || !data?.signedUrl) return value ?? undefined;
+  return data.signedUrl;
+};
+
+const withSignedInvoiceDocuments = async <T extends InvoiceDocumentFields>(invoice: T): Promise<T> => ({
+  ...invoice,
+  pdf_url: await resolveInvoiceDocumentUrl(invoice.pdf_url),
+  facturx_url: await resolveInvoiceDocumentUrl(invoice.facturx_url),
+}) as T;
+
+const withSignedInvoiceListDocuments = async <T extends InvoiceDocumentFields>(invoices: T[]): Promise<T[]> =>
+  Promise.all(invoices.map(withSignedInvoiceDocuments));
+
 export const getMyInvoices = async () => {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.user) throw new Error('Not authenticated');
@@ -112,7 +155,7 @@ export const getMyInvoices = async () => {
     .or(`seller_id.eq.${session.user.id},buyer_id.eq.${session.user.id}`)
     .order('created_at', { ascending: false });
   checkError(error);
-  return data || [];
+  return withSignedInvoiceListDocuments(data || []);
 };
 
 const INVOICE_SELECT = `
@@ -136,7 +179,7 @@ export const getInvoices = async (role: 'buyer' | 'seller') => {
     .or(filter)
     .order('created_at', { ascending: false });
   checkError(error);
-  return data || [];
+  return withSignedInvoiceListDocuments(data || []);
 };
 
 export const getInvoiceDetail = async (invoiceId: string) => {
@@ -149,5 +192,5 @@ export const getInvoiceDetail = async (invoiceId: string) => {
     .eq('id', invoiceId)
     .single();
   checkError(error);
-  return data;
+  return withSignedInvoiceDocuments(data);
 };

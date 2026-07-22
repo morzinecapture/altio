@@ -5,7 +5,7 @@
  *
  * Cette fonction sert de redirect_uri auprès de Google (URL HTTPS valide).
  * Google Console → Identifiants → redirect URI autorisé :
- *   https://vtybccqqbyjbmhkpliyn.supabase.co/functions/v1/google-calendar-callback
+ *   {SUPABASE_URL}/functions/v1/google-calendar-callback
  */
 Deno.serve(async (req) => {
   const url = new URL(req.url);

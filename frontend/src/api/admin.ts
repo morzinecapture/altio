@@ -257,6 +257,27 @@ export const logAuditAction = async (
   });
 };
 
+const resolveAdminInvoiceDocumentUrl = async (value?: string | null) => {
+  if (!value) return undefined;
+  let objectPath: string | null = value;
+
+  if (/^https?:\/\//.test(value)) {
+    try {
+      const path = decodeURIComponent(new URL(value).pathname);
+      const publicMarker = '/storage/v1/object/public/invoices/';
+      const signedMarker = '/storage/v1/object/sign/invoices/';
+      const marker = path.includes(publicMarker) ? publicMarker : path.includes(signedMarker) ? signedMarker : null;
+      objectPath = marker ? path.slice(path.indexOf(marker) + marker.length) : null;
+    } catch {
+      objectPath = null;
+    }
+  }
+
+  if (!objectPath) return value;
+  const { data, error } = await supabase.storage.from('invoices').createSignedUrl(objectPath, 60 * 60);
+  return error || !data?.signedUrl ? value : data.signedUrl;
+};
+
 export const getAdminInvoices = async (filters?: { invoice_type?: string; status?: string; limit?: number }) => {
   await requireAdmin();
   let query = supabase
@@ -270,7 +291,11 @@ export const getAdminInvoices = async (filters?: { invoice_type?: string; status
 
   const { data, error } = await query;
   checkError(error);
-  return data || [];
+  return Promise.all((data || []).map(async (invoice) => ({
+    ...invoice,
+    pdf_url: await resolveAdminInvoiceDocumentUrl(invoice.pdf_url),
+    facturx_url: await resolveAdminInvoiceDocumentUrl(invoice.facturx_url),
+  })));
 };
 
 export const getDisputes = async () => {

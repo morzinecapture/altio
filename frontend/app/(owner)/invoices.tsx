@@ -20,14 +20,18 @@ const STATUS_LABEL: Record<string, string> = {
 
 const INVOICE_TYPE_LABEL: Record<string, string> = {
   service: 'Prestation',
+  displacement: 'Déplacement',
   service_fee: 'Frais de service Altio',
   commission: 'Commission Altio',
+  credit_note: 'Avoir',
 };
 
 const INVOICE_ISSUER: Record<string, string> = {
   service: 'Émise par le prestataire (via mandat)',
+  displacement: 'Émise par le prestataire (via mandat)',
   service_fee: 'Émise par Altio',
   commission: 'Émise par Altio',
+  credit_note: 'Avoir',
 };
 
 const STATUS_STYLE: Record<string, { bg: string; text: string }> = {
@@ -51,6 +55,7 @@ const formatAmount = (amount: number) => {
 const OWNER_FILTERS: { label: string; value: string | null }[] = [
   { label: 'Toutes', value: null },
   { label: 'Prestations', value: 'service' },
+  { label: 'Déplacements', value: 'displacement' },
   { label: 'Frais Altio', value: 'service_fee' },
   { label: 'Commissions', value: 'commission' },
 ];
@@ -135,6 +140,13 @@ export default function OwnerInvoices() {
             const typeLabel = INVOICE_TYPE_LABEL[invoice.invoice_type] || 'Prestation';
             const issuerLabel = INVOICE_ISSUER[invoice.invoice_type] || '';
             const isAltioInvoice = invoice.invoice_type === 'service_fee' || invoice.invoice_type === 'commission';
+            const amountLabel = invoice.invoice_type === 'service' || invoice.invoice_type === 'displacement'
+              ? 'Montant de la prestation'
+              : invoice.invoice_type === 'service_fee'
+                ? 'Frais de service'
+                : invoice.invoice_type === 'credit_note'
+                  ? 'Avoir'
+                  : 'Commission plateforme';
 
             return (
               <TouchableOpacity key={invoice.id} style={styles.card} onPress={() => handleViewDetail(invoice.id)} activeOpacity={0.7}>
@@ -165,7 +177,7 @@ export default function OwnerInvoices() {
                 </View>
 
                 <View style={styles.amountRow}>
-                  <Text style={styles.amountLabel}>{invoice.invoice_type === 'service' ? 'Montant de la prestation' : invoice.invoice_type === 'service_fee' ? 'Frais de service' : 'Commission plateforme'}</Text>
+                  <Text style={styles.amountLabel}>{amountLabel}</Text>
                   <Text style={styles.amountValue}>{formatAmount(invoice.amount_ttc || 0)}</Text>
                 </View>
 

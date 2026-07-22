@@ -29,8 +29,10 @@ const STATUS_STYLE: Record<string, { bg: string; text: string }> = {
 
 const INVOICE_TYPE_LABEL: Record<string, string> = {
   service: 'Facture de prestation (mandat)',
+  displacement: 'Déplacement et diagnostic (mandat)',
   service_fee: 'Frais de service Altio',
   commission: 'Commission plateforme Altio',
+  credit_note: 'Avoir',
 };
 
 const formatDate = (iso?: string) => {
@@ -118,7 +120,7 @@ export default function InvoiceDetail() {
   }
 
   const statusStyle = STATUS_STYLE[invoice.status] || STATUS_STYLE.draft;
-  const isMandate = invoice.invoice_type === 'service';
+  const isMandate = invoice.invoice_type === 'service' || invoice.invoice_type === 'displacement';
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>

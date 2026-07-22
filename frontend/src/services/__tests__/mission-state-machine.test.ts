@@ -32,8 +32,8 @@ describe('Machine a etats des missions', () => {
       expect(isValidMissionTransition('pending', 'in_progress')).toBe(false);
     });
 
-    it('pending ne peut pas aller directement a assigned', () => {
-      expect(isValidMissionTransition('pending', 'assigned')).toBe(false);
+    it('pending ne peut pas aller directement a paid', () => {
+      expect(isValidMissionTransition('pending', 'paid')).toBe(false);
     });
 
     it('in_progress ne peut pas revenir a pending', () => {

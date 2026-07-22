@@ -58,6 +58,8 @@ jest.mock('../payments', () => ({
 const sendPushSpy = sendPushNotification as jest.MockedFunction<typeof sendPushNotification>;
 const { capturePayment } = require('../payments') as { capturePayment: jest.MockedFunction<typeof import('../payments').capturePayment> };
 
+const flushMicrotasks = () => new Promise(resolve => setTimeout(resolve, 0));
+
 // ── Fixtures ───────────────────────────────────────────────────────────────────
 
 const owner = createTestOwner();
@@ -137,6 +139,7 @@ describe('Urgence complète : créer → bid → accepter → arriver → devis 
       service_type: 'plumbing',
       description: 'Fuite d\'eau',
     });
+    await flushMicrotasks();
 
     expect(result.status).toBe('bids_open');
     // At least one push notification sent to provider in zone
@@ -241,6 +244,7 @@ describe('Urgence complète : créer → bid → accepter → arriver → devis 
   it('7. acceptEmergencyQuote → status quote_accepted', async () => {
     mockAuthSession(owner.id);
 
+    mockSupabaseResponse('emergency_requests', 'select', { owner_id: owner.id });
     mockSupabaseResponse('mission_quotes', 'update', null);
     mockSupabaseResponse('emergency_requests', 'update', null);
 

@@ -37,7 +37,7 @@ export type EmergencyStatus =
 export type ApplicationStatus = 'pending' | 'accepted' | 'rejected' | 'declined';
 export type BidStatus = 'pending' | 'accepted' | 'rejected' | 'cancelled';
 export type QuoteStatus = 'pending' | 'sent' | 'accepted' | 'refused';
-export type InvoiceType = 'service' | 'service_fee' | 'commission';
+export type InvoiceType = 'service' | 'displacement' | 'service_fee' | 'commission' | 'credit_note';
 export type UserRole = 'owner' | 'provider' | 'admin';
 
 // ─── Property ────────────────────────────────────────────────────────────────

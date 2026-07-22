@@ -269,9 +269,9 @@ export default function ProviderProfile() {
         .from('insurance-documents')
         .upload(`${user.id}/${fileName}`, blob, { upsert: true, contentType: 'image/jpeg' });
       if (error) throw error;
-      const { data: { publicUrl } } = supabase.storage.from('insurance-documents').getPublicUrl(`${user.id}/${fileName}`);
-      if (type === 'rc_pro') setRcProDocUrl(publicUrl);
-      else setDecennaleDocUrl(publicUrl);
+      const storagePath = `${user.id}/${fileName}`;
+      if (type === 'rc_pro') setRcProDocUrl(storagePath);
+      else setDecennaleDocUrl(storagePath);
       Alert.alert('Document ajouté', 'Votre document a bien été uploadé.');
     } catch (e: unknown) {
       Alert.alert('Erreur', e instanceof Error ? e.message : String(e) || 'Impossible d\'uploader le document.');
@@ -312,7 +312,12 @@ export default function ProviderProfile() {
     setConnectingGcal(true);
     try {
       // URL HTTPS via Supabase relay — Google n'accepte pas les custom schemes (altio://)
-      const supabaseRedirectUri = 'https://vtybccqqbyjbmhkpliyn.supabase.co/functions/v1/google-calendar-callback';
+      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL?.replace(/\/$/, '');
+      if (!supabaseUrl) {
+        Alert.alert('Configuration manquante', 'EXPO_PUBLIC_SUPABASE_URL non défini dans .env');
+        return;
+      }
+      const supabaseRedirectUri = `${supabaseUrl}/functions/v1/google-calendar-callback`;
       // Deep link que l'app va recevoir après le relay
       const appDeepLink = ExpoLinking.createURL('auth/google-calendar-callback');
       const codeVerifier = generateCodeVerifier();

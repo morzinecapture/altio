@@ -398,7 +398,7 @@ serve(async (req) => {
     const { data: buckets } = await db.storage.listBuckets()
     const bucketExists = buckets?.some((b: { name: string }) => b.name === 'invoices')
     if (!bucketExists) {
-      const { error: createBucketErr } = await db.storage.createBucket('invoices', { public: true })
+      const { error: createBucketErr } = await db.storage.createBucket('invoices', { public: false })
       if (createBucketErr && !createBucketErr.message.includes('already exists')) {
         throw new Error(`Cannot create storage bucket: ${createBucketErr.message}`)
       }
@@ -413,31 +413,34 @@ serve(async (req) => {
       })
     if (uploadErr) throw new Error(`Storage upload failed: ${uploadErr.message}`)
 
-    const { data: { publicUrl } } = db.storage.from('invoices').getPublicUrl(fileName)
+    const { data: signedQuote } = await db.storage
+      .from('invoices')
+      .createSignedUrl(fileName, 60 * 60)
+    const documentUrl = signedQuote?.signedUrl ?? fileName
 
     // ── 8. Update the quote record with the generated document URL ───────────
     const { error: updateErr } = await db
       .from('mission_quotes')
-      .update({ quote_document_url: publicUrl, quote_number: quoteNumber })
+      .update({ quote_document_url: fileName, quote_number: quoteNumber })
       .eq('id', quoteId)
 
     // If columns don't exist yet, try without quote_number
     if (updateErr) {
       const { error: retryErr } = await db
         .from('mission_quotes')
-        .update({ quote_document_url: publicUrl })
+        .update({ quote_document_url: fileName })
         .eq('id', quoteId)
       if (retryErr) {
         // Last resort: try pdf_url column name
         await db
           .from('mission_quotes')
-          .update({ pdf_url: publicUrl })
+          .update({ pdf_url: fileName })
           .eq('id', quoteId)
       }
     }
 
     return new Response(
-      JSON.stringify({ success: true, quoteNumber, url: publicUrl, document_url: publicUrl }),
+      JSON.stringify({ success: true, quoteNumber, url: documentUrl, document_url: documentUrl, document_path: fileName }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
     )
   } catch (error) {

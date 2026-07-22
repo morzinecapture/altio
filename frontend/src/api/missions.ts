@@ -1104,11 +1104,11 @@ export const submitQuoteWithLines = async (data: {
       console.warn('[submitQuoteWithLines] generate-quote error:', JSON.stringify(genError));
     }
 
-    const generatedUrl = docData?.document_url || docData?.url;
-    if (generatedUrl && quote) {
+    const generatedPath = docData?.document_path || docData?.document_url || docData?.url;
+    if (generatedPath && quote) {
       await supabase
         .from('mission_quotes')
-        .update({ quote_document_url: generatedUrl })
+        .update({ quote_document_url: generatedPath })
         .eq('id', quote.id);
     }
   } catch (e) {

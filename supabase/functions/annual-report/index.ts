@@ -191,13 +191,15 @@ serve(async (req) => {
 
     if (uploadError) throw new Error(`Storage upload failed: ${uploadError.message}`)
 
-    const { data: { publicUrl } } = db.storage.from('invoices').getPublicUrl(fileName)
+    const { data: signedReport } = await db.storage
+      .from('invoices')
+      .createSignedUrl(fileName, 60 * 60)
 
     // ── 9. Return response ──────────────────────────────────────────────────
     return new Response(
       JSON.stringify({
         success: true,
-        report_url: publicUrl,
+        report_url: signedReport?.signedUrl ?? fileName,
         report,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }

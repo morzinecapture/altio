@@ -194,8 +194,28 @@ export default function QuoteDetailScreen() {
       Alert.alert('Erreur', e instanceof Error ? e.message : 'Une erreur est survenue.');
     } finally {
       setAccepting(false);
-    }
-  };
+  }
+};
+
+const resolveInvoiceBucketUrl = async (value: string) => {
+  if (!/^https?:\/\//.test(value)) {
+    const { data, error } = await supabase.storage.from('invoices').createSignedUrl(value, 60 * 60);
+    return error || !data?.signedUrl ? value : data.signedUrl;
+  }
+
+  try {
+    const path = decodeURIComponent(new URL(value).pathname);
+    const publicMarker = '/storage/v1/object/public/invoices/';
+    const signedMarker = '/storage/v1/object/sign/invoices/';
+    const marker = path.includes(publicMarker) ? publicMarker : path.includes(signedMarker) ? signedMarker : null;
+    if (!marker) return value;
+    const objectPath = path.slice(path.indexOf(marker) + marker.length);
+    const { data, error } = await supabase.storage.from('invoices').createSignedUrl(objectPath, 60 * 60);
+    return error || !data?.signedUrl ? value : data.signedUrl;
+  } catch {
+    return value;
+  }
+};
 
   const handleRefuseConfirm = async () => {
     setRefusing(true);
@@ -223,7 +243,8 @@ export default function QuoteDetailScreen() {
       return;
     }
     const quoteNum = quote?.quote_number || id || 'devis';
-    await viewOrShareDocument({ url, title: `Devis ${quoteNum}` });
+    const signedUrl = await resolveInvoiceBucketUrl(url);
+    await viewOrShareDocument({ url: signedUrl, title: `Devis ${quoteNum}` });
   };
 
   const handleRegeneratePdf = async () => {

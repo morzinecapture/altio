@@ -357,8 +357,6 @@ serve(async (req) => {
       })
     if (uploadErr) throw new Error(`Storage upload failed: ${uploadErr.message}`)
 
-    const { data: { publicUrl } } = db.storage.from('invoices').getPublicUrl(fileName)
-
     // ── 8b. Store Factur-X XML ───────────────────────────────────────────────
     const xmlFileName = `${year}/${creditNoteNumber}.xml`
     const { error: xmlUploadErr } = await db.storage
@@ -368,8 +366,6 @@ serve(async (req) => {
         upsert: true,
       })
     if (xmlUploadErr) throw new Error(`Factur-X XML upload failed: ${xmlUploadErr.message}`)
-
-    const { data: { publicUrl: publicXmlUrl } } = db.storage.from('invoices').getPublicUrl(xmlFileName)
 
     // ── 9. Insert credit note record ─────────────────────────────────────────
     let creditNotePayload: Record<string, unknown> = {
@@ -382,10 +378,10 @@ serve(async (req) => {
       vat_rate:            vatRate,
       seller_id:           originalInvoice.seller_id,
       buyer_id:            originalInvoice.buyer_id,
-      pdf_url:             publicUrl,
+      pdf_url:             fileName,
       stripe_pi_id:        originalInvoice.stripe_pi_id ?? null,
       status:              'issued',
-      facturx_url:         publicXmlUrl,
+      facturx_url:         xmlFileName,
       related_invoice_id:  invoiceId,
     }
 
@@ -426,7 +422,7 @@ serve(async (req) => {
       .eq('id', invoiceId)
 
     return new Response(
-      JSON.stringify({ success: true, creditNote, facturx_url: publicXmlUrl }),
+      JSON.stringify({ success: true, creditNote, facturx_url: xmlFileName }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
     )
   } catch (error: unknown) {

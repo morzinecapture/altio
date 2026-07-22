@@ -102,6 +102,7 @@ function createStorageMock() {
     from: jest.fn().mockReturnValue({
       upload: jest.fn().mockResolvedValue({ data: { path: 'test-path' }, error: null }),
       getPublicUrl: jest.fn().mockReturnValue({ data: { publicUrl: 'https://test.supabase.co/storage/test' } }),
+      createSignedUrl: jest.fn().mockResolvedValue({ data: { signedUrl: 'https://test.supabase.co/storage/signed/test' }, error: null }),
       download: jest.fn().mockResolvedValue({ data: new Blob(), error: null }),
       remove: jest.fn().mockResolvedValue({ data: null, error: null }),
     }),

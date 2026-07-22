@@ -441,7 +441,17 @@ export default function OwnerProfile() {
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                       <View style={{ flex: 1 }}>
                         <Text style={styles.invoiceNumber}>{inv.invoice_number}</Text>
-                        <Text style={styles.invoiceType}>{inv.invoice_type === 'service' ? 'Prestation' : 'Commission'}</Text>
+                        <Text style={styles.invoiceType}>
+                          {inv.invoice_type === 'service'
+                            ? 'Prestation'
+                            : inv.invoice_type === 'displacement'
+                              ? 'Déplacement'
+                              : inv.invoice_type === 'service_fee'
+                                ? 'Frais Altio'
+                                : inv.invoice_type === 'credit_note'
+                                  ? 'Avoir'
+                                  : 'Commission'}
+                        </Text>
                         <Text style={styles.invoiceDate}>{new Date(inv.created_at).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}</Text>
                       </View>
                       <View style={{ alignItems: 'flex-end' }}>

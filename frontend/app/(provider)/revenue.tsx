@@ -44,6 +44,7 @@ export default function RevenueScreen() {
 
   const INVOICE_TYPE_LABELS: Record<string, string> = {
     commission: t('provider.revenue.invoice_type_commission'),
+    displacement: 'Déplacement et diagnostic',
     service:    t('provider.revenue.invoice_type_service'),
   };
 

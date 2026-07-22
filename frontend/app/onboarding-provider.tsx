@@ -6,7 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import * as ImagePicker from 'expo-image-picker';
 import { COLORS, FONTS, SPACING, RADIUS, SHADOWS } from '../src/theme';
-import { completeProviderOnboarding, geocodeAddress } from '../src/api';
+import { completeProviderOnboarding, geocodeAddress, supabase } from '../src/api';
 
 const validateSiret = (v: string) => /^\d{14}$/.test(v.replace(/\s/g, ''));
 
@@ -93,9 +93,24 @@ export default function OnboardingProvider() {
     return parts[parts.length - 1];
   };
 
+  const uploadInsuranceDoc = async (uri: string, userId: string, type: 'rc_pro' | 'decennale') => {
+    const response = await fetch(uri);
+    const blob = await response.blob();
+    const fileName = type === 'rc_pro' ? 'rc_pro.jpg' : 'decennale.jpg';
+    const storagePath = `${userId}/${fileName}`;
+    const { error } = await supabase.storage
+      .from('insurance-documents')
+      .upload(storagePath, blob, { upsert: true, contentType: 'image/jpeg' });
+    if (error) throw error;
+    return storagePath;
+  };
+
   const handleFinish = async () => {
     setSaving(true);
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) throw new Error('Not authenticated');
+
       let locationData: { latitude?: number; longitude?: number; location_label?: string } = {};
       if (baseAddress.trim()) {
         const coords = await geocodeAddress(baseAddress.trim());
@@ -105,11 +120,18 @@ export default function OnboardingProvider() {
           locationData = { location_label: baseAddress.trim() };
         }
       }
+      const [rcProDocUrl, decennaleDocUrl] = await Promise.all([
+        rcProDoc ? uploadInsuranceDoc(rcProDoc, session.user.id, 'rc_pro') : Promise.resolve(undefined),
+        decennaleDoc ? uploadInsuranceDoc(decennaleDoc, session.user.id, 'decennale') : Promise.resolve(undefined),
+      ]);
       await completeProviderOnboarding({
         specialties,
         company_type:       companyType,
         radius_km:          radiusKm,
         weekly_availability: availability,
+        ...(siren.trim() ? { siren: siren.replace(/\s/g, '') } : {}),
+        ...(rcProDocUrl ? { rc_pro_doc_url: rcProDocUrl } : {}),
+        ...(decennaleDocUrl ? { decennale_doc_url: decennaleDocUrl } : {}),
         ...locationData,
         cgu_accepted_at:     new Date().toISOString(),
         mandate_accepted_at: new Date().toISOString(),

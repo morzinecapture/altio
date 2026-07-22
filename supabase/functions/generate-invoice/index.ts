@@ -20,16 +20,19 @@ serve(async (req) => {
     // ── Input validation ──
     const missionId = reqBody.missionId ? assertUUID(reqBody.missionId, 'missionId') : undefined
     const emergencyId = reqBody.emergencyId ? assertUUID(reqBody.emergencyId, 'emergencyId') : undefined
-    if (!missionId && !emergencyId) {
-      throw new ValidationError('missionId or emergencyId is required')
+    const interventionId = reqBody.interventionId ? assertUUID(reqBody.interventionId, 'interventionId') : undefined
+    if (!missionId && !emergencyId && !interventionId) {
+      throw new ValidationError('missionId, emergencyId or interventionId is required')
     }
-    const invoiceType = assertOneOf(reqBody.invoiceType, 'invoiceType', ['service', 'service_fee', 'commission'] as const)
+    const invoiceType = assertOneOf(reqBody.invoiceType, 'invoiceType', ['service', 'displacement', 'service_fee', 'commission'] as const)
+    const isMandateInvoice = invoiceType === 'service' || invoiceType === 'displacement'
     const stripePaymentIntentId = assertOptionalString(reqBody.stripePaymentIntentId, 'stripePaymentIntentId')
 
     // ── 0. Dedup: skip if invoice already exists for this source + type ────────
     const dedupQuery = db.from('invoices').select('id').eq('invoice_type', invoiceType)
     if (missionId)   dedupQuery.eq('mission_id', missionId)
     if (emergencyId) dedupQuery.eq('emergency_id', emergencyId)
+    if (interventionId) dedupQuery.eq('intervention_id', interventionId)
     const { data: existing } = await dedupQuery.limit(1)
     if (existing && existing.length > 0) {
       return new Response(JSON.stringify({ ok: true, skipped: true, message: 'Invoice already exists' }), {
@@ -54,7 +57,7 @@ serve(async (req) => {
       insurance_policy?: string;
       qualifications?: string;
     }
-    let owner: InvoiceParty | null, provider: InvoiceParty | null, amount: number, propertyName: string, propertyAddress: string, serviceType: string, sourceId: string, serviceDate: string
+    let owner: InvoiceParty | null, provider: InvoiceParty | null, amount: number, propertyName: string, propertyAddress: string, serviceType: string, sourceId: string, serviceDate: string, sourceKind: 'mission' | 'emergency' | 'intervention'
 
     if (missionId) {
       const { data: mission, error: mErr } = await db
@@ -72,7 +75,8 @@ serve(async (req) => {
       serviceType     = mission.mission_type || 'service'
       serviceDate     = mission.completed_at ? new Date(mission.completed_at).toLocaleDateString('fr-FR') : new Date().toLocaleDateString('fr-FR')
       sourceId        = missionId
-    } else {
+      sourceKind      = 'mission'
+    } else if (emergencyId) {
       const { data: emergency, error: eErr } = await db
         .from('emergency_requests')
         .select('*, property:properties(name, address), owner:users!emergency_requests_owner_id_fkey(*), provider:users!emergency_requests_accepted_provider_id_fkey(*)')
@@ -89,12 +93,59 @@ serve(async (req) => {
 
       owner    = emergency.owner
       provider = emergency.provider
-      amount   = (Number(emergency.displacement_fee ?? 0)) + (Number(emergency.diagnostic_fee ?? 0)) + (Number(quote?.repair_cost ?? 0))
+      const displacementAmount = (Number(emergency.displacement_fee ?? 0)) + (Number(emergency.diagnostic_fee ?? 0))
+      amount   = invoiceType === 'displacement'
+        ? displacementAmount
+        : displacementAmount + (Number(quote?.repair_cost ?? 0))
       propertyName    = emergency.property?.name || '\u2014'
       propertyAddress = emergency.property?.address || ''
       serviceType     = emergency.service_type || 'urgence'
       serviceDate     = emergency.completed_at ? new Date(emergency.completed_at).toLocaleDateString('fr-FR') : new Date().toLocaleDateString('fr-FR')
       sourceId        = emergencyId
+      sourceKind      = 'emergency'
+    } else {
+      const { data: intervention, error: iErr } = await db
+        .from('interventions')
+        .select('*')
+        .eq('id', interventionId)
+        .single()
+      if (iErr || !intervention) throw new Error('Intervention not found')
+
+      const { data: ownerRow } = await db
+        .from('users')
+        .select('*')
+        .eq('id', intervention.owner_id)
+        .single()
+      const { data: providerRow } = intervention.assigned_provider_id
+        ? await db
+          .from('users')
+          .select('*')
+          .eq('id', intervention.assigned_provider_id)
+          .single()
+        : { data: null }
+      const { data: property } = intervention.property_id
+        ? await db
+          .from('properties')
+          .select('name, address')
+          .eq('id', intervention.property_id)
+          .single()
+        : { data: null }
+
+      owner    = ownerRow
+      provider = providerRow
+      const visitAmount = Number(intervention.displacement_fee ?? 0) + Number(intervention.first_hour_fee ?? intervention.diagnostic_fee ?? 0)
+      const serviceAmount = Number(intervention.quote_amount ?? 0) > 0
+        ? Number(intervention.quote_amount)
+        : Number(intervention.final_amount ?? intervention.fixed_price ?? 0)
+      amount = invoiceType === 'displacement' ? visitAmount : serviceAmount
+      propertyName    = property?.name || '\u2014'
+      propertyAddress = property?.address || ''
+      serviceType     = intervention.service_type || intervention.mission_type || 'intervention'
+      serviceDate     = (intervention.paid_at || intervention.validated_at || intervention.completed_at || intervention.on_site_at)
+        ? new Date(intervention.paid_at || intervention.validated_at || intervention.completed_at || intervention.on_site_at).toLocaleDateString('fr-FR')
+        : new Date().toLocaleDateString('fr-FR')
+      sourceId        = interventionId as string
+      sourceKind      = 'intervention'
     }
 
     if (!owner?.id && invoiceType !== 'commission') throw new Error('Owner not found')
@@ -135,7 +186,7 @@ serve(async (req) => {
     const year = new Date().getFullYear()
     let invoiceNumber: string
 
-    if (invoiceType === 'service') {
+    if (isMandateInvoice) {
       // F1 — Mandat: per-provider sequence MAN-[SIRET_SHORT]-YYYY-XXXX
       const providerSiret = provider?.siren || provider?.siret || provider?.id?.substring(0, 8) || 'UNKNOWN'
       const siretShort = providerSiret.replace(/\s/g, '').slice(0, 9)
@@ -208,6 +259,7 @@ serve(async (req) => {
 
     const sellerUser = (invoiceType === 'commission' || invoiceType === 'service_fee') ? altioInfo : (provider ?? {})
     const buyerUser  = invoiceType === 'commission' ? (provider ?? {}) : (owner ?? {})
+    const sourceLabel = sourceKind === 'mission' ? 'Mission' : sourceKind === 'emergency' ? 'Urgence' : 'Intervention'
 
     // Provider info for F1 mandate mention
     const providerName = provider?.company_name || provider?.name || 'Prestataire'
@@ -223,18 +275,22 @@ serve(async (req) => {
       ? `Commission de service plateforme Altio (${COMMISSION_RATE * 100}%)`
       : invoiceType === 'service_fee'
         ? `Frais de mise en relation et service plateforme Altio (${COMMISSION_RATE * 100}%)`
-        : `Prestation de ${serviceType} \u2014 ${missionId ? `Mission n\u00B0${sourceId.substring(0, 8)}` : `Urgence n\u00B0${sourceId.substring(0, 8)}`}`
+        : invoiceType === 'displacement'
+          ? `Déplacement et diagnostic \u2014 ${sourceLabel} n\u00B0${sourceId.substring(0, 8)}`
+          : `Prestation de ${serviceType} \u2014 ${sourceLabel} n\u00B0${sourceId.substring(0, 8)}`
 
     // Badge label
     const badgeLabel = invoiceType === 'commission'
       ? 'Commission plateforme'
       : invoiceType === 'service_fee'
         ? 'Frais de service'
-        : 'Prestation de service (mandat)'
+        : invoiceType === 'displacement'
+          ? 'Déplacement et diagnostic (mandat)'
+          : 'Prestation de service (mandat)'
 
     // Seller detail block
     const sellerDetailHtml = (() => {
-      if (invoiceType === 'service') {
+      if (isMandateInvoice) {
         // F1: Provider is seller (via mandate), show full provider info
         return `
           <div class="party-name">${providerName}</div>
@@ -274,7 +330,7 @@ serve(async (req) => {
     })()
 
     // Legal footer — mandate mention only on F1
-    const mandateMention = invoiceType === 'service'
+    const mandateMention = isMandateInvoice
       ? `<br><em>Facture \u00E9mise par Altio SAS (SIREN : ${altioSiren}) au nom et pour le compte de ${providerName} (SIREN : ${providerSiren}) en vertu d'un mandat de facturation (art. 289-I-2 du CGI).</em><br>`
       : ''
 
@@ -326,7 +382,7 @@ serve(async (req) => {
 
   <div class="parties">
     <div>
-      <div class="party-label">${invoiceType === 'service' ? '\u00C9metteur (prestataire)' : '\u00C9metteur'}</div>
+      <div class="party-label">${isMandateInvoice ? '\u00C9metteur (prestataire)' : '\u00C9metteur'}</div>
       ${sellerDetailHtml}
     </div>
     <div>
@@ -336,14 +392,14 @@ serve(async (req) => {
   </div>
 
   ${(() => {
-    const lieuExecution = invoiceType === 'service' ? propertyAddress : altioAddress
+    const lieuExecution = isMandateInvoice ? propertyAddress : altioAddress
     return lieuExecution ? `<div style="margin-bottom:24px;font-size:12px;color:#64748B">
     <strong>Lieu d'ex\u00E9cution de la prestation :</strong> ${lieuExecution}
   </div>` : ''
   })()}
 
-  ${invoiceType !== 'service' ? `<div style="margin-bottom:16px;font-size:12px;color:#64748B">
-    <strong>R\u00E9f. prestation :</strong> ${missionId ? `Mission n\u00B0${sourceId.substring(0, 8)}` : `Urgence n\u00B0${sourceId.substring(0, 8)}`}
+  ${!isMandateInvoice ? `<div style="margin-bottom:16px;font-size:12px;color:#64748B">
+    <strong>R\u00E9f. prestation :</strong> ${sourceLabel} n\u00B0${sourceId.substring(0, 8)}
   </div>` : ''}
 
   <table>
@@ -449,8 +505,8 @@ serve(async (req) => {
       </ram:SpecifiedLineTradeSettlement>
     </ram:IncludedSupplyChainTradeLineItem>
 
-    <ram:ApplicableHeaderTradeAgreement>${invoiceType !== 'service' ? `
-      <ram:BuyerReference>${missionId ? `Mission-${sourceId.substring(0, 8)}` : `Urgence-${sourceId.substring(0, 8)}`}</ram:BuyerReference>` : ''}
+    <ram:ApplicableHeaderTradeAgreement>${!isMandateInvoice ? `
+      <ram:BuyerReference>${sourceLabel}-${sourceId.substring(0, 8)}</ram:BuyerReference>` : ''}
       <ram:SellerTradeParty>
         <ram:Name>${sellerName}</ram:Name>
         <ram:SpecifiedTaxRegistration>
@@ -510,8 +566,6 @@ serve(async (req) => {
       })
     if (uploadErr) throw new Error(`Storage upload failed: ${uploadErr.message}`)
 
-    const { data: { publicUrl } } = db.storage.from('invoices').getPublicUrl(fileName)
-
     // ── 5b. Store Factur-X XML ───────────────────────────────────────────────
     const xmlFileName = `${year}/${invoiceNumber}.xml`
     const { error: xmlUploadErr } = await db.storage
@@ -522,23 +576,22 @@ serve(async (req) => {
       })
     if (xmlUploadErr) throw new Error(`Factur-X XML upload failed: ${xmlUploadErr.message}`)
 
-    const { data: { publicUrl: publicXmlUrl } } = db.storage.from('invoices').getPublicUrl(xmlFileName)
-
     // ── 6. Insert invoice record ─────────────────────────────────────────────
     let invoiceInsertPayload: Record<string, unknown> = {
       invoice_number:  invoiceNumber,
       mission_id:      missionId ?? null,
       emergency_id:    emergencyId ?? null,
+      intervention_id: interventionId ?? null,
       invoice_type:    invoiceType,
       amount_ht:       amountHt,
       amount_ttc:      amountTtc,
       vat_rate:        vatRate,
       seller_id:       sellerId,
       buyer_id:        buyerId,
-      pdf_url:         publicUrl,
+      pdf_url:         fileName,
       stripe_pi_id:    stripePaymentIntentId ?? null,
       status:          'issued',
-      facturx_url:     publicXmlUrl,
+      facturx_url:     xmlFileName,
     }
 
     let invoice: Record<string, unknown> | null = null
@@ -547,7 +600,7 @@ serve(async (req) => {
     const firstTry = await db.from('invoices').insert(invoiceInsertPayload).select().single()
     if (firstTry.error) {
       const errMsg = firstTry.error.message || ''
-      const fieldsToRetry = ['facturx_url', 'emergency_id']
+      const fieldsToRetry = ['facturx_url', 'emergency_id', 'intervention_id']
       let retryPayload = { ...invoiceInsertPayload }
       let needsRetry = false
       for (const field of fieldsToRetry) {
@@ -572,7 +625,7 @@ serve(async (req) => {
     if (insertErr) throw new Error(`Invoice insert failed: ${insertErr.message}`)
 
     return new Response(
-      JSON.stringify({ success: true, invoice, facturx_url: publicXmlUrl }),
+      JSON.stringify({ success: true, invoice, facturx_url: xmlFileName }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
     )
   } catch (error) {
