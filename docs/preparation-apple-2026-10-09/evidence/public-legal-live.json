@@ -1,0 +1,32 @@
+[
+  {
+    "page": "support",
+    "status": 200,
+    "html": "text/html; charset=utf-8"
+  },
+  {
+    "page": "confidentialite",
+    "status": 200,
+    "html": "text/html; charset=utf-8"
+  },
+  {
+    "page": "cgu",
+    "status": 200,
+    "html": "text/html; charset=utf-8"
+  },
+  {
+    "page": "cgv",
+    "status": 200,
+    "html": "text/html; charset=utf-8"
+  },
+  {
+    "page": "mentions-legales",
+    "status": 200,
+    "html": "text/html; charset=utf-8"
+  },
+  {
+    "page": "mediation",
+    "status": 200,
+    "html": "text/html; charset=utf-8"
+  }
+]

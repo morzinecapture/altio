@@ -1,10 +1,13 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { requireConnectSplit, assertConnectIntent } from '../_shared/connect-split.ts'
+import { connectStripe } from '../_shared/stripe-connect.ts'
 import Stripe from 'npm:stripe@^14.0.0'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { requireAuth } from '../_shared/auth.ts'
 import { assertUUID, ValidationError } from '../_shared/validate.ts'
 import { corsHeaders, handleCors } from '../_shared/cors.ts'
 import { checkRateLimit } from '../_shared/rateLimit.ts'
+import { keepAlive } from '../_shared/background.ts'
 
 const FN = 'validate-intervention'
 
@@ -106,11 +109,16 @@ serve(async (req) => {
     } else if (iv.payment_mode === 'in_app' && paymentIntentId && !isInline) {
       // (a) Capture d'une pré-autorisation existante (parcours devis).
       try {
-        const intent = await stripe.paymentIntents.capture(paymentIntentId)
+        const existing = await stripe.paymentIntents.retrieve(paymentIntentId)
+        if (existing.metadata?.completionFlow === 'v1') throw new Error('Utilisez la validation de l’étape ; capture directe interdite')
+        const { data: payee, error: payeeError } = await db.from('provider_profiles').select('stripe_account_id').eq('provider_id', iv.assigned_provider_id).single()
+        if (payeeError) throw new Error('Vérification du bénéficiaire indisponible')
+        assertConnectIntent(existing, payee?.stripe_account_id)
+        const intent = existing.status === 'succeeded' ? existing : await stripe.paymentIntents.capture(paymentIntentId)
         log('info', 'quote_captured', { pi: paymentIntentId, status: intent.status })
       } catch (err) {
         const e = err as { code?: string; type?: string; message?: string }
-        if (e?.code === 'payment_intent_unexpected_state') {
+        if (e?.code === 'payment_intent_unexpected_state' && (await stripe.paymentIntents.retrieve(paymentIntentId)).status === 'succeeded') {
           log('warn', 'quote_already_captured', { pi: paymentIntentId })
         } else {
           log('error', 'stripe_capture_failed', { err: e?.message, code: e?.code })
@@ -146,22 +154,7 @@ serve(async (req) => {
           },
         }
 
-        if (profile?.stripe_account_id) {
-          try {
-            const account = await stripe.accounts.retrieve(profile.stripe_account_id)
-            if (account.charges_enabled) {
-              params.transfer_data = { destination: profile.stripe_account_id }
-              // Modèle 10% + 10% = 2/11 du TTC en application_fee.
-              params.application_fee_amount = Math.round(amountCents * 2 / 11)
-            } else {
-              params.metadata = { ...params.metadata, needs_manual_transfer: 'true' }
-            }
-          } catch (_e) {
-            params.metadata = { ...params.metadata, needs_manual_transfer: 'true' }
-          }
-        } else {
-          params.metadata = { ...params.metadata, needs_manual_transfer: 'true' }
-        }
+        Object.assign(params, await requireConnectSplit(connectStripe, profile?.stripe_account_id, amountCents))
 
         // Récupérer customer + payment method par défaut pour charger off_session.
         const { data: ownerRow } = await db
@@ -218,16 +211,20 @@ serve(async (req) => {
     const invoiceTypes = iv.payment_mode === 'out_of_app'
       ? ['service_fee', 'commission']
       : ['service', 'service_fee', 'commission']
-    Promise.all(
-      invoiceTypes.map((invoiceType) =>
-        db.functions.invoke('generate-invoice', {
-          body: { interventionId, invoiceType, stripePaymentIntentId: paymentIntentId },
-          headers: invoiceHeaders,
-        })
-      )
-    ).catch((e: unknown) => log('warn', 'invoice_generation_error', {
-      err: e instanceof Error ? e.message : String(e),
-    }))
+    // `keepAlive` : sans ça, l'isolate est arrêté au `respond()` et les factures
+    // ne sont jamais générées (cf. _shared/background.ts).
+    keepAlive(
+      Promise.all(
+        invoiceTypes.map((invoiceType) =>
+          db.functions.invoke('generate-invoice', {
+            body: { interventionId, invoiceType, stripePaymentIntentId: paymentIntentId },
+            headers: invoiceHeaders,
+          })
+        )
+      ).catch((e: unknown) => log('warn', 'invoice_generation_error', {
+        err: e instanceof Error ? e.message : String(e),
+      }))
+    )
 
     // 5. Rappel fiscal Art. 242 bis CGI — ciblé PRESTATAIRE.
     //    Art. 242 bis CGI vise les vendeurs/prestataires (utilisateurs percevant
@@ -240,18 +237,20 @@ serve(async (req) => {
     // Le trigger DB `notify_intervention_status_change` envoie déjà le push
     // "Paiement reçu" quand phase → paid ; on ajoute ici la notice fiscale.
     if (iv.assigned_provider_id) {
-      db.functions.invoke('send-push', {
-        body: {
-          userId: iv.assigned_provider_id,
-          title: '📋 Rappel fiscal',
-          body: "Les revenus perçus via Altio sont imposables et soumis aux cotisations sociales. Consultez impots.gouv.fr.",
-          data: { type: 'fiscal_reminder', interventionId },
-          notifType: 'fiscal_reminder',
-          referenceId: interventionId,
-        },
-      }).catch((e: unknown) => log('warn', 'fiscal_push_failed', {
-        err: e instanceof Error ? e.message : String(e),
-      }))
+      keepAlive(
+        db.functions.invoke('send-push', {
+          body: {
+            userId: iv.assigned_provider_id,
+            title: '📋 Rappel fiscal',
+            body: "Les revenus perçus via Altio sont imposables et soumis aux cotisations sociales. Consultez impots.gouv.fr.",
+            data: { type: 'fiscal_reminder', interventionId },
+            notifType: 'fiscal_reminder',
+            referenceId: interventionId,
+          },
+        }).catch((e: unknown) => log('warn', 'fiscal_push_failed', {
+          err: e instanceof Error ? e.message : String(e),
+        }))
+      )
     }
 
     return respond({ success: true, data: { intervention: updatedIv } })

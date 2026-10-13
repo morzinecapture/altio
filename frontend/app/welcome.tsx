@@ -12,7 +12,7 @@ import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { COLORS, FONTS, SPACING, RADIUS, SHADOWS } from '../src/theme';
+import { COLORS, FONTS, SPACING, RADIUS, SHADOWS, GRADIENT } from '../src/theme';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../src/lib/supabase';
 
@@ -25,8 +25,8 @@ const SLIDE_CONFIGS = [
     badgeKey: 'auth.slide1_badge',
     titleKey: 'auth.slide1_title',
     subtitleKey: 'auth.slide1_subtitle',
-    gradient: ['#4A6CF7', '#6C63FF'] as const,
-    softBg: '#EEF2FF',
+    gradient: GRADIENT.brandButton,
+    softBg: COLORS.infoSoft,
     accentColor: COLORS.brandPrimary,
     decorItems: [
       { size: 120, top: 30, right: -30, opacity: 0.08 },
@@ -40,8 +40,8 @@ const SLIDE_CONFIGS = [
     badgeKey: 'auth.slide2_badge',
     titleKey: 'auth.slide2_title',
     subtitleKey: 'auth.slide2_subtitle',
-    gradient: ['#06D6A0', '#00B4D8'] as const,
-    softBg: '#E6FBF3',
+    gradient: GRADIENT.successButton,
+    softBg: COLORS.successSoft,
     accentColor: COLORS.success,
     decorItems: [
       { size: 100, top: 20, left: -20, opacity: 0.1 },
@@ -55,8 +55,8 @@ const SLIDE_CONFIGS = [
     badgeKey: 'auth.slide3_badge',
     titleKey: 'auth.slide3_title',
     subtitleKey: 'auth.slide3_subtitle',
-    gradient: ['#FF6B6B', '#FF8A65'] as const,
-    softBg: '#FFF0F0',
+    gradient: GRADIENT.urgencyButton,
+    softBg: COLORS.urgencySoft,
     accentColor: COLORS.urgency,
     decorItems: [
       { size: 110, bottom: -10, right: -30, opacity: 0.1 },
@@ -177,7 +177,7 @@ export default function WelcomeScreen() {
       <View style={styles.header}>
         <View style={styles.logoRow}>
           <LinearGradient
-            colors={['#4A6CF7', '#6C63FF']}
+            colors={GRADIENT.brandButton}
             style={styles.logoCircle}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}

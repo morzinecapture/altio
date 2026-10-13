@@ -54,6 +54,7 @@ export default function OnboardingProvider() {
   const [step, setStep] = useState(0);
   const [specialties, setSpecialties] = useState<string[]>([]);
   const [companyType, setCompanyType] = useState('');
+  const [vatExempt, setVatExempt] = useState<boolean | null>(null);
   const [baseAddress, setBaseAddress] = useState('');
   const [radiusKm, setRadiusKm] = useState(20);
   const [availability, setAvailability] = useState<string[]>([]);
@@ -106,6 +107,7 @@ export default function OnboardingProvider() {
   };
 
   const handleFinish = async () => {
+    if (vatExempt === null || !cguAccepted || !mandateAccepted || !dsaCertification) return;
     setSaving(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -127,6 +129,7 @@ export default function OnboardingProvider() {
       await completeProviderOnboarding({
         specialties,
         company_type:       companyType,
+        is_vat_exempt: vatExempt,
         radius_km:          radiusKm,
         weekly_availability: availability,
         ...(siren.trim() ? { siren: siren.replace(/\s/g, '') } : {}),
@@ -443,6 +446,16 @@ export default function OnboardingProvider() {
             <Text style={styles.stepSub}>{t('onboarding.provider.step_legal_sub', { defaultValue: 'Pour exercer sur Altio, veuillez accepter les conditions suivantes.' })}</Text>
 
             {/* Mandat de facturation */}
+            <Text style={styles.fieldLabel}>Votre régime de TVA</Text>
+            <Text style={styles.stepSub}>Le statut de micro-entrepreneur ne suffit pas à déterminer votre TVA. Confirmez votre régime fiscal actuel.</Text>
+            {([true, false] as const).map(exempt => (
+              <TouchableOpacity key={String(exempt)} style={styles.checkboxRow} onPress={() => setVatExempt(exempt)} accessibilityRole="radio" accessibilityState={{ checked: vatExempt === exempt }}>
+                <View style={[styles.checkbox, vatExempt === exempt && styles.checkboxChecked]}>
+                  {vatExempt === exempt && <Ionicons name="checkmark" size={14} color={COLORS.textInverse} />}
+                </View>
+                <Text style={styles.checkboxLabel}>{exempt ? 'Je bénéficie de la franchise en base de TVA' : 'Je facture la TVA'}</Text>
+              </TouchableOpacity>
+            ))}
             <View style={styles.legalCard}>
               <View style={styles.legalIconWrap}>
                 <Ionicons name="document-text-outline" size={24} color={COLORS.info} />
@@ -513,9 +526,9 @@ export default function OnboardingProvider() {
             </View>
 
             <TouchableOpacity
-              style={[styles.nextBtn, (!cguAccepted || !mandateAccepted || !dsaCertification) && styles.nextBtnDisabled]}
+              style={[styles.nextBtn, (vatExempt === null || !cguAccepted || !mandateAccepted || !dsaCertification) && styles.nextBtnDisabled]}
               onPress={handleFinish}
-              disabled={saving || !cguAccepted || !mandateAccepted || !dsaCertification}
+              disabled={saving || vatExempt === null || !cguAccepted || !mandateAccepted || !dsaCertification}
             >
               {saving ? (
                 <ActivityIndicator color={COLORS.textInverse} />
@@ -558,7 +571,7 @@ const styles = StyleSheet.create({
   specialtyLabelSelected: { color: COLORS.textInverse },
   checkDot: { position: 'absolute', top: 6, right: 6, width: 16, height: 16, borderRadius: 8, backgroundColor: COLORS.success, justifyContent: 'center', alignItems: 'center' },
   typeCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.paper, padding: SPACING.lg, borderRadius: RADIUS.lg, marginBottom: SPACING.md, borderWidth: 2, borderColor: COLORS.border, ...SHADOWS.card, gap: SPACING.md },
-  typeCardSelected: { borderColor: COLORS.brandPrimary, backgroundColor: '#F8FAFC' },
+  typeCardSelected: { borderColor: COLORS.brandPrimary, backgroundColor: COLORS.background },
   typeLabel: { ...FONTS.bodySmall, color: COLORS.textPrimary, fontWeight: '700', marginBottom: 2 },
   typeLabelSelected: { color: COLORS.brandPrimary },
   typeDesc: { ...FONTS.bodySmall, color: COLORS.textSecondary },

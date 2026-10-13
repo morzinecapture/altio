@@ -4,6 +4,9 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { assertString, assertUUID, assertPositiveInt, ValidationError } from '../_shared/validate.ts'
 import { corsHeaders, handleCors } from '../_shared/cors.ts'
 import { requireAuth } from '../_shared/auth.ts'
+import { keepAlive } from '../_shared/background.ts'
+import { verifyCaptureOrder } from '../_shared/capture-order.ts'
+import { assertConnectIntent } from '../_shared/connect-split.ts'
 
 const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') as string, {
     apiVersion: '2022-11-15',
@@ -26,6 +29,7 @@ serve(async (req) => {
         }
         const missionId = body.missionId ? assertUUID(body.missionId, 'missionId') : undefined
         const emergencyId = body.emergencyId ? assertUUID(body.emergencyId, 'emergencyId') : undefined
+        if (Boolean(missionId) === Boolean(emergencyId)) throw new ValidationError('Une seule mission ou urgence est obligatoire')
         const amountToCapture = body.amountToCapture ? assertPositiveInt(body.amountToCapture, 'amountToCapture') : undefined
 
         // ── Create service_role client for ownership check + later DB ops ──
@@ -33,15 +37,18 @@ serve(async (req) => {
         const supabaseService = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') as string
         const db = createClient(supabaseUrl, supabaseService)
 
-        // ── Ownership verification (owner OR assigned provider) ──
+        let source: Record<string, unknown>;
+        // Ownership, business state and Stripe metadata must all agree.
         if (missionId) {
-            const { data: mData, error: mErr } = await db.from('missions').select('owner_id, assigned_provider_id').eq('id', missionId).single()
+            const { data: mData, error: mErr } = await db.from('missions').select('*').eq('id', missionId).single()
             if (mErr || !mData) throw new Error("Mission introuvable")
             if (mData.owner_id !== user.id && mData.assigned_provider_id !== user.id) throw new Error("Vous n'êtes pas autorisé à capturer ce paiement")
+            source = mData;
         } else if (emergencyId) {
-            const { data: eData, error: eErr } = await db.from('emergency_requests').select('owner_id, accepted_provider_id').eq('id', emergencyId).single()
+            const { data: eData, error: eErr } = await db.from('emergency_requests').select('*').eq('id', emergencyId).single()
             if (eErr || !eData) throw new Error("Urgence introuvable")
             if (eData.owner_id !== user.id && eData.accepted_provider_id !== user.id) throw new Error("Vous n'êtes pas autorisé à capturer ce paiement")
+            source = eData;
         }
 
         const captureOptions: Record<string, unknown> = {}
@@ -49,7 +56,19 @@ serve(async (req) => {
             captureOptions.amount_to_capture = Math.round(amountToCapture)
         }
 
-        const intent = await stripe.paymentIntents.capture(paymentIntentId, captureOptions)
+        const existingIntent = await stripe.paymentIntents.retrieve(paymentIntentId)
+        if (existingIntent.metadata?.completionFlow === 'v1') throw new ValidationError('Utilisez la validation de l’étape ; capture directe interdite')
+        verifyCaptureOrder(user.id, source!, existingIntent, { missionId, emergencyId }, amountToCapture)
+        const { data: payee, error: payeeError } = await db.from('provider_profiles').select('stripe_account_id')
+          .eq('provider_id', source!.assigned_provider_id || source!.accepted_provider_id).single()
+        if (payeeError) throw new Error('Vérification du bénéficiaire indisponible')
+        assertConnectIntent(existingIntent, payee?.stripe_account_id)
+        if (existingIntent.status === 'succeeded') {
+            return new Response(JSON.stringify({ success: true, alreadyCaptured: true }), {
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200,
+            })
+        }
+        const intent = await stripe.paymentIntents.capture(paymentIntentId, captureOptions, { idempotencyKey: `altio-capture:${paymentIntentId}` })
 
         // ── Trigger invoice generation after successful capture ────────────────
         const invoiceSourceId = missionId || emergencyId
@@ -65,20 +84,23 @@ serve(async (req) => {
                 : { emergencyId, stripePaymentIntentId: paymentIntentId }
             // Generate 3 invoices (fire-and-forget)
             const invoiceHeaders = { 'x-service-key': Deno.env.get('INTERNAL_SERVICE_KEY') || '' }
-            Promise.all([
-                db.functions.invoke('generate-invoice', {
-                    body: { ...invoiceBody, invoiceType: 'service' },
-                    headers: invoiceHeaders,
-                }),
-                db.functions.invoke('generate-invoice', {
-                    body: { ...invoiceBody, invoiceType: 'service_fee' },
-                    headers: invoiceHeaders,
-                }),
-                db.functions.invoke('generate-invoice', {
-                    body: { ...invoiceBody, invoiceType: 'commission' },
-                    headers: invoiceHeaders,
-                }),
-            ]).catch(() => console.error('[capture-payment] Invoice generation error'))
+            keepAlive(
+                Promise.all([
+                    db.functions.invoke('generate-invoice', {
+                        body: { ...invoiceBody, invoiceType: 'service' },
+                        headers: invoiceHeaders,
+                    }),
+                    db.functions.invoke('generate-invoice', {
+                        body: { ...invoiceBody, invoiceType: 'service_fee' },
+                        headers: invoiceHeaders,
+                    }),
+                    db.functions.invoke('generate-invoice', {
+                        body: { ...invoiceBody, invoiceType: 'commission' },
+                        headers: invoiceHeaders,
+                    }),
+                ]),
+                'Invoice generation error',
+            )
 
             // ── Art. 242 bis CGI — Notify provider of fiscal/social obligations ──
             // Obligation: inform each provider at every transaction that revenue
@@ -94,32 +116,41 @@ serve(async (req) => {
 
             if (providerId) {
                 // DB notification
-                db.from('notifications').insert({
-                    user_id: providerId,
-                    type: 'fiscal_reminder',
-                    title: 'Rappel obligations fiscales',
-                    body: 'Les revenus perçus via Altio sont soumis à l\'impôt sur le revenu et aux cotisations sociales. Plus d\'informations : impots.gouv.fr et urssaf.fr',
-                }).then(() => {}).catch(() => console.error('[capture-payment] Fiscal notification error'))
+                keepAlive(
+                    db.from('notifications').insert({
+                        user_id: providerId,
+                        type: 'fiscal_reminder',
+                        title: 'Rappel obligations fiscales',
+                        body: 'Les revenus perçus via Altio sont soumis à l\'impôt sur le revenu et aux cotisations sociales. Plus d\'informations : impots.gouv.fr et urssaf.fr',
+                    }).then(() => {}),
+                    'Fiscal notification error',
+                )
 
                 // Push notification (Art. 242 bis CGI — 50 000€ fine if missing)
-                db.functions.invoke('send-push', {
-                    body: {
-                        userId: providerId,
-                        title: '📋 Rappel fiscal',
-                        body: 'Les revenus perçus via Altio sont imposables et soumis aux cotisations sociales. Consultez impots.gouv.fr pour plus d\'informations.',
-                        data: { type: 'fiscal_reminder' },
-                    },
-                }).catch(() => {})
+                keepAlive(
+                    db.functions.invoke('send-push', {
+                        body: {
+                            userId: providerId,
+                            title: '📋 Rappel fiscal',
+                            body: 'Les revenus perçus via Altio sont imposables et soumis aux cotisations sociales. Consultez impots.gouv.fr pour plus d\'informations.',
+                            data: { type: 'fiscal_reminder' },
+                        },
+                    }),
+                    'Fiscal push error',
+                )
 
                 // Notify provider that an invoice was issued in their name (mandate)
-                db.functions.invoke('send-push', {
-                    body: {
-                        userId: providerId,
-                        title: '🧾 Facture émise en votre nom',
-                        body: 'Une facture de prestation a été émise par Altio en votre nom (mandat de facturation). Consultez vos factures dans l\'app.',
-                        data: { type: 'invoice_mandate', missionId, emergencyId },
-                    },
-                }).catch(() => {})
+                keepAlive(
+                    db.functions.invoke('send-push', {
+                        body: {
+                            userId: providerId,
+                            title: '🧾 Facture émise en votre nom',
+                            body: 'Une facture de prestation a été émise par Altio en votre nom (mandat de facturation). Consultez vos factures dans l\'app.',
+                            data: { type: 'invoice_mandate', missionId, emergencyId },
+                        },
+                    }),
+                    'Invoice mandate push error',
+                )
             }
         }
 

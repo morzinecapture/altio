@@ -1,0 +1,68 @@
+{
+  "checkedAt": "2026-10-09",
+  "productionDependencies": {
+    "info": 0,
+    "low": 0,
+    "moderate": 20,
+    "high": 25,
+    "critical": 0,
+    "total": 45
+  },
+  "allDependencies": {
+    "info": 0,
+    "low": 0,
+    "moderate": 20,
+    "high": 45,
+    "critical": 0,
+    "total": 65
+  },
+  "countsAreDependencyNodesNotDistinctFlaws": true,
+  "families": [
+    {
+      "package": "braces",
+      "version": "3.0.3",
+      "path": "micromatch → outils de recherche et compilation",
+      "risk": "Déni de service par motifs profondément imbriqués.",
+      "assessment": "Aucun import depuis le code mobile propre à Altio trouvé. Les motifs de compilation restent une surface à contrôler ; cela ne prouve pas l’absence du module dans toute distribution.",
+      "decision": "Pas de correctif compatible publié identifié ; ne pas accepter de motifs externes dans la chaîne de compilation."
+    },
+    {
+      "package": "image-size",
+      "version": "1.2.1",
+      "path": "Metro → lecture des images à la compilation",
+      "risk": "Boucle infinie sur certaines images JXL/HEIF/ICNS malformées.",
+      "assessment": "Metro transmet aussi un chemin de fichier ; la version 2 corrigée change cette API. Les photos de missions ne sont pas utilisées comme ressources du compilateur.",
+      "decision": "Ne pas forcer la version 2 sans adapter et tester Metro. Ressources de compilation à conserver sous contrôle."
+    },
+    {
+      "package": "node-forge",
+      "version": "1.4.0",
+      "path": "Expo CLI / code-signing-certificates",
+      "risk": "Validation RSA PKCS#1 v1.5 insuffisante.",
+      "assessment": "Des vérifications de certificats/signatures existent réellement dans cet outil. Pas d’import direct dans le code mobile Altio examiné.",
+      "decision": "Non corrigé en amont dans la version identifiée ; ne pas confondre l’outil JavaScript et la signature native Apple. Revue nécessaire avant usage de cette chaîne de signature."
+    },
+    {
+      "package": "sprintf-js",
+      "version": "1.0.3",
+      "path": "argparse → outils Node",
+      "risk": "Déni de service avec précision de format non bornée.",
+      "assessment": "Dépendance de parsing des commandes ; aucun import Altio mobile trouvé.",
+      "decision": "Revue des entrées d’outillage ; ne pas forcer une disparition artificielle du signalement."
+    },
+    {
+      "package": "uuid",
+      "version": "3.4.0 / 7.0.3",
+      "path": "@expo/ngrok / xcode",
+      "risk": "Défaut de bornage de tampon dans v3/v5/v6.",
+      "assessment": "Les appels directs inspectés dans ngrok et xcode utilisent v4, qui n’est pas la fonction visée.",
+      "decision": "Exposition de ces appels réduite ; conserver le suivi amont. Pas de remplacement majeur forcé."
+    }
+  ],
+  "fixedInThisContinuation": [
+    "PostCSS 8.5.29",
+    "Handlebars 4.7.10",
+    "decode-uri-component 0.5.0 adapté seulement à l’export CommonJS ; provenance et test de compatibilité conservés"
+  ],
+  "limits": "Analyse statique des dépendances et de quelques appels. Ne constitue ni un audit mobile indépendant ni une preuve universelle d’absence d’exposition. Alertes maintenues dans le registre de publication."
+}

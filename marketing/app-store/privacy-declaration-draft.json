@@ -1,0 +1,158 @@
+{
+  "status": "DRAFT — vérifier les réglages effectifs avant déclaration Apple",
+  "readyToSubmit": false,
+  "source": "https://developer.apple.com/help/app-store-connect/manage-app-information/manage-app-privacy/",
+  "observedDataCandidates": [
+    {
+      "appleCategory": "Contact Info",
+      "data": [
+        "Name",
+        "Email Address",
+        "Phone Number",
+        "Physical Address"
+      ],
+      "purpose": "App Functionality",
+      "linkedToUser": true,
+      "evidence": [
+        "users",
+        "properties",
+        "invoice parties"
+      ]
+    },
+    {
+      "appleCategory": "User Content",
+      "data": [
+        "Photos or Videos",
+        "Emails or Text Messages",
+        "Other User Content"
+      ],
+      "purpose": "App Functionality",
+      "linkedToUser": true,
+      "evidence": [
+        "mission photos",
+        "messages",
+        "reviews",
+        "calendar events"
+      ]
+    },
+    {
+      "appleCategory": "Identifiers",
+      "data": [
+        "User ID",
+        "Device ID à qualifier pour le jeton de notification"
+      ],
+      "purpose": "App Functionality",
+      "linkedToUser": true
+    },
+    {
+      "appleCategory": "Location",
+      "data": [
+        "Precise Location"
+      ],
+      "purpose": "App Functionality",
+      "linkedToUser": true,
+      "condition": "Fonctions de localisation et coordonnées de profils/logements ; vérifier précision transmise et permissions."
+    },
+    {
+      "appleCategory": "Purchases / Financial Info",
+      "data": [
+        "Purchase History",
+        "Payment Info via Stripe à examiner selon les définitions Apple"
+      ],
+      "purpose": "App Functionality",
+      "linkedToUser": true,
+      "condition": "Inclure le traitement des partenaires ; l’absence de numéro de carte en base Altio ne suffit pas à répondre aucune donnée financière."
+    },
+    {
+      "appleCategory": "Diagnostics",
+      "data": [
+        "Crash Data",
+        "Performance Data"
+      ],
+      "purpose": "App Functionality / Analytics à qualifier",
+      "linkedToUser": "À vérifier sur un événement expurgé",
+      "condition": "Sentry activé uniquement si DSN configuré ; échantillonnage de traces configuré à 20 % en production."
+    }
+  ],
+  "tracking": "Aucun usage publicitaire observé dans le code examiné. Ne pas déclarer l’absence de suivi sans revue des partenaires et de la configuration effective.",
+  "privacyURL": null,
+  "supportURL": null,
+  "screenshots": {
+    "requiredFinalFiles": [],
+    "plannedPixels": [
+      1320,
+      2868
+    ],
+    "source": "https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications/"
+  },
+  "declarationsRequiringAccountHolder": [
+    "Identité et statut de professionnel",
+    "Coordonnées affichées dans l’Union européenne",
+    "Contrats Apple",
+    "Données, contenu utilisateur et classification selon le binaire final",
+    "Chiffrement exempté selon les usages réels"
+  ],
+  "verification20261009": {
+    "source": "https://developer.apple.com/app-store/app-privacy-details/",
+    "paymentInfo": {
+      "decision": "Include in draft",
+      "reason": "Stripe PaymentSheet is presented inside the app; the Apple exclusion for entry outside the app does not apply to this native flow. Partner collection must be included.",
+      "evidence": [
+        "frontend/app/quote/[id].tsx:140-148",
+        "frontend/app/emergency.tsx:386-393"
+      ]
+    },
+    "otherFinancialInfo": {
+      "reason": "Provider revenue computed from settled invoice amounts",
+      "evidence": [
+        "frontend/src/api/profile.ts:228-273"
+      ]
+    },
+    "preciseLocation": {
+      "reason": "Provider base address geocoded and saved as latitude/longitude",
+      "evidence": [
+        "frontend/app/onboarding-provider.tsx:117-120"
+      ]
+    },
+    "customerSupport": {
+      "reason": "In-app complaints stored with user description",
+      "evidence": [
+        "frontend/app/reclamation.tsx:174-182"
+      ]
+    },
+    "pending": [
+      "Device identifier classification for push token and SDKs",
+      "Diagnostics and any usage data in final build",
+      "Final per-category purposes, identity linkage and tracking review"
+    ]
+  },
+  "remoteStatus": "2026-10-11: 15 categories saved; 14 configured with purposes, linkage and no tracking. Purchase History remains unconfigured: native Safari merged accessibility text cannot activate form. Not published.",
+  "remoteCategories": [
+    "Payment Info",
+    "Other Financial Info",
+    "Precise Location",
+    "Physical Address",
+    "Email Address",
+    "Name",
+    "Phone Number",
+    "Emails or Text Messages",
+    "Photos or Videos",
+    "Customer Support",
+    "Other User Content",
+    "User ID",
+    "Purchase History",
+    "Product Interaction",
+    "Device ID"
+  ],
+  "existingRemotePrivacyURL": "https://morzinecapture.github.io/altio-legal/",
+  "existingRemotePrivacyURLVerification": "Web tool could not access it; availability and contents not verified.",
+  "sdkReview20261011": {
+    "evidence": "docs/preparation-apple-2026-10-09/evidence/sdk-privacy-2026-10-11.json",
+    "paymentInfo": "StripePaymentSheet manifest explicitly declares payment info, linked to user, app functionality, no tracking.",
+    "productInteraction": "Saved in Apple draft: App Functionality + Analytics, linked to user, no tracking; supported by Stripe manifests.",
+    "diagnostics": "Sentry manifest declares crash, performance and other diagnostics. Actual app passes some user IDs in extras: linkage cannot be assumed false from SDK manifest alone.",
+    "remaining": "Final DSN/configuration and notification device identifier review",
+    "deviceIdentifier": "Expo push installation token stored on user record: Device ID saved for App Functionality, linked, no tracking.",
+    "build20Sentry": "No DSN in EAS preview environment or testflight profile; Sentry initialization exits without DSN. Reassess production separately."
+  }
+}

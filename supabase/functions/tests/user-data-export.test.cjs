@@ -1,0 +1,7 @@
+const {test}=require('node:test'),assert=require('node:assert/strict');
+const {exportUserData}=require('../_shared/user-data-export.ts');
+const schema=require('../../tests/fixtures/account-deletion-schema.json');
+const id='11111111-1111-4111-8111-111111111111';
+function mock(fail=false){const calls=[];return {calls,from(table){assert.ok(schema.columns.some(c=>c.table===table));const call={table};calls.push(call);const q={select(fields){call.fields=fields;if(fields!=='*')for(const f of fields.split(','))assert.ok(schema.columns.some(c=>c.table===table&&c.name===f),`${table}.${f}`);return q},eq(field){assert.ok(schema.columns.some(c=>c.table===table&&c.name===field));return q},or(expr){for(const s of expr.split(','))assert.ok(schema.columns.some(c=>c.table===table&&c.name===s.split('.')[0]));return q},order(){return q},range(start){call.start=start;return Promise.resolve(fail?{error:{message:'secret query'}}:{data:table==='messages'&&start===0?Array(500).fill({content:'fixture'}):[]})}};return q}}}
+test('export uses actual schema and retrieves all pages without OAuth credentials',async()=>{const db=mock();const result=await exportUserData(db,id);assert.equal(result.data.messages.length,500);assert.ok(db.calls.some(c=>c.table==='messages'&&c.start===500));assert.doesNotMatch(db.calls.find(c=>c.table==='users').fields,/token|admin|suspended/);});
+test('query error rejects entire export instead of silently losing data',async()=>{await assert.rejects(exportUserData(mock(true),id),/temporarily unavailable/)});

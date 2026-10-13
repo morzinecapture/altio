@@ -1,0 +1,10 @@
+{
+  ".env": {
+    "stripe_mode": "test",
+    "sentry_dsn_present": false
+  },
+  ".env.production": {
+    "stripe_mode": "test",
+    "sentry_dsn_present": true
+  }
+}

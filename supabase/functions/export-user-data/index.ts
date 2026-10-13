@@ -1,3 +1,5 @@
+import { exportUserData } from '../_shared/user-data-export.ts'
+import { requireActiveSession } from '../_shared/active-session.ts'
 // RGPD — Droit a la portabilite des donnees (art. 20 RGPD)
 // L'utilisateur peut exporter l'ensemble de ses donnees personnelles.
 // Delai legal de reponse : 1 mois maximum (art. 12 RGPD).
@@ -12,6 +14,7 @@ serve(async (req) => {
   const corsResponse = handleCors(req);
   if (corsResponse) return corsResponse;
 
+  if(req.method !== 'POST') return new Response(null,{status:405,headers:corsHeaders});
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL') as string
     const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY') as string
@@ -33,64 +36,22 @@ serve(async (req) => {
     // Use service role to fetch data across all tables (bypasses RLS)
     const db = createClient(supabaseUrl, supabaseServiceKey)
 
-    // Fetch all user data in parallel
-    const [
-      profileResult,
-      propertiesResult,
-      missionsResult,
-      quotesResult,
-      invoicesResult,
-      reclamationsResult,
-      reviewsResult,
-    ] = await Promise.all([
-      // Profile
-      db.from('profiles').select('*').eq('id', userId).single(),
+    await requireActiveSession(db, user.id, token)
 
-      // Properties owned by the user
-      db.from('properties').select('*').eq('owner_id', userId),
-
-      // Missions created by or assigned to the user
-      db.from('missions').select('*').or(`owner_id.eq.${userId},provider_id.eq.${userId}`),
-
-      // Quotes submitted by or received by the user
-      db.from('mission_quotes').select('*').or(`provider_id.eq.${userId},owner_id.eq.${userId}`),
-
-      // Invoices where the user is seller or buyer
-      db.from('invoices').select('*').or(`seller_id.eq.${userId},buyer_id.eq.${userId}`),
-
-      // Reclamations filed by or concerning the user
-      db.from('reclamations').select('*').or(`user_id.eq.${userId},owner_id.eq.${userId},provider_id.eq.${userId}`),
-
-      // Reviews given by or received by the user
-      db.from('reviews').select('*').or(`reviewer_id.eq.${userId},reviewee_id.eq.${userId}`),
-    ])
-
-    const exportData = {
-      exported_at: new Date().toISOString(),
-      user_id: userId,
-      data: {
-        profile: profileResult.data ?? null,
-        properties: propertiesResult.data ?? [],
-        missions: missionsResult.data ?? [],
-        quotes: quotesResult.data ?? [],
-        invoices: invoicesResult.data ?? [],
-        reclamations: reclamationsResult.data ?? [],
-        reviews: reviewsResult.data ?? [],
-      },
-    }
+    const exportData = await exportUserData(db, userId)
 
     return new Response(
       JSON.stringify(exportData),
       {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
         status: 200,
       }
     )
   } catch (error) {
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: 'Export indisponible. Reconnectez-vous puis réessayez.' }),
       {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
         status: 400,
       }
     )

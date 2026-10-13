@@ -70,18 +70,20 @@ export default function AddPropertyScreen() {
       console.error('[AddProperty] SUCCESS');
 
       if (prop?.id && photoAssets.length > 0) {
-        const photoUrls: string[] = [];
-        for (const asset of photoAssets) {
-          try {
-            const url = await uploadPropertyPhoto(prop.id, asset.uri);
-            photoUrls.push(url);
-          } catch (e) {
-            console.error('[AddProperty] photo upload error:', e);
-          }
+        let photoUrls: string[];
+        try {
+          photoUrls = await Promise.all(
+            photoAssets.map(asset => uploadPropertyPhoto(prop.id, asset.uri)),
+          );
+        } catch (e) {
+          console.error('[AddProperty] photo upload error:', e);
+          Alert.alert(
+            t('owner.properties.photo_upload_failed_title'),
+            t('owner.properties.photo_upload_failed_after_create'),
+          );
+          return;
         }
-        if (photoUrls.length > 0) {
-          await updateProperty(prop.id, { photos: photoUrls });
-        }
+        await updateProperty(prop.id, { photos: photoUrls });
       }
 
       Alert.alert(t('owner.properties.added'), '', [{ text: 'OK', onPress: () => router.back() }]);

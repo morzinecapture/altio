@@ -1,0 +1,1 @@
+location,saisonnière,ménage,entretien,plomberie,logement,prestataire,planning,chalet

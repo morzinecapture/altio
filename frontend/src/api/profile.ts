@@ -1,5 +1,7 @@
-import { supabase, checkError, unwrapJoin, captureError } from './_client';
+import { supabase, checkError, unwrapJoin } from './_client';
 import type { UpdateProviderProfilePayload, FunctionsInvokeError } from './_client';
+import { priceFromTtc, providerVatRate } from '../utils/commission';
+import { quotePrice } from '../utils/quotePrice';
 
 // ─── Geo helpers ──────────────────────────────────────────────────────────────
 
@@ -73,8 +75,8 @@ export const getProfile = async () => {
 
 export const getProviders = async (specialty?: string) => {
   let query = supabase
-    .from('provider_profiles')
-    .select('*, user:users!inner(id, name, picture, role)');
+    .from('public_provider_profiles')
+    .select('*, user:public_profiles!inner(id, name, picture, role)');
 
   if (specialty) {
     query = query.contains('specialties', [specialty]);
@@ -133,6 +135,7 @@ export const completeOwnerOnboarding = async (data: {
 export const completeProviderOnboarding = async (data: {
   specialties: string[];
   company_type: string;
+  is_vat_exempt?: boolean;
   radius_km: number;
   weekly_availability: string[];
   siren?: string;
@@ -146,6 +149,7 @@ export const completeProviderOnboarding = async (data: {
   dsa_certified_at?: string;
   notify_new_missions_in_zone?: boolean;
 }) => {
+  if (typeof data.is_vat_exempt !== 'boolean') throw new Error('Veuillez confirmer votre régime de TVA.');
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.user) throw new Error('Not authenticated');
   // Update user + legal acceptance timestamps
@@ -153,7 +157,7 @@ export const completeProviderOnboarding = async (data: {
   const userUpdate: Record<string, unknown> = {
     onboarding_completed: true,
     is_auto_entrepreneur: isAutoEntrepreneur,
-    is_vat_exempt: isAutoEntrepreneur,
+    is_vat_exempt: data.is_vat_exempt === true,
   };
   if (data.cgu_accepted_at) userUpdate.cgu_accepted_at = data.cgu_accepted_at;
   if (data.mandate_accepted_at) userUpdate.mandate_accepted_at = data.mandate_accepted_at;
@@ -213,8 +217,8 @@ export const toggleAvailability = async () => {
 
 export const getProviderProfile = async (providerId: string) => {
   const [userRes, profileRes] = await Promise.all([
-    supabase.from('users').select('name, picture').eq('id', providerId).single(),
-    supabase.from('provider_profiles').select('rating, total_reviews, specialties, bio, zone').eq('provider_id', providerId).single()
+    supabase.from('public_profiles').select('name, picture').eq('id', providerId).single(),
+    supabase.from('public_provider_profiles').select('rating, total_reviews, specialties, bio, zone').eq('provider_id', providerId).single()
   ]);
 
   return {
@@ -227,34 +231,35 @@ export const getProviderStats = async () => {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.user) throw new Error('Not authenticated');
   const uid = session.user.id;
+  // The current regular-mission flow ends at `paid`. Keep `completed` for
+  // legacy rows created before the payment state machine was introduced.
+  const settledMissionStatuses = ['paid', 'completed'];
 
-  const [profileRes, completedRes, inProgressRes, applicationsRes, recentRes, earningsRes,
-    emCompletedRes, emInProgressRes, emEarningsRes, emQuotesRes, reviewsRes] = await Promise.all([
-      supabase.from('provider_profiles').select('total_earnings, total_reviews').eq('provider_id', uid).single(),
-      supabase.from('missions').select('id', { count: 'exact', head: true }).eq('assigned_provider_id', uid).eq('status', 'completed'),
+  const [completedRes, inProgressRes, applicationsRes, recentRes, invoiceRevenueRes,
+    emCompletedRes, emInProgressRes, emEarningsRes, emQuotesRes, reviewsRes, vatRes] = await Promise.all([
+      supabase.from('missions').select('id', { count: 'exact', head: true }).eq('assigned_provider_id', uid).in('status', settledMissionStatuses),
       supabase.from('missions').select('id', { count: 'exact', head: true }).eq('assigned_provider_id', uid).in('status', ['assigned', 'in_progress']),
       supabase.from('mission_applications').select('id', { count: 'exact', head: true }).eq('provider_id', uid).eq('status', 'pending'),
       supabase.from('missions')
         .select('id, mission_type, description, fixed_rate, completed_at, property:properties(name)')
         .eq('assigned_provider_id', uid)
-        .eq('status', 'completed')
+        .in('status', settledMissionStatuses)
         .order('completed_at', { ascending: false })
         .limit(5),
-      supabase.from('missions')
-        .select('fixed_rate')
-        .eq('assigned_provider_id', uid)
-        .eq('status', 'completed'),
+      supabase.from('invoices')
+        .select('invoice_type, amount_ttc, seller_id, buyer_id, status')
+        .or(`seller_id.eq.${uid},buyer_id.eq.${uid}`)
+        .neq('status', 'cancelled'),
       supabase.from('emergency_requests').select('id', { count: 'exact', head: true }).eq('accepted_provider_id', uid).eq('status', 'completed'),
       supabase.from('emergency_requests').select('id', { count: 'exact', head: true }).eq('accepted_provider_id', uid).neq('status', 'bids_open').neq('status', 'completed'),
       supabase.from('emergency_requests').select('displacement_fee, diagnostic_fee, completed_at, id, service_type, description, property:properties(name)').eq('accepted_provider_id', uid).eq('status', 'completed').order('completed_at', { ascending: false }).limit(5),
-      supabase.from('mission_quotes').select('repair_cost, emergency_request_id, emergency:emergency_requests!inner(status)').eq('provider_id', uid).eq('status', 'accepted').eq('emergency.status', 'completed'),
+      supabase.from('mission_quotes').select('repair_cost, tva_rate, is_vat_exempt, emergency_request_id, line_items:quote_line_items(quantity, unit_price_ht, unit_price), emergency:emergency_requests!inner(status)').eq('provider_id', uid).eq('status', 'accepted').eq('emergency.status', 'completed'),
       supabase.from('reviews').select('rating').eq('provider_id', uid),
+      supabase.from('users').select('is_vat_exempt').eq('id', uid).maybeSingle(),
     ]);
 
-  const COMMISSION_RATE = 0.10;
-  const missionsEarnings = (earningsRes.data || []).reduce((sum, m) => sum + (m.fixed_rate || 0), 0);
-  const emFees = (emEarningsRes.data || []).reduce((sum, e) => sum + (e.displacement_fee || 0) + (e.diagnostic_fee || 0), 0);
-  const emQuotesEarnings = (emQuotesRes.data || []).reduce((sum, q) => sum + (q.repair_cost || 0), 0);
+  // Net amounts: TTC price minus Altio's 10 % of the HT price.
+  const vatRate = providerVatRate(vatRes?.data?.is_vat_exempt);
 
   // Rating : calculé directement depuis la table reviews (la colonne provider_profiles.rating n'est pas mise à jour automatiquement)
   const reviewsList = reviewsRes.data || [];
@@ -263,26 +268,39 @@ export const getProviderStats = async () => {
     ? parseFloat((reviewsList.reduce((sum, r) => sum + (r.rating || 0), 0) / totalReviews).toFixed(1))
     : 0;
 
-  // Net perçu = montant brut × (1 - commission 10%)
-  const grossEarnings = missionsEarnings + emFees + emQuotesEarnings;
-  const totalEarnings = profileRes.data?.total_earnings || parseFloat((grossEarnings * (1 - COMMISSION_RATE)).toFixed(2));
+  // Invoices are generated only after payment, so they are the authoritative
+  // source for money actually received. Service invoices add revenue and
+  // commission invoices subtract Altio's fee. Credit notes carry a negative
+  // amount and therefore reverse the corresponding side automatically.
+  const totalEarnings = parseFloat((invoiceRevenueRes.data || []).reduce((sum, invoice) => {
+    if (invoice.status === 'cancelled') return sum;
+    const amount = Number(invoice.amount_ttc || 0);
+    if (invoice.seller_id === uid && ['service', 'displacement', 'credit_note'].includes(invoice.invoice_type)) {
+      return sum + amount;
+    }
+    if (invoice.buyer_id === uid && ['commission', 'credit_note'].includes(invoice.invoice_type)) {
+      return sum - amount;
+    }
+    return sum;
+  }, 0).toFixed(2));
 
   const rawRecentMissions = (recentRes.data || []).map((m) => ({
     ...m,
     mission_id: m.id,
-    fixed_rate: parseFloat(((m.fixed_rate || 0) * (1 - COMMISSION_RATE)).toFixed(2)),
+    fixed_rate: priceFromTtc(m.fixed_rate || 0, vatRate).payout,
     property_name: unwrapJoin(m.property)?.name,
     is_emergency: false
   }));
 
   const rawRecentEmergencies = (emEarningsRes.data || []).map((e) => {
     const quote = (emQuotesRes.data || []).find((q) => q.emergency_request_id === e.id);
-    const grossRate = (e.displacement_fee || 0) + (e.diagnostic_fee || 0) + (quote?.repair_cost || 0);
+    const visitPayout = priceFromTtc((e.displacement_fee || 0) + (e.diagnostic_fee || 0), vatRate).payout;
+    const repairPayout = quote ? quotePrice(quote).payout : 0;
     return {
       mission_id: e.id,
       mission_type: e.service_type,
       description: e.description,
-      fixed_rate: parseFloat((grossRate * (1 - COMMISSION_RATE)).toFixed(2)),
+      fixed_rate: Math.round((visitPayout + repairPayout) * 100) / 100,
       completed_at: e.completed_at,
       property_name: unwrapJoin(e.property)?.name,
       is_emergency: true
@@ -306,17 +324,46 @@ export const getProviderStats = async () => {
 
 // ─── Account management ───────────────────────────────────────────────────────
 
-export const deleteAccount = async (): Promise<void> => {
+export const deleteAccount = async (): Promise<'deleted' | 'processing'> => {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) throw new Error('Not authenticated');
-
-  const { data, error } = await supabase.functions.invoke('delete-account');
-  if (error) {
-    // Extract the real message from the function response body
-    const body = await (error as FunctionsInvokeError).context?.json?.().catch(() => null);
-    throw new Error(body?.error || error.message);
+  // Pin both requests to the initiating session: a concurrent sign-in must not
+  // redirect this destructive operation to another account.
+  const invoke = async (body: Record<string, unknown>) => {
+    const { data, error } = await supabase.functions.invoke(body.action === 'prepare' ? 'prepare-account-deletion' : 'delete-account', {
+      body, headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+    if (error) {
+      const response = await (error as FunctionsInvokeError).context?.json?.().catch(() => null);
+      throw new Error(response?.error || error.message);
+    }
+    if (data?.error) throw new Error(data.error);
+    return data;
+  };
+  const preparation = await invoke({ action: 'prepare' });
+  // A legacy endpoint returning success:true must never trigger another call.
+  if (preparation?.protocol !== 1 || preparation?.ready !== true ||
+      preparation?.userId !== session.user.id || typeof preparation?.requiresApple !== 'boolean') {
+    throw new Error('La préparation de la suppression n’a pas été confirmée. Réessayez plus tard.');
   }
-  if (data?.error) throw new Error(data.error);
+  let appleAuthorizationCode: string | undefined;
+  if (preparation.requiresApple) {
+    if (typeof preparation.appleSubject !== 'string' || !preparation.appleSubject) {
+      throw new Error('Votre identité Apple n’a pas été confirmée.');
+    }
+    const { confirmAppleAccountDeletion } = await import('../services/account-deletion-apple');
+    appleAuthorizationCode = await confirmAppleAccountDeletion(preparation.appleSubject);
+  }
+  const current = await supabase.auth.getSession();
+  if (current.data.session?.user.id !== session.user.id) {
+    throw new Error('Votre session a changé. La suppression a été interrompue.');
+  }
+  const data = await invoke({ action: 'delete', confirmation: 'DELETE_MY_ACCOUNT', ...(appleAuthorizationCode ? { appleAuthorizationCode } : {}) });
+  if (data?.success === false && data?.accepted === true && data?.status === 'processing' && typeof data?.requestId === 'string' && data.requestId) return 'processing';
+  if (data?.success !== true) {
+    throw new Error('La suppression du compte n’a pas été confirmée. Réessayez dans quelques instants.');
+  }
+  return 'deleted';
 };
 
 // ─── Billing info ─────────────────────────────────────────────────────────────

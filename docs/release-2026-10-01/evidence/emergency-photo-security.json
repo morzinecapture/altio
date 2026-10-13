@@ -1,0 +1,99 @@
+{
+  "results": [
+    {
+      "check": "owner_upload",
+      "passed": true,
+      "http": 200
+    },
+    {
+      "check": "owner_signature",
+      "passed": true,
+      "http": 200
+    },
+    {
+      "check": "unrelated_signature_denied",
+      "passed": true,
+      "http": 400
+    },
+    {
+      "check": "anonymous_download_denied",
+      "passed": true,
+      "http": 400
+    },
+    {
+      "check": "legacy_public_upload_denied",
+      "passed": true,
+      "http": 400
+    },
+    {
+      "check": "qa_cleanup",
+      "passed": true,
+      "http": 200
+    },
+    {
+      "check": "legacy_public_url_removed",
+      "passed": true,
+      "http": 400
+    },
+    {
+      "check": "legacy_public_url_removed",
+      "passed": true,
+      "http": 400
+    },
+    {
+      "check": "legacy_public_url_removed",
+      "passed": true,
+      "http": 400
+    },
+    {
+      "check": "legacy_public_url_removed",
+      "passed": true,
+      "http": 400
+    },
+    {
+      "check": "legacy_public_url_removed",
+      "passed": true,
+      "http": 400
+    },
+    {
+      "check": "legacy_public_url_removed",
+      "passed": true,
+      "http": 400
+    },
+    {
+      "check": "legacy_public_url_removed",
+      "passed": true,
+      "http": 400
+    },
+    {
+      "check": "legacy_public_url_removed",
+      "passed": true,
+      "http": 400
+    },
+    {
+      "check": "legacy_public_url_removed",
+      "passed": true,
+      "http": 400
+    },
+    {
+      "check": "legacy_public_url_removed",
+      "passed": true,
+      "http": 400
+    },
+    {
+      "check": "legacy_public_url_removed",
+      "passed": true,
+      "http": 400
+    },
+    {
+      "check": "legacy_public_url_removed",
+      "passed": true,
+      "http": 400
+    },
+    {
+      "check": "legacy_public_url_removed",
+      "passed": true,
+      "http": 400
+    }
+  ]
+}

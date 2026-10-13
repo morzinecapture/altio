@@ -1,47 +1,34 @@
 import { supabase, checkError, unwrapJoin, haversineKm } from './_client';
 import type { PushNotificationData, AppNotification, NotificationRow } from './_client';
+import { getMissionTypeLabel, getServiceTypeLabel } from '../utils/serviceLabels';
 
-export const registerPushToken = async (tokenData: { data: string } | string, platform: string) => {
+export const registerPushToken = async (tokenData: { data: string } | string, platform: string, expectedUserId?: string) => {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.user) return;
+  if (expectedUserId && session.user.id !== expectedUserId) return;
 
   const actualToken = typeof tokenData === 'string' ? tokenData : tokenData.data;
 
   const { error } = await supabase
     .from('users')
     .update({ expo_push_token: actualToken })
-    .eq('id', session.user.id);
+    .eq('id', session.user.id)
+    .select('id')
+    .single();
 
-  if (error && __DEV__) console.error('Failed to register push token in DB', error);
+  checkError(error);
 };
 
 export const sendPushNotification = async (userId: string, title: string, body: string, data?: PushNotificationData) => {
   const referenceId = data?.missionId || data?.emergencyId || null;
   const notifType = data?.emergencyId ? 'emergency' : 'mission';
 
-  // Path 1: Insert in-app notification via RPC (SECURITY DEFINER → bypasses RLS)
-  // This works immediately without Edge Function deployment.
-  try {
-    await supabase.rpc('insert_notification_for_user', {
-      p_user_id: userId,
-      p_type: notifType,
-      p_title: title,
-      p_body: body,
-      p_reference_id: referenceId,
-    });
-  } catch (err) {
-    if (__DEV__) console.warn('[Notif] RPC insert failed (migration may not be applied yet):', err);
-  }
+  // One server transaction owns both the inbox entry and the device dispatch.
+  const { error } = await supabase.rpc('insert_notification_for_user', {
+    p_user_id: userId, p_type: notifType, p_title: title, p_body: body, p_reference_id: referenceId,
+  });
+  checkError(error);
 
-  // Path 2: Send device push notification via Edge Function
-  // skipDbInsert=true because RPC already handled the in-app notification above
-  try {
-    await supabase.functions.invoke('send-push', {
-      body: { userId, title, body, data, referenceId, notifType, skipDbInsert: true }
-    });
-  } catch (err) {
-    if (__DEV__) console.warn('[Push] Notification skipped:', err);
-  }
 };
 
 export const getNotifications = async () => {
@@ -101,14 +88,14 @@ const getNotificationsFallback = async (uid: string) => {
         .eq('owner_id', uid),
       supabase
         .from('missions')
-        .select('id, mission_type, status, updated_at, assigned_provider_id, provider:users!missions_assigned_provider_id_fkey(name)')
+        .select('id, mission_type, status, updated_at, assigned_provider_id, provider:public_profiles!missions_assigned_provider_id_fkey(name)')
         .eq('owner_id', uid)
         .in('status', ['assigned', 'in_progress', 'awaiting_payment', 'completed'])
         .order('updated_at', { ascending: false })
         .limit(20),
       supabase
         .from('emergency_requests')
-        .select('id, service_type, status, updated_at, accepted_provider_id, provider:users!emergency_requests_accepted_provider_id_fkey(name)')
+        .select('id, service_type, status, updated_at, accepted_provider_id, provider:public_profiles!emergency_requests_accepted_provider_id_fkey(name)')
         .eq('owner_id', uid)
         .in('status', ['provider_accepted', 'bid_accepted', 'in_progress', 'completed'])
         .order('updated_at', { ascending: false })
@@ -121,11 +108,11 @@ const getNotificationsFallback = async (uid: string) => {
     if (missions && missions.length > 0) {
       const missionIds = missions.map((m) => m.id);
       const missionMap: Record<string, string> = {};
-      missions.forEach((m) => { missionMap[m.id] = m.mission_type; });
+      missions.forEach((m) => { missionMap[m.id] = getMissionTypeLabel(m.mission_type).toLocaleLowerCase('fr-FR'); });
 
       const { data: apps } = await supabase
         .from('mission_applications')
-        .select('id, created_at, status, mission_id, provider:users!mission_applications_provider_id_fkey(name)')
+        .select('id, created_at, status, mission_id, provider:public_profiles!mission_applications_provider_id_fkey(name)')
         .in('mission_id', missionIds)
         .order('created_at', { ascending: false })
         .limit(30);
@@ -150,28 +137,28 @@ const getNotificationsFallback = async (uid: string) => {
         notifications.push({
           notification_id: `assigned_${m.id}`, type: 'mission',
           title: '👷 Prestataire confirmé',
-          body: `${provName} va intervenir pour votre mission de ${m.mission_type || 'service'}.`,
+          body: `${provName} va intervenir pour votre mission de ${getMissionTypeLabel(m.mission_type || 'service').toLocaleLowerCase('fr-FR')}.`,
           reference_id: m.id, read: false, created_at: m.updated_at,
         });
       } else if (m.status === 'in_progress') {
         notifications.push({
           notification_id: `progress_${m.id}`, type: 'mission',
           title: '🔧 Intervention en cours',
-          body: `${provName} a commencé l'intervention pour votre mission de ${m.mission_type || 'service'}.`,
+          body: `${provName} a commencé l'intervention pour votre mission de ${getMissionTypeLabel(m.mission_type || 'service').toLocaleLowerCase('fr-FR')}.`,
           reference_id: m.id, read: false, created_at: m.updated_at,
         });
       } else if (m.status === 'awaiting_payment') {
         notifications.push({
           notification_id: `pay_${m.id}`, type: 'mission',
           title: '💳 Paiement en attente',
-          body: `Votre mission de ${m.mission_type || 'service'} est terminée. Validez et payez le prestataire.`,
+          body: `Votre mission de ${getMissionTypeLabel(m.mission_type || 'service').toLocaleLowerCase('fr-FR')} est terminée. Validez et payez le prestataire.`,
           reference_id: m.id, read: false, created_at: m.updated_at,
         });
       } else if (m.status === 'completed') {
         notifications.push({
           notification_id: `done_${m.id}`, type: 'mission',
           title: '✅ Intervention terminée',
-          body: `${provName} a terminé la mission de ${m.mission_type || 'service'}. Vérifiez et validez.`,
+          body: `${provName} a terminé la mission de ${getMissionTypeLabel(m.mission_type || 'service').toLocaleLowerCase('fr-FR')}. Vérifiez et validez.`,
           reference_id: m.id, read: false, created_at: m.updated_at,
         });
       }
@@ -183,7 +170,7 @@ const getNotificationsFallback = async (uid: string) => {
       notifications.push({
         notification_id: `emerg_${e.id}`, type: 'emergency',
         title: e.status === 'completed' ? '✅ Urgence résolue' : '🚨 Urgence mise à jour',
-        body: `${provName} ${e.status === 'completed' ? 'a résolu' : 'prend en charge'} votre urgence de ${e.service_type || 'service'}.`,
+        body: `${provName} ${e.status === 'completed' ? 'a résolu' : 'prend en charge'} votre urgence de ${getServiceTypeLabel(e.service_type || 'service').toLocaleLowerCase('fr-FR')}.`,
         reference_id: e.id, read: false, created_at: e.updated_at,
       });
     });
@@ -208,7 +195,7 @@ const getNotificationsFallback = async (uid: string) => {
       supabase
         .from('provider_profiles')
         .select('latitude, longitude, radius_km, specialties')
-        .eq('user_id', uid)
+        .eq('provider_id', uid)
         .single(),
     ]);
 
@@ -216,7 +203,7 @@ const getNotificationsFallback = async (uid: string) => {
 
     (acceptedRes.data || []).forEach((app) => {
       const appMission = unwrapJoin(app.mission);
-      const missionType = appMission?.mission_type || 'service';
+      const missionType = getMissionTypeLabel(appMission?.mission_type || 'service').toLocaleLowerCase('fr-FR');
       const propName = unwrapJoin(appMission?.property)?.name || '';
       notifications.push({
         notification_id: `accepted_${app.id}`, type: 'mission_assigned',
@@ -234,28 +221,28 @@ const getNotificationsFallback = async (uid: string) => {
         notifications.push({
           notification_id: `mission_${m.id}`, type: 'mission',
           title: '✅ Mission confirmée',
-          body: `Mission de ${m.mission_type} chez ${propName}.`,
+          body: `Mission de ${getMissionTypeLabel(m.mission_type).toLocaleLowerCase('fr-FR')} chez ${propName}.`,
           reference_id: m.id, read: false, created_at: m.updated_at,
         });
       } else if (m.status === 'in_progress') {
         notifications.push({
           notification_id: `progress_${m.id}`, type: 'mission',
           title: '🔧 Mission en cours',
-          body: `Mission de ${m.mission_type} chez ${propName}.`,
+          body: `Mission de ${getMissionTypeLabel(m.mission_type).toLocaleLowerCase('fr-FR')} chez ${propName}.`,
           reference_id: m.id, read: false, created_at: m.updated_at,
         });
       } else if (m.status === 'awaiting_payment' || m.status === 'completed') {
         notifications.push({
           notification_id: `awaiting_${m.id}`, type: 'mission',
           title: '⏳ En attente de validation',
-          body: `Le propriétaire va valider votre mission de ${m.mission_type}.`,
+          body: `Le propriétaire va valider votre mission de ${getMissionTypeLabel(m.mission_type).toLocaleLowerCase('fr-FR')}.`,
           reference_id: m.id, read: false, created_at: m.updated_at,
         });
       } else if (m.status === 'paid') {
         notifications.push({
           notification_id: `paid_${m.id}`, type: 'mission',
           title: '💰 Paiement reçu',
-          body: `Vous avez été payé pour la mission de ${m.mission_type}.`,
+          body: `Vous avez été payé pour la mission de ${getMissionTypeLabel(m.mission_type).toLocaleLowerCase('fr-FR')}.`,
           reference_id: m.id, read: true, created_at: m.updated_at,
         });
       }
@@ -286,7 +273,7 @@ const getNotificationsFallback = async (uid: string) => {
         notifications.push({
           notification_id: `new_${m.id}`, type: 'mission',
           title: isTargeted ? '📋 Nouvelle mission pour vous' : '📋 Nouvelle mission disponible',
-          body: `Mission de ${m.mission_type} à proximité${prop.name ? ` — ${prop.name}` : ''}.`,
+          body: `Mission de ${getMissionTypeLabel(m.mission_type).toLocaleLowerCase('fr-FR')} à proximité${prop.name ? ` — ${prop.name}` : ''}.`,
           reference_id: m.id, read: false, created_at: m.created_at,
         });
       });

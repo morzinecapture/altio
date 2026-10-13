@@ -150,7 +150,7 @@ const handleSave = async () => {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={22} color="#1E3A5F" />
+          <Ionicons name="arrow-back" size={22} color={COLORS.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.title}>{isEdit ? t('admin.partner_form.title_edit') : t('admin.partner_form.title_new')}</Text>
         <TouchableOpacity style={[styles.saveBtn, saveMut.isPending && { opacity: 0.6 }]} onPress={handleSave} disabled={saveMut.isPending}>
@@ -298,7 +298,7 @@ const handleSave = async () => {
           <Switch
             value={isActive}
             onValueChange={setIsActive}
-            trackColor={{ true: '#1E3A5F', false: '#E2E8F0' }}
+            trackColor={{ true: COLORS.brandPrimary, false: COLORS.subtle }}
             thumbColor="#FFFFFF"
           />
         </View>
@@ -309,7 +309,7 @@ const handleSave = async () => {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F8FAFC' },
+  container: { flex: 1, backgroundColor: COLORS.background },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
   header: {
@@ -322,24 +322,24 @@ const styles = StyleSheet.create({
     width: 38, height: 38, borderRadius: 19,
     backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center',
   },
-  title: { fontFamily: 'Inter_700Bold', fontSize: 18, color: '#1E3A5F', flex: 1 },
+  title: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 18, color: COLORS.textPrimary, flex: 1 },
   saveBtn: {
-    backgroundColor: '#1E3A5F', borderRadius: RADIUS.md,
+    backgroundColor: COLORS.brandPrimary, borderRadius: RADIUS.md,
     paddingHorizontal: SPACING.md, paddingVertical: 8,
     minWidth: 90, alignItems: 'center',
   },
-  saveBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 14, color: '#FFFFFF' },
+  saveBtnText: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 14, color: '#FFFFFF' },
 
   form: { padding: SPACING.lg, gap: SPACING.lg, paddingBottom: 40 },
 
   section: { gap: SPACING.sm },
-  label: { fontFamily: 'Inter_600SemiBold', fontSize: 13, color: '#475569' },
+  label: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 13, color: '#475569' },
 
   input: {
     backgroundColor: '#FFFFFF', borderRadius: RADIUS.md,
     borderWidth: 1, borderColor: '#E2E8F0',
     paddingHorizontal: SPACING.md, paddingVertical: 12,
-    fontFamily: 'Inter_400Regular', fontSize: 15, color: '#1E3A5F',
+    fontFamily: 'PlusJakartaSans_400Regular', fontSize: 15, color: COLORS.textPrimary,
   },
   textarea: { minHeight: 80 },
 
@@ -350,7 +350,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   logoPreview: { width: '100%', height: '100%' },
-  logoPickerText: { fontFamily: 'Inter_400Regular', fontSize: 13, color: '#94A3B8' },
+  logoPickerText: { fontFamily: 'PlusJakartaSans_400Regular', fontSize: 13, color: '#94A3B8' },
 
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm },
   gridItem: {
@@ -359,8 +359,8 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.md, borderWidth: 1.5, borderColor: '#E2E8F0',
     backgroundColor: '#FFFFFF',
   },
-  gridItemActive: { backgroundColor: '#1E3A5F', borderColor: '#1E3A5F' },
-  gridItemText: { fontFamily: 'Inter_500Medium', fontSize: 13, color: '#64748B' },
+  gridItemActive: { backgroundColor: COLORS.brandPrimary, borderColor: COLORS.brandPrimary },
+  gridItemText: { fontFamily: 'PlusJakartaSans_500Medium', fontSize: 13, color: '#64748B' },
   gridItemTextActive: { color: '#FFFFFF' },
 
   pill: {
@@ -368,17 +368,17 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.full, borderWidth: 1.5, borderColor: '#E2E8F0',
     backgroundColor: '#FFFFFF',
   },
-  pillActive: { backgroundColor: '#1E3A5F', borderColor: '#1E3A5F' },
-  pillText: { fontFamily: 'Inter_500Medium', fontSize: 13, color: '#64748B' },
+  pillActive: { backgroundColor: COLORS.brandPrimary, borderColor: COLORS.brandPrimary },
+  pillText: { fontFamily: 'PlusJakartaSans_500Medium', fontSize: 13, color: '#64748B' },
   pillTextActive: { color: '#FFFFFF' },
 
-  inputHint: { fontFamily: 'Inter_400Regular', fontSize: 11, color: '#94A3B8', marginTop: 2 },
+  inputHint: { fontFamily: 'PlusJakartaSans_400Regular', fontSize: 11, color: '#94A3B8', marginTop: 2 },
 
   switchRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     backgroundColor: '#FFFFFF', borderRadius: RADIUS.lg,
     padding: SPACING.md, borderWidth: 1, borderColor: '#E2E8F0',
   },
-  switchLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 14, color: '#1E3A5F' },
-  switchSub: { fontFamily: 'Inter_400Regular', fontSize: 12, color: '#94A3B8', marginTop: 2 },
+  switchLabel: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 14, color: COLORS.textPrimary },
+  switchSub: { fontFamily: 'PlusJakartaSans_400Regular', fontSize: 12, color: '#94A3B8', marginTop: 2 },
 });

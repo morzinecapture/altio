@@ -1,0 +1,97 @@
+{
+  "checkedAt": "2026-10-11",
+  "source": "Safari — authenticated App Store Connect",
+  "appId": "6762188482",
+  "bundleId": "com.altio.app",
+  "currentHolder": "Maxime Gakiere",
+  "requiredSeller": "Maxime Gakiere",
+  "tradeName": "Freuchet Services",
+  "freeAppsAgreement": "active on existing Maxime account",
+  "euTraderStatus": "En cours de vérification — observed in authenticated Safari on 2026-10-11; Apple row last updated 2026-10-09",
+  "savedDraftFields": [
+    "name: Altio : services locatifs",
+    "subtitle: Ménage et entretien",
+    "category: Productivité",
+    "keywords",
+    "copyright: 2026 Manon Freuchet (Freuchet Services)",
+    "manual release",
+    "age rating: 18+",
+    "Review contact: Maxime Gakiere / +33661510978 / morzinecapture@gmail.com",
+    "App Review owner demo username and password",
+    "2 iPhone screenshots"
+  ],
+  "notSaved": [
+    "description and promotional text: Safari textarea writes did not persist",
+    "Remaining 3 screenshots: Safari file chooser disabled transfer after selection"
+  ],
+  "submitted": false,
+  "published": false,
+  "supportMessageSent": false,
+  "sources": [
+    "https://developer.apple.com/help/account/membership/enrolling-in-the-app/",
+    "https://developer.apple.com/help/account/membership/updating-your-account-information/",
+    "https://developer.apple.com/help/app-store-connect/transfer-an-app/app-transfer-criteria/"
+  ],
+  "operator": "Manon Freuchet / Freuchet Services",
+  "latestUserDecision": "Use existing Maxime Apple account; no new membership or transfer.",
+  "privacyDraft": {
+    "savedCategoryCount": 15,
+    "complete": false,
+    "published": false,
+    "remaining": "Purchase history form and final production SDK configuration review",
+    "previousDeclaration": "No data collected — replaced in draft",
+    "configuredCategoryCount": 14
+  },
+  "traderApproval": {
+    "date": "2026-10-09",
+    "userReply": "oui vas y",
+    "actionCompleted": "Selected trader and advanced to contact validation",
+    "contactDetailsSubmitted": true
+  },
+  "traderContactVerification": {
+    "email": "morzinecapture@gmail.com",
+    "address": "115 rue du Bourg, 74110 Morzine, France",
+    "phone": "+33661510978",
+    "publicDisplayAuthorized": true,
+    "emailVerification": "code sent; awaiting user",
+    "completed": false
+  },
+  "traderDocumentReview": {
+    "sourceFile": "/Users/maxime/Downloads/Export_Portail_Data_MORZINECAPTURE_Du_11-10-2026.pdf",
+    "documentDate": "2026-10-11",
+    "pagesReviewed": 2,
+    "company": "MORZINECAPTURE",
+    "siren": "908550528",
+    "legalForm": "SARL",
+    "manager": "Maxime Gakiere",
+    "addressMatchesDeclared": true,
+    "uploadedByAssistant": false,
+    "reasonNotUploaded": "Apple already shows verification in progress; submitted document not known."
+  },
+  "testflightBuild20": {
+    "checkedAt": "2026-10-11",
+    "userAuthorization": "Oui, autoriser Expo EAS et TestFlight",
+    "scope": "Code/resources to EAS, binary to Apple TestFlight; no public release",
+    "buildId": "f689374f-928a-426e-a157-26231aff16bb",
+    "buildNumber": "20",
+    "version": "1.0.0",
+    "buildStatus": "FINISHED",
+    "profile": "testflight",
+    "stripeMode": "test",
+    "submissionId": "0803178a-c52f-4c5d-9fd2-19209ac3a20e",
+    "uploadStatus": "SUCCESS",
+    "appleObservedStatus": "En cours de traitement",
+    "appleObservedUploadTime": "2026-10-11 14:49 Europe/Paris",
+    "publicSubmission": false,
+    "publicRelease": false,
+    "archiveReview": {
+      "included": "frontend and .easignore only",
+      "excluded": "Private documents, PDFs, environment files, signing keys, outputs, website, backend and dependencies",
+      "uploadedMB": 9.9
+    },
+    "localChecks": {
+      "frontendTypes": "passed",
+      "websiteBuild": "passed"
+    }
+  }
+}

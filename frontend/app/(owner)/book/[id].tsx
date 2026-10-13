@@ -84,7 +84,7 @@ export default function BookProviderScreen() {
         <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
             <View style={styles.header}>
                 <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-                    <Ionicons name="arrow-back" size={24} color="#1E3A5F" />
+                    <Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>{t('book.title')}</Text>
                 <View style={{ width: 44 }} />
@@ -170,25 +170,25 @@ const styles = StyleSheet.create({
     center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: SPACING.xl, paddingVertical: SPACING.md, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
     backBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center' },
-    headerTitle: { fontFamily: 'Inter_700Bold', fontSize: 18, color: '#1E3A5F' },
+    headerTitle: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 18, color: COLORS.textPrimary },
 
     content: { padding: SPACING.xl },
-    providerCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', padding: SPACING.md, borderRadius: 16, marginBottom: SPACING.xl, borderWidth: 1, borderColor: '#F1F5F9' },
-    providerName: { fontFamily: 'Inter_600SemiBold', fontSize: 16, color: '#1E3A5F' },
-    providerTarget: { fontFamily: 'Inter_400Regular', fontSize: 12, color: '#64748B' },
+    providerCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.background, padding: SPACING.md, borderRadius: 16, marginBottom: SPACING.xl, borderWidth: 1, borderColor: '#F1F5F9' },
+    providerName: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 16, color: COLORS.textPrimary },
+    providerTarget: { fontFamily: 'PlusJakartaSans_400Regular', fontSize: 12, color: '#64748B' },
 
-    label: { fontFamily: 'Inter_600SemiBold', fontSize: 15, color: '#1E3A5F', marginBottom: SPACING.sm },
+    label: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 15, color: COLORS.textPrimary, marginBottom: SPACING.sm },
     chip: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 99, backgroundColor: '#F1F5F9', marginRight: SPACING.sm, borderWidth: 1, borderColor: 'transparent' },
     chipActive: { backgroundColor: '#EFF6FF', borderColor: '#3B82F6' },
-    chipText: { fontFamily: 'Inter_500Medium', fontSize: 14, color: '#64748B' },
+    chipText: { fontFamily: 'PlusJakartaSans_500Medium', fontSize: 14, color: '#64748B' },
     chipTextActive: { color: '#3B82F6', fontWeight: 'bold' },
 
-    dateInput: { flexDirection: 'row', alignItems: 'center', padding: SPACING.md, backgroundColor: '#F8FAFC', borderRadius: 12, borderWidth: 1, borderColor: '#E2E8F0', marginBottom: SPACING.xl },
-    dateText: { fontFamily: 'Inter_500Medium', fontSize: 15, color: '#1E3A5F', marginLeft: SPACING.sm },
+    dateInput: { flexDirection: 'row', alignItems: 'center', padding: SPACING.md, backgroundColor: COLORS.background, borderRadius: 12, borderWidth: 1, borderColor: '#E2E8F0', marginBottom: SPACING.xl },
+    dateText: { fontFamily: 'PlusJakartaSans_500Medium', fontSize: 15, color: COLORS.textPrimary, marginLeft: SPACING.sm },
 
-    textArea: { backgroundColor: '#F8FAFC', borderRadius: 12, borderWidth: 1, borderColor: '#E2E8F0', padding: SPACING.md, paddingTop: SPACING.md, fontFamily: 'Inter_400Regular', fontSize: 15, color: '#1E3A5F', minHeight: 100, textAlignVertical: 'top' },
+    textArea: { backgroundColor: COLORS.background, borderRadius: 12, borderWidth: 1, borderColor: '#E2E8F0', padding: SPACING.md, paddingTop: SPACING.md, fontFamily: 'PlusJakartaSans_400Regular', fontSize: 15, color: COLORS.textPrimary, minHeight: 100, textAlignVertical: 'top' },
 
     footer: { flexDirection: 'row', padding: SPACING.xl, borderTopWidth: 1, borderTopColor: '#F1F5F9', backgroundColor: '#FFFFFF', alignItems: 'center' },
     submitBtn: { backgroundColor: '#3B82F6', paddingHorizontal: SPACING.xl, paddingVertical: SPACING.md, borderRadius: 99 },
-    submitBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 16, color: '#FFFFFF' }
+    submitBtnText: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 16, color: '#FFFFFF' }
 });

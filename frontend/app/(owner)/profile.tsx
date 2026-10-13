@@ -3,10 +3,10 @@ import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, TextInput,
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { COLORS, FONTS, SPACING, RADIUS, SHADOWS, GRADIENT } from '../../src/theme';
+import { COLORS, FONTS, SPACING, RADIUS, SHADOWS } from '../../src/theme';
+import OwnerPageHeader from '../../src/components/owner/OwnerPageHeader';
 import { useAuth } from '../../src/auth';
 import { supabase } from '../../src/lib/supabase';
 import { deleteAccount, getMyInvoices, getProfile, updateMarketingConsent, getMarketingConsent } from '../../src/api';
@@ -25,7 +25,7 @@ const OWNER_TYPE_LABELS: Record<string, string> = {
 const FAQ = [
   { q: 'Comment synchroniser mon calendrier Airbnb ?', a: 'Dans "Mes logements", ouvrez un logement et ajoutez votre URL iCal Airbnb. Appuyez ensuite sur "Synchroniser iCal" pour importer vos réservations.' },
   { q: 'Comment créer une mission manuellement ?', a: 'Dans l\'onglet "Missions", appuyez sur le bouton "+" en haut à droite. Sélectionnez le logement, le type de mission et le mode (tarif fixe ou appel d\'offres).' },
-  { q: 'Que faire en cas d\'urgence ?', a: 'Appuyez sur le bouton rouge "Urgence" visible depuis le tableau de bord. Décrivez le problème — les techniciens disponibles dans votre zone seront alertés immédiatement.' },
+  { q: 'Que faire en cas d\'urgence ?', a: 'Depuis l’accueil, choisissez « Nouvelle mission » puis « Urgent · dès que possible », ou utilisez le raccourci urgence. Choisissez la prestation et décrivez votre besoin. Retrouvez le suivi dans Mes missions.' },
   { q: 'Comment choisir un prestataire ?', a: 'En mode "Appel d\'offres", les prestataires candidatent et vous pouvez comparer leurs tarifs et avis. En mode "Tarif fixe", le premier prestataire disponible accepte automatiquement.' },
   { q: 'Quand suis-je débité ?', a: 'Le paiement est effectué lors de la validation du devis (urgences) ou lors de l\'acceptation d\'une candidature. Stripe sécurise la transaction jusqu\'à la fin de l\'intervention.' },
 ];
@@ -39,7 +39,7 @@ export default function OwnerProfile() {
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [deletingAccount, setDeletingAccount] = useState(false);
-  const [loadingInvoices, setLoadingInvoices] = useState(false);
+  const loadingInvoices = false;
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
   // Mes informations state
@@ -75,7 +75,7 @@ export default function OwnerProfile() {
   const handleToggleMarketingConsent = async (value: boolean) => {
     try {
       await marketingConsentMutation.mutateAsync(value);
-    } catch (err) {
+    } catch {
       Alert.alert('Erreur', 'Impossible de mettre a jour vos preferences.');
     }
   };
@@ -84,9 +84,13 @@ export default function OwnerProfile() {
     setActiveModal('factures');
   };
 
+  const [loggingOut, setLoggingOut] = useState(false);
   const onLogout = async () => {
-    await handleLogout();
-    setTimeout(() => router.replace('/'), 0);
+    if (loggingOut) return;
+    setLoggingOut(true);
+    try { await handleLogout(); router.replace('/'); }
+    catch { Alert.alert('Déconnexion impossible', 'Vérifiez votre connexion puis réessayez.'); }
+    finally { setLoggingOut(false); }
   };
 
   const handlePickPhoto = async () => {
@@ -170,9 +174,11 @@ export default function OwnerProfile() {
     { id: 'infos', icon: 'person-outline' as const, label: 'Mes informations', onPress: handleOpenInfos },
     { id: 'favorites', icon: 'star-outline' as const, label: t('owner.favorites.title'), onPress: () => router.push('/(owner)/favorites') },
     { id: 'notifications', icon: 'notifications-outline' as const, label: t('owner.profile.menu_notifications') },
-    { id: 'factures', icon: 'document-text-outline' as const, label: `${t('owner.profile.menu_invoices')}${invoices.length > 0 ? ` (${invoices.length})` : ''}`, onPress: handleOpenBilling },
+    { id: 'invoice-list', icon: 'receipt-outline' as const, label: t('alpine.invoices'), onPress: () => router.push('/(owner)/invoices') },
+    { id: 'factures', icon: 'document-text-outline' as const, label: t('alpine.billing'), onPress: handleOpenBilling },
     { id: 'langue', icon: 'language-outline' as const, label: t('owner.profile.menu_language') },
     { id: 'aide', icon: 'help-circle-outline' as const, label: t('owner.profile.menu_help') },
+    { id: 'withdrawal', icon: 'return-down-back-outline' as const, label: 'Renoncer à un contrat', onPress: () => router.push('/withdrawal') },
     { id: 'reclamation', icon: 'alert-circle-outline' as const, label: 'Réclamation', onPress: () => router.push('/reclamation') },
     { id: 'apropos', icon: 'information-circle-outline' as const, label: t('owner.profile.menu_about') },
   ];
@@ -180,18 +186,20 @@ export default function OwnerProfile() {
   return (
     <SafeAreaView style={styles.container} testID="owner-profile">
       <ScrollView showsVerticalScrollIndicator={false}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Profil</Text>
-        </View>
+        <OwnerPageHeader
+          title={t('alpine.account')}
+          subtitle="Compte, préférences et assistance Altio"
+          icon="person-outline"
+        />
 
         <View style={styles.userCard}>
           <TouchableOpacity onPress={handlePickPhoto} activeOpacity={0.7} style={styles.avatarWrap}>
             {user?.picture ? (
               <Image source={{ uri: user.picture }} style={styles.avatarImage} />
             ) : (
-              <LinearGradient colors={GRADIENT.brandButton} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.avatar}>
-                <Text style={styles.avatarText}>{user?.name?.[0] || 'U'}</Text>
-              </LinearGradient>
+              <View style={styles.avatar}>
+                <Ionicons name="person-outline" size={32} color="#FFFFFF" />
+              </View>
             )}
             <View style={styles.cameraOverlay}>
               {uploadingPhoto ? (
@@ -207,7 +215,7 @@ export default function OwnerProfile() {
             <Text style={styles.ownerTypeText}>{OWNER_TYPE_LABELS[user.owner_type] || user.owner_type}</Text>
           )}
           <View style={styles.roleBadge}>
-            <Ionicons name="home-outline" size={14} color={COLORS.brandPrimary} />
+            <Ionicons name="home-outline" size={14} color="#FFFFFF" />
             <Text style={styles.roleText}>Propriétaire</Text>
           </View>
         </View>
@@ -221,7 +229,7 @@ export default function OwnerProfile() {
               activeOpacity={0.7}
             >
               <View style={styles.menuIconWrap}>
-                <Ionicons name={item.icon} size={20} color={COLORS.brandPrimary} />
+                <Ionicons name={item.icon} size={20} color="#FFFFFF" />
               </View>
               <Text style={styles.menuLabel}>{item.label}</Text>
               <Ionicons name="chevron-forward" size={18} color={COLORS.textTertiary} />
@@ -229,9 +237,9 @@ export default function OwnerProfile() {
           ))}
         </View>
 
-        <TouchableOpacity testID="logout-btn" style={styles.logoutBtn} onPress={onLogout}>
+        <TouchableOpacity testID="logout-btn" style={styles.logoutBtn} disabled={loggingOut} onPress={onLogout}>
           <Ionicons name="log-out-outline" size={22} color={COLORS.urgency} />
-          <Text style={styles.logoutText}>{t('common.logout')}</Text>
+          <Text style={styles.logoutText}>{loggingOut ? 'Déconnexion…' : t('common.logout')}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -370,7 +378,7 @@ export default function OwnerProfile() {
               </View>
               <Text style={styles.deleteWarningTitle}>Action irréversible</Text>
               <Text style={styles.deleteWarningDesc}>
-                Toutes vos missions, logements et données seront définitivement supprimés.{'\n\n'}
+                La suppression de votre compte est définitive. Les justificatifs soumis à une obligation légale de conservation seront conservés. Si votre compte est lié à Apple, une confirmation Apple vous sera demandée.{'\n\n'}
                 Tapez <Text style={{ fontWeight: '700', color: COLORS.urgency }}>SUPPRIMER</Text> pour confirmer.
               </Text>
             </View>
@@ -389,10 +397,11 @@ export default function OwnerProfile() {
               onPress={async () => {
                 setDeletingAccount(true);
                 try {
-                  await deleteAccount();
+                  const deletionStatus = await deleteAccount();
                   setUser(null); // flush React state before navigation to avoid race condition
                   await supabase.auth.signOut();
                   router.replace('/');
+                  if (deletionStatus === 'processing') Alert.alert('Demande enregistrée', 'Votre compte est désormais inaccessible. La suppression de vos données est en cours et reprend automatiquement en cas d’interruption. Les justificatifs soumis à une obligation légale sont conservés.');
                 } catch (e: unknown) {
                   Alert.alert('Erreur', e instanceof Error ? e.message : String(e));
                 } finally {
@@ -498,7 +507,7 @@ export default function OwnerProfile() {
                 {[
                   { label: 'Zone cible', value: 'Morzine / Alpes' },
                   { label: 'Stack', value: 'Supabase + Expo + Stripe' },
-                  { label: 'Contact', value: 'contact@altio.app' },
+                  { label: 'Contact', value: 'morzinecapture@gmail.com' },
                 ].map((row, i) => (
                   <View key={i} style={styles.aboutRow}>
                     <Text style={styles.aboutLabel}>{row.label}</Text>
@@ -623,32 +632,29 @@ export default function OwnerProfile() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
-  header: { paddingHorizontal: SPACING.xl, paddingTop: SPACING.xxl, paddingBottom: SPACING.lg },
-  title: { ...FONTS.h1, color: COLORS.textPrimary },
-  userCard: { alignItems: 'center', backgroundColor: COLORS.paper, marginHorizontal: SPACING.xl, padding: SPACING.xxl, borderRadius: RADIUS.xxl, ...SHADOWS.float, borderWidth: 1, borderColor: COLORS.border },
+  userCard: { alignItems: 'center', backgroundColor: COLORS.navy, marginHorizontal: SPACING.xl, marginTop: SPACING.xl, padding: SPACING.xxl, borderRadius: RADIUS.xxl, ...SHADOWS.float },
   avatarWrap: { position: 'relative' as const, marginBottom: SPACING.lg },
-  avatar: { width: 80, height: 80, borderRadius: 40, justifyContent: 'center', alignItems: 'center', ...SHADOWS.card },
-  avatarImage: { width: 80, height: 80, borderRadius: 40, ...SHADOWS.card },
-  avatarText: { ...FONTS.h1, color: COLORS.textInverse },
-  cameraOverlay: { position: 'absolute' as const, bottom: 0, right: 0, width: 28, height: 28, borderRadius: 14, backgroundColor: COLORS.brandPrimary, justifyContent: 'center' as const, alignItems: 'center' as const, borderWidth: 2, borderColor: COLORS.paper },
-  userName: { ...FONTS.h2, color: COLORS.textPrimary },
-  userEmail: { ...FONTS.body, color: COLORS.textSecondary, marginTop: 4 },
-  ownerTypeText: { ...FONTS.bodySmall, color: COLORS.textTertiary, marginTop: SPACING.xs },
-  roleBadge: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, marginTop: SPACING.md, backgroundColor: COLORS.subtle, paddingHorizontal: SPACING.lg, paddingVertical: 6, borderRadius: RADIUS.full, borderWidth: 1, borderColor: COLORS.border },
-  roleText: { ...FONTS.bodySmall, color: COLORS.brandPrimary, fontWeight: '600' },
-  menuSection: { marginTop: SPACING.xxl, marginHorizontal: SPACING.xl, backgroundColor: COLORS.paper, borderRadius: RADIUS.xxl, ...SHADOWS.card, borderWidth: 1, borderColor: COLORS.border },
-  menuItem: { flexDirection: 'row', alignItems: 'center', padding: SPACING.lg, borderBottomWidth: 1, borderBottomColor: COLORS.subtle, gap: SPACING.md },
-  menuIconWrap: { width: 40, height: 40, borderRadius: 12, backgroundColor: COLORS.subtle, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: COLORS.border },
+  avatar: { width: 80, height: 80, borderRadius: 40, justifyContent: 'center', alignItems: 'center', backgroundColor: '#2563EB', borderWidth: 2, borderColor: '#FFFFFF', ...SHADOWS.card },
+  avatarImage: { width: 80, height: 80, borderRadius: 40, borderWidth: 2, borderColor: '#FFFFFF', ...SHADOWS.card },
+  cameraOverlay: { position: 'absolute' as const, bottom: 0, right: 0, width: 28, height: 28, borderRadius: 14, backgroundColor: '#F97316', justifyContent: 'center' as const, alignItems: 'center' as const, borderWidth: 2, borderColor: '#16233A' },
+  userName: { ...FONTS.h2, color: '#FFFFFF' },
+  userEmail: { ...FONTS.body, color: '#FFFFFF', opacity: 0.76, marginTop: 4 },
+  ownerTypeText: { ...FONTS.bodySmall, color: '#FFFFFF', opacity: 0.66, marginTop: SPACING.xs },
+  roleBadge: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, marginTop: SPACING.md, backgroundColor: '#2563EB', paddingHorizontal: SPACING.lg, paddingVertical: 7, borderRadius: RADIUS.full },
+  roleText: { ...FONTS.bodySmall, color: '#FFFFFF', fontWeight: '700' },
+  menuSection: { marginTop: SPACING.xxl, marginHorizontal: SPACING.xl, backgroundColor: '#FFFFFF', borderRadius: RADIUS.xxl, ...SHADOWS.card, borderWidth: 1, borderColor: COLORS.border },
+  menuItem: { flexDirection: 'row', alignItems: 'center', padding: SPACING.lg, borderBottomWidth: 1, borderBottomColor: COLORS.border, gap: SPACING.md },
+  menuIconWrap: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#2563EB', justifyContent: 'center', alignItems: 'center' },
   menuLabel: { flex: 1, ...FONTS.body, color: COLORS.textPrimary, fontWeight: '500' },
   logoutBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.md, marginHorizontal: SPACING.xl, marginTop: SPACING.xxl, padding: SPACING.lg, backgroundColor: COLORS.paper, borderRadius: RADIUS.xl, borderWidth: 1, borderColor: COLORS.urgency, ...SHADOWS.card },
   logoutText: { ...FONTS.h3, color: COLORS.urgency, fontSize: 16 },
   deleteBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.md, marginHorizontal: SPACING.xl, marginTop: SPACING.md, padding: SPACING.md, borderRadius: RADIUS.xl },
   deleteBtnText: { ...FONTS.bodySmall, color: COLORS.urgency, fontWeight: '600' },
   deleteWarningWrap: { alignItems: 'center', paddingVertical: SPACING.lg, marginBottom: SPACING.lg },
-  deleteWarningIcon: { width: 72, height: 72, borderRadius: 20, backgroundColor: '#FEF2F2', justifyContent: 'center', alignItems: 'center', marginBottom: SPACING.md, borderWidth: 1, borderColor: '#FECACA' },
+  deleteWarningIcon: { width: 72, height: 72, borderRadius: 20, backgroundColor: COLORS.urgencySoft, justifyContent: 'center', alignItems: 'center', marginBottom: SPACING.md, borderWidth: 1, borderColor: '#FECACA' },
   deleteWarningTitle: { ...FONTS.h2, color: COLORS.urgency, marginBottom: SPACING.sm },
   deleteWarningDesc: { ...FONTS.body, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 22 },
-  deleteInput: { backgroundColor: '#FEF2F2', borderWidth: 2, borderColor: COLORS.urgency, borderRadius: RADIUS.md, paddingHorizontal: SPACING.lg, paddingVertical: SPACING.lg, ...FONTS.h3, color: COLORS.urgency, textAlign: 'center', letterSpacing: 2, marginBottom: SPACING.lg },
+  deleteInput: { backgroundColor: COLORS.urgencySoft, borderWidth: 2, borderColor: COLORS.urgency, borderRadius: RADIUS.md, paddingHorizontal: SPACING.lg, paddingVertical: SPACING.lg, ...FONTS.h3, color: COLORS.urgency, textAlign: 'center', letterSpacing: 2, marginBottom: SPACING.lg },
   confirmDeleteBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.sm, backgroundColor: COLORS.urgency, paddingVertical: SPACING.lg, borderRadius: RADIUS.xl, ...SHADOWS.float },
   confirmDeleteBtnDisabled: { opacity: 0.4 },
   confirmDeleteBtnText: { ...FONTS.h3, color: COLORS.textInverse },

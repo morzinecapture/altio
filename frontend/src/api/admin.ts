@@ -2,6 +2,7 @@ import { supabase, checkError, captureError, unwrapJoin, requireAdmin } from './
 import type { ProviderDocument, MissionStatus } from './_client';
 import { sendPushNotification } from './notifications';
 import { assertMissionTransition } from './_client';
+import { getMissionTypeLabel } from '../utils/serviceLabels';
 
 export const getAdminStats = async () => {
   await requireAdmin();
@@ -163,7 +164,7 @@ export const getAdminEmergencies = async () => {
   await requireAdmin();
   const { data, error } = await supabase
     .from('emergency_requests')
-    .select('*, property:properties(name, address, latitude, longitude), owner:users!owner_id(name)')
+    .select('*, property:properties(name, address, latitude, longitude), owner:public_profiles!owner_id(name)')
     .order('created_at', { ascending: false })
     .limit(50);
   checkError(error);
@@ -273,16 +274,25 @@ const resolveAdminInvoiceDocumentUrl = async (value?: string | null) => {
     }
   }
 
-  if (!objectPath) return value;
+  if (!objectPath) return undefined;
   const { data, error } = await supabase.storage.from('invoices').createSignedUrl(objectPath, 60 * 60);
-  return error || !data?.signedUrl ? value : data.signedUrl;
+
+  // Bucket privé : sans URL signée, renvoyer la valeur brute produirait un lien mort (HTTP 400).
+  if (error || !data?.signedUrl) {
+    captureError(error ?? new Error('Signature du document impossible'), {
+      scope: 'resolveAdminInvoiceDocumentUrl',
+      objectPath,
+    });
+    return undefined;
+  }
+  return data.signedUrl;
 };
 
 export const getAdminInvoices = async (filters?: { invoice_type?: string; status?: string; limit?: number }) => {
   await requireAdmin();
   let query = supabase
     .from('invoices')
-    .select('*, mission:missions(mission_type, description, property:properties(name)), seller:users!invoices_seller_id_fkey(name, company_name), buyer:users!invoices_buyer_id_fkey(name, company_name)')
+    .select('*, mission:missions(mission_type, description, property:properties(name)), seller:public_profiles!invoices_seller_id_fkey(name, company_name), buyer:public_profiles!invoices_buyer_id_fkey(name, company_name)')
     .order('created_at', { ascending: false });
 
   if (filters?.invoice_type) query = query.eq('invoice_type', filters.invoice_type);
@@ -302,7 +312,7 @@ export const getDisputes = async () => {
   await requireAdmin();
   const { data, error } = await supabase
     .from('missions')
-    .select('id, status, mission_type, fixed_rate, dispute_reason, dispute_at, dispute_resolution, dispute_resolved_at, owner:users!missions_owner_id_fkey(name), provider:users!missions_assigned_provider_id_fkey(name), property:properties(name, address)')
+    .select('id, status, mission_type, fixed_rate, dispute_reason, dispute_at, dispute_resolution, dispute_resolved_at, owner:public_profiles!missions_owner_id_fkey(name), provider:public_profiles!missions_assigned_provider_id_fkey(name), property:properties(name, address)')
     .eq('status', 'dispute')
     .order('dispute_at', { ascending: false });
   checkError(error);
@@ -334,7 +344,7 @@ export const resolveDispute = async (missionId: string, resolution: string, outc
     .eq('status', 'dispute');
   checkError(error);
 
-  const missionLabel = `${mission.mission_type || 'service'}`;
+  const missionLabel = getMissionTypeLabel(mission.mission_type || 'service').toLocaleLowerCase('fr-FR');
 
   // Contextual dispute resolution notifications (richer than generic trigger)
   if (mission.owner_id) {

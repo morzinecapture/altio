@@ -6,19 +6,19 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 export const COLORS = {
   // Backgrounds — near-white, clean, professional
-  background: '#F1F5F9',
+  background: '#F5F4EF',
   paper: '#FFFFFF',
-  subtle: '#E2E8F0',
+  subtle: '#ECEEEA',
   surfaceGlass: 'rgba(255, 255, 255, 0.85)',
 
   // Text — Slate palette, high contrast
-  textPrimary: '#1E293B',
-  textSecondary: '#64748B',
-  textTertiary: '#94A3B8',
+  textPrimary: '#142B3C',
+  textSecondary: '#60717C',
+  textTertiary: '#71808A',
   textInverse: '#FFFFFF',
 
   // Brand — bleu professionnel pur (blue-600/500), sans dérive violet
-  brandPrimary: '#2563EB',
+  brandPrimary: '#2861DF',
   brandSecondary: '#3B82F6',
   brandAccent: '#1D4ED8',
   brandGradientStart: '#2563EB',
@@ -27,12 +27,12 @@ export const COLORS = {
   // Functional
   urgency: '#EF4444',
   urgencySoft: '#FEE2E2',
-  success: '#10B981',
-  successSoft: '#D1FAE5',
-  warning: '#F59E0B',
+  success: '#297C62',
+  successSoft: '#E5F2EA',
+  warning: '#956318',
   warningSoft: '#FEF3C7',
   info: '#2563EB',
-  infoSoft: '#DBEAFE',
+  infoSoft: '#ECF2FF',
 
   // Accent — orange CTA recommandé B2B, violet uniquement pour admin
   coral: '#F97316',
@@ -41,11 +41,21 @@ export const COLORS = {
   purpleSoft: '#EDE9FE',
 
   // Border — Slate 300/400
-  border: '#CBD5E1',
+  border: '#E3E7E5',
   borderActive: '#94A3B8',
+  navy: '#173748',
+  gold: '#D6B681',
+  attention: '#FFFAF0',
+  attentionBorder: '#EAD7B7',
+  avatar: '#DDC7A8',
+  onNavyMuted: '#C6D8DC',
+  heroGlass: 'rgba(20,43,60,0.30)',
+  heroBorder: 'rgba(255,255,255,0.28)',
+  scrim: 'rgba(20,43,60,0.48)',
 };
 
 export const GRADIENT = {
+  alpine: ['rgba(8,30,47,0.88)', 'rgba(11,37,57,0.46)', 'rgba(8,27,44,0.33)'] as const,
   header: ['#EFF6FF', '#DBEAFE', '#EFF6FF'] as const,
   brandButton: ['#2563EB', '#3B82F6'] as const,
   urgencyButton: ['#EF4444', '#F87171'] as const,
@@ -78,7 +88,7 @@ export const SHADOWS = {
   card: {
     shadowColor: '#0F172A',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.10,
+    shadowOpacity: 0.04,
     shadowRadius: 6,
     elevation: 2,
   },
@@ -128,7 +138,7 @@ export const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
   open: { bg: COLORS.urgencySoft, text: COLORS.urgency },
   bids_open: { bg: COLORS.warningSoft, text: COLORS.warning },
   in_progress: { bg: COLORS.infoSoft, text: COLORS.info },
-  assigned: { bg: COLORS.purpleSoft, text: COLORS.purple },
+  assigned: { bg: COLORS.infoSoft, text: COLORS.info },
   accepted: { bg: COLORS.successSoft, text: COLORS.success },
   rejected: { bg: COLORS.urgencySoft, text: COLORS.urgency },
   awaiting_payment: { bg: COLORS.coralSoft, text: COLORS.coral },
@@ -148,6 +158,50 @@ export const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
   quote_sent: { bg: COLORS.coralSoft, text: COLORS.coral },
   quote_accepted: { bg: COLORS.infoSoft, text: COLORS.info },
   quote_refused: { bg: COLORS.urgencySoft, text: COLORS.urgency },
+};
+
+// Palette catégorielle — sert à distinguer des familles de services entre elles,
+// jamais à porter un sens d'état (succès/erreur/alerte : voir COLORS fonctionnel).
+// Chaque entrée = teinte pleine pour l'icône/le texte, teinte douce pour le fond.
+export const ACCENTS = {
+  violet:     { color: '#8B5CF6', bg: COLORS.purpleSoft },
+  pink:       { color: '#EC4899', bg: '#FCE7F3' },
+  cyan:       { color: '#06B6D4', bg: '#CFFAFE' },
+  blue:       { color: COLORS.brandSecondary, bg: COLORS.infoSoft },
+  orange:     { color: COLORS.coral, bg: COLORS.coralSoft },
+  green:      { color: COLORS.success, bg: COLORS.successSoft },
+  amber:      { color: COLORS.warning, bg: COLORS.warningSoft },
+  neutral:    { color: COLORS.textSecondary, bg: COLORS.background },
+} as const;
+
+export type AccentName = keyof typeof ACCENTS;
+
+// Visuel partagé des services et catégories partenaires.
+// Source unique : ne pas redéclarer de table icône/couleur dans un écran.
+export const SERVICE_VISUALS: Record<string, { icon: string; accent: AccentName }> = {
+  // Prestations Altio
+  cleaning:   { icon: 'sparkles-outline', accent: 'green'   },
+  linen:      { icon: 'shirt-outline',    accent: 'pink'    },
+  maintenance:{ icon: 'construct-outline',accent: 'blue'    },
+  plumbing:   { icon: 'water-outline',    accent: 'blue'    },
+  electrical: { icon: 'flash-outline',    accent: 'amber'   },
+  locksmith:  { icon: 'key-outline',      accent: 'violet'  },
+  jacuzzi:    { icon: 'sunny-outline',    accent: 'cyan'    },
+  repair:     { icon: 'hammer-outline',   accent: 'orange'  },
+  // Catégories du catalogue partenaires
+  restaurant: { icon: 'restaurant-outline', accent: 'orange'  },
+  activite:   { icon: 'bicycle-outline',    accent: 'green'   },
+  spa:        { icon: 'sparkles-outline',   accent: 'violet'  },
+  transport:  { icon: 'car-outline',        accent: 'blue'    },
+  shopping:   { icon: 'bag-outline',        accent: 'pink'    },
+  location:   { icon: 'key-outline',        accent: 'amber'   },
+  autre:      { icon: 'ellipsis-horizontal-outline', accent: 'neutral' },
+};
+
+/** Visuel d'un service : icône + couleurs. Retombe sur 'autre' si la clé est inconnue. */
+export const getServiceVisual = (key: string) => {
+  const entry = SERVICE_VISUALS[key] ?? SERVICE_VISUALS.autre;
+  return { icon: entry.icon, ...ACCENTS[entry.accent] };
 };
 
 export const MISSION_TYPE_LABELS: Record<string, string> = {

@@ -1,0 +1,2 @@
+Bienvenue sur Altio.
+Cette première version réunit la gestion des logements, le planning, les missions de service, les profils prestataires, la messagerie et le suivi des factures.

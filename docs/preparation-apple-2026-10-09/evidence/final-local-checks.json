@@ -1,0 +1,81 @@
+{
+  "checkedAt": "2026-10-09T13:04:58.923Z",
+  "passed": false,
+  "scope": "Local uniquement ; aucun déploiement ou envoi Apple.",
+  "results": [
+    {
+      "name": "routes",
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "name": "typescript",
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "name": "lint",
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "name": "application",
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "name": "database",
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "name": "server",
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "name": "dependency-guards",
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "name": "payment-guard",
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "name": "app-store",
+      "passed": false,
+      "exitCode": 1
+    }
+  ],
+  "testCounts": {
+    "application": 352,
+    "server": 316,
+    "database": 64,
+    "dependency-guards": 1,
+    "payment-guard": 5
+  },
+  "totalTests": 738,
+  "iosReleaseBuild": "passed",
+  "signedArchive": false,
+  "localSigningIdentities": 0,
+  "remoteDeployment": false,
+  "appleUpload": false,
+  "smokeTest": {
+    "status": "passed",
+    "scope": "Écran de connexion de la copie Release isolée com.altio.prelaunch.local, simulateur iPhone 17. Aucun compte connecté, paiement, notification APNs ou révocation Apple validé par ce contrôle.",
+    "screenshot": "ios-release-smoke.png"
+  },
+  "secretConfiguration": {
+    "checked": "names only; no secret values read or exported",
+    "missingNames": [
+      "APPLE_TEAM_ID",
+      "APPLE_KEY_ID",
+      "APPLE_CLIENT_ID",
+      "APPLE_PRIVATE_KEY",
+      "RESEND_API_KEY",
+      "WITHDRAWAL_RECEIPT_FROM"
+    ]
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "CFBundleIdentifier": "com.altio.app",
+  "CFBundleShortVersionString": "1.0.0",
+  "CFBundleVersion": "1",
+  "DTXcode": "2660",
+  "DTSDKName": "iphonesimulator26.5",
+  "MinimumOSVersion": "15.1",
+  "permissions": {
+    "NSCameraUsageDescription": "Cette application a besoin de l'appareil photo pour prendre des preuves de fin de mission.",
+    "NSLocationWhenInUseUsageDescription": "Cette application utilise votre localisation pour trouver les prestataires et missions à proximité.",
+    "NSPhotoLibraryAddUsageDescription": "Cette application sauvegarde des photos de vos interventions.",
+    "NSPhotoLibraryUsageDescription": "Cette application a besoin d'accéder à vos photos pour uploader des preuves d'intervention."
+  },
+  "privacyManifests": 22,
+  "mainBundlePresent": true,
+  "buildResult": "BUILD SUCCEEDED",
+  "scope": "Unsigned Release build for iOS simulator, not an App Store archive."
+}

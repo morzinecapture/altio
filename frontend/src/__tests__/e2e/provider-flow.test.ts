@@ -144,6 +144,7 @@ describe('PARTIE A — Auth + Onboarding provider', () => {
     const onboardingData = {
       specialties: ['cleaning', 'linen'],
       company_type: 'auto_entrepreneur',
+      is_vat_exempt: true,
       radius_km: 20,
       weekly_availability: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'],
       cgu_accepted_at: new Date().toISOString(),
@@ -153,6 +154,12 @@ describe('PARTIE A — Auth + Onboarding provider', () => {
     };
 
     await expect(completeProviderOnboarding(onboardingData)).resolves.toBeDefined();
+  });
+
+  test('onboarding refuses to infer VAT exemption from micro status', async () => {
+    await expect(completeProviderOnboarding({
+      specialties: ['cleaning'], company_type: 'auto_entrepreneur', radius_km: 20, weekly_availability: [],
+    })).rejects.toThrow('confirmer votre régime de TVA');
   });
 
   test('SIRET validation works correctly', () => {
@@ -522,7 +529,7 @@ describe('PARTIE D — Flux urgence complet (provider)', () => {
     expect(isValidEmergencyTransition('completed', 'bids_open')).toBe(false);
   });
 
-  test('completeEmergencyWithCapture() completes an emergency', async () => {
+  test('completeEmergencyWithCapture() declares completion for owner validation', async () => {
     // Mock the emergency request fetch (needs quote_payment_id + correct status + provider)
     mockSupabaseResponse('emergency_requests', 'select', {
       owner_id: TEST_OWNER.id,
@@ -530,8 +537,8 @@ describe('PARTIE D — Flux urgence complet (provider)', () => {
       accepted_provider_id: TEST_PROVIDER.id,
       quote_payment_id: 'pi_quote_hold',
     });
-    // Mock capture-payment edge function
-    (supabase.functions.invoke as jest.Mock).mockResolvedValue({ data: { captured: true }, error: null });
+    // Server records a pending step; this must not capture payment immediately.
+    (supabase.functions.invoke as jest.Mock).mockResolvedValue({ data: { step: { id: 'step-test', status: 'pending' } }, error: null });
     // Mock emergency update to completed
     mockSupabaseResponse('emergency_requests', 'update', {
       ...EMERGENCY, status: 'completed', completed_at: new Date().toISOString(),
@@ -597,6 +604,25 @@ describe('PARTIE E — Revenus + Factures + Stats', () => {
     expect(stats.completed_missions).toBe(0);
     // Rendering check: "0€" should be displayable
     expect(`${(stats.total_earnings || 0).toFixed(2)}€`).toBe('0.00€');
+  });
+
+  test('getProviderStats() derives settled revenue from post-payment invoices', async () => {
+    mockSupabaseResponse('missions', 'select', []);
+    mockSupabaseResponse('invoices', 'select', [
+      { invoice_type: 'service', amount_ttc: 100, seller_id: TEST_PROVIDER.id, buyer_id: TEST_OWNER.id, status: 'issued' },
+      { invoice_type: 'commission', amount_ttc: 10, seller_id: null, buyer_id: TEST_PROVIDER.id, status: 'issued' },
+      { invoice_type: 'service', amount_ttc: 50, seller_id: TEST_PROVIDER.id, buyer_id: TEST_OWNER.id, status: 'issued' },
+      { invoice_type: 'commission', amount_ttc: 5, seller_id: null, buyer_id: TEST_PROVIDER.id, status: 'issued' },
+      { invoice_type: 'service', amount_ttc: 999, seller_id: TEST_PROVIDER.id, buyer_id: TEST_OWNER.id, status: 'cancelled' },
+    ]);
+    mockSupabaseResponse('mission_applications', 'select', []);
+    mockSupabaseResponse('emergency_requests', 'select', []);
+    mockSupabaseResponse('mission_quotes', 'select', []);
+    mockSupabaseResponse('reviews', 'select', []);
+
+    const stats = await getProviderStats();
+
+    expect(stats.total_earnings).toBe(135);
   });
 
   test('getMyInvoices() returns array (empty or with data)', async () => {

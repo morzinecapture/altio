@@ -1,0 +1,54 @@
+{
+  "checkedAt": "2026-10-11T13:56:55.158534+00:00",
+  "status": "endpoints_deployed_and_tested_external_configuration_remaining",
+  "applied": [
+    "atomic_account_deletion_foundation",
+    "revoke_deleted_account_access",
+    "preserve_invoice_parties_for_account_erasure",
+    "erase_closed_account_history",
+    "resumable_account_file_erasure",
+    "preserve_siren_invoice_counters",
+    "withdrawal_requests_and_receipts",
+    "schedule_account_erasure_retries",
+    "schedule_withdrawal_receipt_retries"
+  ],
+  "tests": {
+    "targetedPassed": 105,
+    "serverRegressionPassed": 380,
+    "note": "376 tests passed in initial broad run; two files failed only because PGLITE_MODULE was absent. Rerun with installed module: all four tests passed."
+  },
+  "remote": {
+    "ownerLoginAndProfile": true,
+    "providerLoginAndProfile": true,
+    "disposablePreflightReady": true,
+    "invoiceCount": 102,
+    "invoiceHashBefore": "85c0b2787c6cb1d82cbc8dbcea89ba6b",
+    "invoiceHashAfter": "85c0b2787c6cb1d82cbc8dbcea89ba6b",
+    "invoiceIdentitySnapshots": 102,
+    "prepareAccountDeletionHTTP": 200,
+    "disposableAccountDeleted": true,
+    "erasureJobCompleted": true,
+    "oldTokenRejected": true,
+    "withdrawalRecorded": true,
+    "withdrawalRetryIdempotent": true,
+    "withdrawalReceiptRetrievable": true,
+    "withdrawalEmailSent": false,
+    "accountErasureRetryEnabled": true,
+    "brevoConfigured": true,
+    "brevoDeliveryStatus": "401 unauthorized"
+  },
+  "notYetDeployed": [],
+  "remaining": [
+    "Apple revocation credentials absent: APPLE_TEAM_ID, APPLE_KEY_ID, APPLE_CLIENT_ID, APPLE_PRIVATE_KEY",
+    "Apple sign-in deletion not validated; live tests used email accounts",
+    "Receipt retry inactive until email configured",
+    "Brevo key present but API rejects it with HTTP 401 unauthorized; no receipt delivered"
+  ],
+  "deployed": [
+    "prepare-account-deletion",
+    "delete-account",
+    "submit-withdrawal",
+    "process-account-erasures",
+    "process-withdrawal-receipts"
+  ]
+}

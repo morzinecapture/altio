@@ -1,0 +1,39 @@
+{
+  "checkedAt": "2026-10-09",
+  "project": "vtybccqqbyjbmhkpliyn",
+  "calendar": {
+    "functionVersion": 17,
+    "migration": "20261009073545",
+    "authenticatedHealthStatus": 200,
+    "anonymousStatus": 401,
+    "configuredProperties": 0,
+    "dispatchCheckRequests": 0,
+    "schedule": "0 * * * *",
+    "command": "select public.dispatch_ical_sync()",
+    "limitations": [
+      "Pas de flux réel connecté",
+      "Annulations et adaptation des missions liées à finaliser"
+    ]
+  },
+  "refunds": {
+    "functionVersion": 22,
+    "migration": "20261009074235",
+    "rls": true,
+    "anonymousRead": false,
+    "authenticatedWrite": false,
+    "receiptsAtVerification": 0,
+    "actualFinancialOperations": 0,
+    "limitations": [
+      "Réception durable uniquement",
+      "Avoirs et rapprochement Connect non automatisés"
+    ]
+  },
+  "accountDeletion": {
+    "clientConfirmationGuard": true,
+    "newTests": 7,
+    "realAccountsDeleted": 0,
+    "serverAtomicDeletionReady": false
+  },
+  "submissionPerformed": false,
+  "productionReady": false
+}

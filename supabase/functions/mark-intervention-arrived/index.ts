@@ -1,10 +1,12 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { assertConnectIntent } from '../_shared/connect-split.ts'
 import Stripe from 'npm:stripe@^14.0.0'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { requireAuth } from '../_shared/auth.ts'
 import { assertUUID, ValidationError } from '../_shared/validate.ts'
 import { corsHeaders, handleCors } from '../_shared/cors.ts'
 import { checkRateLimit } from '../_shared/rateLimit.ts'
+import { keepAlive } from '../_shared/background.ts'
 
 const FN = 'mark-intervention-arrived'
 
@@ -68,12 +70,17 @@ serve(async (req) => {
     // 2. Capture the displacement pre-auth (if there is one)
     if (iv.displacement_payment_id && iv.payment_mode === 'in_app') {
       try {
-        const intent = await stripe.paymentIntents.capture(iv.displacement_payment_id)
+        const existing = await stripe.paymentIntents.retrieve(iv.displacement_payment_id)
+        if (existing.metadata?.completionFlow === 'v1') throw new Error('Utilisez la validation de l’étape ; capture directe interdite')
+        const { data: payee, error: payeeError } = await db.from('provider_profiles').select('stripe_account_id').eq('provider_id', iv.assigned_provider_id).single()
+        if (payeeError) throw new Error('Vérification du bénéficiaire indisponible')
+        assertConnectIntent(existing, payee?.stripe_account_id)
+        const intent = existing.status === 'succeeded' ? existing : await stripe.paymentIntents.capture(iv.displacement_payment_id)
         log('info', 'displacement_captured', { pi: iv.displacement_payment_id, status: intent.status })
       } catch (err) {
         const e = err as { code?: string; type?: string; message?: string }
         // If already captured, continue; otherwise abort.
-        if (e?.code === 'payment_intent_unexpected_state') {
+        if (e?.code === 'payment_intent_unexpected_state' && (await stripe.paymentIntents.retrieve(iv.displacement_payment_id)).status === 'succeeded') {
           log('warn', 'displacement_already_captured', { pi: iv.displacement_payment_id })
         } else {
           log('error', 'stripe_capture_failed', { err: e?.message, code: e?.code })
@@ -97,13 +104,17 @@ serve(async (req) => {
     }
 
     // 4. Invoice generation for the displacement leg.
-    // Fire-and-forget: arrival must not fail if invoice generation is temporarily down.
-    db.functions.invoke('generate-invoice', {
-      body: { interventionId, invoiceType: 'displacement' },
-      headers: { 'x-service-key': Deno.env.get('INTERNAL_SERVICE_KEY') || '' },
-    }).catch((e: unknown) => log('warn', 'invoice_displacement_skipped', {
-      err: e instanceof Error ? e.message : String(e),
-    }))
+    // L'arrivée ne doit pas échouer si la facturation est temporairement indisponible,
+    // mais la tâche doit survivre à la réponse : sans `waitUntil`, le runtime Edge
+    // arrête l'isolate dès le `respond()` et la génération n'aboutit jamais.
+    keepAlive(
+      db.functions.invoke('generate-invoice', {
+        body: { interventionId, invoiceType: 'displacement' },
+        headers: { 'x-service-key': Deno.env.get('INTERNAL_SERVICE_KEY') || '' },
+      }).catch((e: unknown) => log('warn', 'invoice_displacement_skipped', {
+        err: e instanceof Error ? e.message : String(e),
+      }))
+    )
 
     // Owner push is handled by the DB trigger `notify_intervention_status_change`
     // when phase flips to 'on_site' ("Prestataire arrivé"). No manual push needed.

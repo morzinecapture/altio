@@ -1,0 +1,37 @@
+{
+  "status": "ok",
+  "deployment": {
+    "id": "dpl_6sqfSiyHmjGbmQXKZK2eZbhFBihv",
+    "url": "https://altio-z852sby1j-morzinecaptures-projects.vercel.app",
+    "inspectorUrl": "https://vercel.com/morzinecaptures-projects/altio/6sqfSiyHmjGbmQXKZK2eZbhFBihv",
+    "readyState": "READY",
+    "target": null,
+    "deploymentApiUrl": "https://api.vercel.com/v13/deployments/dpl_6sqfSiyHmjGbmQXKZK2eZbhFBihv",
+    "buildMachine": {
+      "cores": 4,
+      "memory": 8192,
+      "machine": "standard",
+      "selectionType": "elastic",
+      "selectionSource": "elastic-algorithm"
+    }
+  },
+  "message": "Deployment altio-z852sby1j-morzinecaptures-projects.vercel.app ready.",
+  "next": [
+    {
+      "command": "vercel git connect --non-interactive",
+      "when": "Automatically deploy changes on every push"
+    },
+    {
+      "command": "vercel curl https://altio-z852sby1j-morzinecaptures-projects.vercel.app",
+      "when": "Verify deployment, including when Deployment Protection is enabled"
+    },
+    {
+      "command": "vercel inspect altio-z852sby1j-morzinecaptures-projects.vercel.app --non-interactive",
+      "when": "Inspect deployment"
+    },
+    {
+      "command": "vercel deploy --prod --non-interactive",
+      "when": "Promote to production"
+    }
+  ]
+}

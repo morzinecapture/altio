@@ -1,0 +1,57 @@
+{
+  "date": "2026-10-09",
+  "deployed": false,
+  "scope": "Confirmation et autorisation Apple, développées et testées localement",
+  "tests": {
+    "frontendDeletion": 16,
+    "nativeAppleConfirmation": 10,
+    "serverRevocation": 11,
+    "serverAuthorization": 11,
+    "endpointGuards": 10
+  },
+  "verified": [
+    "Préparation séparée du point de suppression historique",
+    "Annulation et mauvais compte interrompent le parcours",
+    "Session initiale conservée ; changement de compte interrompt la suppression",
+    "Identité serveur issue de auth.getUser, pas des champs fournis par le client",
+    "Clés Apple absentes ou invalides : arrêt avant la confirmation native",
+    "Échec de révocation : aucun nettoyage des données lancé"
+  ],
+  "remaining": [
+    "Traitement des comptes avec historique et conservation justifiée des pièces",
+    "Nettoyage des fichiers et connexions externes",
+    "Gestion des accès résiduels et concurrence des anciennes références sans contrainte",
+    "Configurer les clés Apple côté serveur",
+    "Validation distante avec compte dédié puis déploiement coordonné",
+    "Recette avec compte Apple jetable sur appareil physique"
+  ],
+  "sources": [
+    "https://developer.apple.com/help/app-review/guideline-reference/5-1-1-account-deletion",
+    "https://supabase.com/docs/guides/auth/managing-user-data",
+    "https://docs.expo.dev/versions/latest/sdk/apple-authentication/"
+  ],
+  "atomicFoundation": {
+    "deployed": false,
+    "migration": "20261009093406_atomic_account_deletion_foundation.sql",
+    "localDatabaseTests": 14,
+    "serverOrchestrationTests": 9,
+    "supported": "Comptes sans historique métier, sans fichiers et sans connexion externe à nettoyer",
+    "mechanism": "Une seule suppression Auth ; cascade et nettoyage dans une transaction PostgreSQL",
+    "verified": [
+      "Profil, sessions, identités et préférences supprimés ensemble",
+      "Autre compte préservé",
+      "Erreur tardive : toutes les suppressions annulées",
+      "Reprise après échec réussie",
+      "Factures et historique conservés intégralement en cas de blocage",
+      "Relations vérifiées avant les cascades Auth et au moment de la suppression",
+      "Droits de contrôle limités au serveur",
+      "Profil manquant : refus explicite"
+    ],
+    "limitations": [
+      "Schéma représentatif simulé localement, aucune recette de suppression sur le serveur distant",
+      "Comptes avec historique, fichiers ou connexions externes non pris en charge",
+      "Accès par jeton déjà émis à traiter avant déploiement",
+      "Concurrence des références historiques sans contrainte à traiter avant déploiement"
+    ]
+  }
+}

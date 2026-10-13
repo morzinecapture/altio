@@ -114,7 +114,7 @@ describe('Urgence complète : créer → bid → accepter → arriver → devis 
 
   // ── 1. Owner crée une urgence ─────────────────────────────────────────────
 
-  it('1. createEmergency → status bids_open + notif aux prestataires', async () => {
+  it('1. createEmergency → status bids_open, diffusion par le trigger serveur', async () => {
     mockAuthSession(owner.id);
 
     const created = {
@@ -125,7 +125,7 @@ describe('Urgence complète : créer → bid → accepter → arriver → devis 
     mockSupabaseResponse('emergency_requests', 'insert', created);
     mockSupabaseResponse('favorite_providers', 'select', []);
     // Providers in zone
-    mockSupabaseResponse('provider_profiles', 'select', [{
+    mockSupabaseResponse('public_provider_profiles', 'select', [{
       provider_id: provider.id,
       specialties: ['plumbing'],
       radius_km: 50,
@@ -142,18 +142,13 @@ describe('Urgence complète : créer → bid → accepter → arriver → devis 
     await flushMicrotasks();
 
     expect(result.status).toBe('bids_open');
-    // At least one push notification sent to provider in zone
-    expect(sendPushSpy).toHaveBeenCalledWith(
-      provider.id,
-      expect.stringContaining('Urgence'),
-      expect.stringContaining('plumbing'),
-      expect.objectContaining({ emergencyId: emergency.id }),
-    );
+    // Zone broadcast belongs to trg_notify_emergency_broadcast_on_insert: no second client push.
+    expect(sendPushSpy).not.toHaveBeenCalled();
   });
 
   // ── 2. Provider soumet un bid ─────────────────────────────────────────────
 
-  it('2. submitEmergencyBid → bid créé + notif owner', async () => {
+  it('2. submitEmergencyBid → bid créé, notification gérée par le serveur', async () => {
     mockAuthSession(provider.id);
 
     // Document verification
@@ -174,12 +169,7 @@ describe('Urgence complète : créer → bid → accepter → arriver → devis 
 
     expect(result).toBeDefined();
     expect(result.status).toBe('pending');
-    expect(sendPushSpy).toHaveBeenCalledWith(
-      owner.id,
-      expect.stringContaining('candidature'),
-      expect.stringContaining('plumbing'),
-      expect.objectContaining({ emergencyId: emergency.id }),
-    );
+    expect(sendPushSpy).not.toHaveBeenCalled(); // One server event, no second client push.
   });
 
   // ── 3. Owner accepte le bid ───────────────────────────────────────────────
@@ -187,18 +177,13 @@ describe('Urgence complète : créer → bid → accepter → arriver → devis 
   it('3. acceptEmergencyBid → status displacement_paid', async () => {
     mockAuthSession(owner.id);
 
-    // Owner check
-    mockSupabaseResponse('emergency_requests', 'select', { owner_id: owner.id });
-    // Accept bid
-    mockSupabaseResponse('emergency_bids', 'update', [{ ...bid, status: 'accepted' }]);
-    // Get bid data
-    mockSupabaseResponse('emergency_bids', 'select', { travel_cost: 50, diagnostic_cost: 30, estimated_arrival: bid.estimated_arrival });
-    // Update emergency → displacement_paid
-    mockSupabaseResponse('emergency_requests', 'update', [{ ...emergency, status: 'displacement_paid', accepted_provider_id: provider.id }]);
-
     const result = await acceptEmergencyBid(emergency.id, bid.id, provider.id, 'pi_displacement_123');
 
     expect(result.ok).toBe(true);
+    // Accepting, rejecting the others and assigning the emergency happen in one transaction.
+    expect(mockSupabaseClient.rpc).toHaveBeenCalledWith('accept_emergency_bid', {
+      p_emergency: emergency.id, p_bid: bid.id, p_payment: 'pi_displacement_123',
+    });
   });
 
   // ── 4. payDisplacement — montant vérifié dans scénario 2 ──────────────────
@@ -255,7 +240,7 @@ describe('Urgence complète : créer → bid → accepter → arriver → devis 
 
   // ── 8. Provider complète + capture paiement ───────────────────────────────
 
-  it('8. completeEmergencyWithCapture → status completed + capture paiement', async () => {
+  it('8. completion declares repair without capturing the payment', async () => {
     mockAuthSession(provider.id);
 
     // Fetch emergency for status check
@@ -268,16 +253,13 @@ describe('Urgence complète : créer → bid → accepter → arriver → devis 
     // Update to completed
     mockSupabaseResponse('emergency_requests', 'update', null);
 
+    mockSupabaseClient.functions.invoke.mockResolvedValueOnce({ data: { step: { id: 'step-repair', status: 'pending' } }, error: null });
     const result = await completeEmergencyWithCapture(emergency.id);
 
     expect(result.ok).toBe(true);
     // capturePayment should have been called with the payment intent
-    expect(capturePayment).toHaveBeenCalledWith(
-      'pi_quote_123',
-      undefined,
-      undefined,
-      emergency.id,
-    );
+    expect(capturePayment).not.toHaveBeenCalled();
+    expect(mockSupabaseClient.functions.invoke).toHaveBeenCalledWith('emergency-completion', { body: { emergencyId: emergency.id, phase: 'repair', action: 'declare', finishEmergency: true } });
   });
 });
 
@@ -305,6 +287,12 @@ describe('Montants avec commission urgence', () => {
     expect(ownerPays).toBe(385);
     expect(providerGets).toBe(315);
     expect(ownerPays - providerGets).toBe(70); // Marge Altio
+  });
+
+  it('Prestataire assujetti : 10 % du HT de chaque côté', () => {
+    // 120 € TTC = 100 € HT → frais 10 € de chaque côté
+    expect(computeOwnerTotal(120, 0.20)).toBe(130);
+    expect(computeProviderPayout(120, 0.20)).toBe(110);
   });
 
   it('payDisplacement calcule le montant en centimes avec 10% de marge', async () => {
@@ -336,19 +324,11 @@ describe('Urgence refusée : owner rejette le bid', () => {
     mockSupabaseResponse('emergency_requests', 'select', { owner_id: owner.id });
     // Reject bid
     mockSupabaseResponse('emergency_bids', 'update', null);
-    // Fetch bid provider for notification
-    mockSupabaseResponse('emergency_bids', 'select', { provider_id: provider.id });
-
     const result = await rejectEmergencyBid(emergency.id, bid.id);
 
     expect(result.ok).toBe(true);
-    // Notification sent to provider about rejection
-    expect(sendPushSpy).toHaveBeenCalledWith(
-      provider.id,
-      expect.stringContaining('refusée'),
-      expect.any(String),
-      expect.objectContaining({ emergencyId: emergency.id }),
-    );
+    // The provider is notified by the notify_provider_on_bid_rejected trigger, not the client.
+    expect(sendPushSpy).not.toHaveBeenCalled();
     // The emergency status is NOT changed by rejectEmergencyBid — it stays bids_open
     // (only the bid row is updated, not the emergency_requests row)
   });
@@ -442,6 +422,7 @@ describe('Transitions invalides urgence', () => {
       accepted_provider_id: provider.id,
     });
 
+    mockSupabaseClient.functions.invoke.mockResolvedValueOnce({ data: { error: 'Un devis accepté est requis' }, error: null });
     await expect(completeEmergencyWithCapture(emergency.id)).rejects.toThrow(/devis accepté/);
   });
 
@@ -455,6 +436,7 @@ describe('Transitions invalides urgence', () => {
       accepted_provider_id: provider.id,
     });
 
+    mockSupabaseClient.functions.invoke.mockResolvedValueOnce({ data: { error: 'Aucune empreinte bancaire' }, error: null });
     await expect(completeEmergencyWithCapture(emergency.id)).rejects.toThrow(/empreinte bancaire/);
   });
 

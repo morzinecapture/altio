@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTranslation } from 'react-i18next';
-import { COLORS, FONTS, SPACING, RADIUS, SHADOWS } from '../src/theme';
+import { COLORS, FONTS, SPACING, RADIUS, SHADOWS, GRADIENT } from '../src/theme';
 import { useAuth } from '../src/auth';
 import { completeOwnerOnboarding } from '../src/api';
 
@@ -62,7 +62,7 @@ export default function OnboardingOwner() {
             <Ionicons name="arrow-back" size={22} color={COLORS.textSecondary} />
           </TouchableOpacity>
         ) : (
-          <LinearGradient colors={['#4A6CF7', '#6C63FF']} style={styles.logoCircle} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+          <LinearGradient colors={GRADIENT.brandButton} style={styles.logoCircle} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
             <Ionicons name="snow" size={18} color={COLORS.textInverse} />
           </LinearGradient>
         )}
@@ -213,7 +213,7 @@ export default function OnboardingOwner() {
         {step === 3 && (
           <>
             <View style={styles.readyIconWrap}>
-              <LinearGradient colors={['#4A6CF7', '#6C63FF']} style={styles.readyIconCircle} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+              <LinearGradient colors={GRADIENT.brandButton} style={styles.readyIconCircle} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
                 <Ionicons name="checkmark-done" size={36} color={COLORS.textInverse} />
               </LinearGradient>
             </View>
@@ -275,7 +275,7 @@ const styles = StyleSheet.create({
   infoCard: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACING.sm, backgroundColor: COLORS.infoSoft, padding: SPACING.md, borderRadius: RADIUS.md, marginBottom: SPACING.xl },
   infoText: { ...FONTS.bodySmall, color: COLORS.info, flex: 1, lineHeight: 18 },
   typeCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.paper, padding: SPACING.lg, borderRadius: RADIUS.lg, marginBottom: SPACING.md, borderWidth: 2, borderColor: COLORS.border, ...SHADOWS.card, gap: SPACING.md },
-  typeCardSelected: { borderColor: COLORS.brandPrimary, backgroundColor: '#F8FAFC' },
+  typeCardSelected: { borderColor: COLORS.brandPrimary, backgroundColor: COLORS.background },
   typeIconWrap: { width: 48, height: 48, borderRadius: 14, backgroundColor: COLORS.subtle, justifyContent: 'center', alignItems: 'center', flexShrink: 0 },
   typeIconWrapSelected: { backgroundColor: COLORS.brandPrimary },
   typeLabel: { ...FONTS.bodySmall, color: COLORS.textPrimary, fontWeight: '700', marginBottom: 2 },

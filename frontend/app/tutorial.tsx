@@ -12,7 +12,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { COLORS, FONTS, SPACING, RADIUS, SHADOWS } from '../src/theme';
+import { COLORS, FONTS, SPACING, RADIUS, SHADOWS, GRADIENT } from '../src/theme';
 import { useTranslation } from 'react-i18next';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -23,9 +23,9 @@ const OWNER_SLIDES = [
     icon: 'create-outline' as const,
     titleKey: 'tutorial.owner_slide1_title',
     subtitleKey: 'tutorial.owner_slide1_sub',
-    gradient: ['#4A6CF7', '#6C63FF'] as const,
-    softBg: '#EEF2FF',
-    accentColor: '#4A6CF7',
+    gradient: GRADIENT.brandButton,
+    softBg: COLORS.infoSoft,
+    accentColor: COLORS.brandPrimary,
     decorItems: [
       { size: 120, top: 30, right: -30, opacity: 0.08 },
       { size: 80, bottom: 20, left: -20, opacity: 0.12 },
@@ -37,9 +37,9 @@ const OWNER_SLIDES = [
     icon: 'people-outline' as const,
     titleKey: 'tutorial.owner_slide2_title',
     subtitleKey: 'tutorial.owner_slide2_sub',
-    gradient: ['#06D6A0', '#00B4D8'] as const,
-    softBg: '#E6FBF3',
-    accentColor: '#06D6A0',
+    gradient: GRADIENT.successButton,
+    softBg: COLORS.successSoft,
+    accentColor: COLORS.success,
     decorItems: [
       { size: 100, top: 20, left: -20, opacity: 0.1 },
       { size: 60, bottom: 30, right: 10, opacity: 0.15 },
@@ -51,9 +51,9 @@ const OWNER_SLIDES = [
     icon: 'checkmark-done-outline' as const,
     titleKey: 'tutorial.owner_slide3_title',
     subtitleKey: 'tutorial.owner_slide3_sub',
-    gradient: ['#FF6B6B', '#FF8A65'] as const,
-    softBg: '#FFF0F0',
-    accentColor: '#FF6B6B',
+    gradient: GRADIENT.urgencyButton,
+    softBg: COLORS.urgencySoft,
+    accentColor: COLORS.urgency,
     decorItems: [
       { size: 110, bottom: -10, right: -30, opacity: 0.1 },
       { size: 70, top: 30, left: -10, opacity: 0.12 },
@@ -68,9 +68,9 @@ const PROVIDER_SLIDES = [
     icon: 'notifications-outline' as const,
     titleKey: 'tutorial.provider_slide1_title',
     subtitleKey: 'tutorial.provider_slide1_sub',
-    gradient: ['#4A6CF7', '#6C63FF'] as const,
-    softBg: '#EEF2FF',
-    accentColor: '#4A6CF7',
+    gradient: GRADIENT.brandButton,
+    softBg: COLORS.infoSoft,
+    accentColor: COLORS.brandPrimary,
     decorItems: [
       { size: 120, top: 30, right: -30, opacity: 0.08 },
       { size: 80, bottom: 20, left: -20, opacity: 0.12 },
@@ -82,9 +82,9 @@ const PROVIDER_SLIDES = [
     icon: 'hand-left-outline' as const,
     titleKey: 'tutorial.provider_slide2_title',
     subtitleKey: 'tutorial.provider_slide2_sub',
-    gradient: ['#06D6A0', '#00B4D8'] as const,
-    softBg: '#E6FBF3',
-    accentColor: '#06D6A0',
+    gradient: GRADIENT.successButton,
+    softBg: COLORS.successSoft,
+    accentColor: COLORS.success,
     decorItems: [
       { size: 100, top: 20, left: -20, opacity: 0.1 },
       { size: 60, bottom: 30, right: 10, opacity: 0.15 },
@@ -96,9 +96,9 @@ const PROVIDER_SLIDES = [
     icon: 'wallet-outline' as const,
     titleKey: 'tutorial.provider_slide3_title',
     subtitleKey: 'tutorial.provider_slide3_sub',
-    gradient: ['#FF6B6B', '#FF8A65'] as const,
-    softBg: '#FFF0F0',
-    accentColor: '#FF6B6B',
+    gradient: GRADIENT.urgencyButton,
+    softBg: COLORS.urgencySoft,
+    accentColor: COLORS.urgency,
     decorItems: [
       { size: 110, bottom: -10, right: -30, opacity: 0.1 },
       { size: 70, top: 30, left: -10, opacity: 0.12 },
@@ -190,7 +190,7 @@ export default function TutorialScreen() {
       <View style={styles.header}>
         <View style={styles.logoRow}>
           <LinearGradient
-            colors={['#4A6CF7', '#6C63FF']}
+            colors={GRADIENT.brandButton}
             style={styles.logoCircle}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}

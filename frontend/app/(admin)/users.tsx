@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, RefreshControl, TextInput, FlatList } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, RefreshControl, TextInput, FlatList } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { COLORS, FONTS, SPACING, RADIUS, SHADOWS } from '../../src/theme';
+import { SkeletonList } from '../../src/components/Skeleton';
 import { AdminGuard } from '../../src/components/AdminGuard';
 import { getAdminUsers } from '../../src/api';
 import type { User } from '../../src/types/api';
@@ -107,7 +108,7 @@ export default function AdminUsers() {
         </ScrollView>
 
         {loading ? (
-          <View style={styles.center}><ActivityIndicator size="large" color={COLORS.purple} /></View>
+          <SkeletonList count={5} />
         ) : (
           <FlatList
             data={users}
@@ -133,10 +134,10 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFFFFF' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: SPACING.xl, paddingTop: SPACING.lg, paddingBottom: SPACING.sm },
-  title: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 24, color: '#1E3A5F' },
+  title: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 24, color: COLORS.textPrimary },
   count: { ...FONTS.bodySmall, color: COLORS.textTertiary },
   searchBar: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginHorizontal: SPACING.xl, backgroundColor: COLORS.subtle, borderRadius: RADIUS.md, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, marginBottom: SPACING.sm },
-  searchInput: { flex: 1, ...FONTS.body, color: '#1E3A5F', paddingVertical: 2 },
+  searchInput: { flex: 1, ...FONTS.body, color: COLORS.textPrimary, paddingVertical: 2 },
   filterBar: { flexGrow: 0 },
   filterContent: { paddingHorizontal: SPACING.xl, gap: SPACING.sm, paddingBottom: SPACING.sm },
   filterDivider: { width: 1, backgroundColor: COLORS.border, marginHorizontal: SPACING.xs },
@@ -149,7 +150,7 @@ const styles = StyleSheet.create({
   avatarCircle: { width: 42, height: 42, borderRadius: 21, backgroundColor: COLORS.purpleSoft, justifyContent: 'center', alignItems: 'center' },
   avatarLetter: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 18, color: COLORS.purple },
   userBody: { flex: 1 },
-  userName: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 14, color: '#1E3A5F' },
+  userName: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 14, color: COLORS.textPrimary },
   userEmail: { ...FONTS.bodySmall, color: COLORS.textSecondary, marginTop: 2 },
   userMeta: { alignItems: 'flex-end' },
   roleBadge: { paddingHorizontal: SPACING.sm, paddingVertical: 3, borderRadius: RADIUS.full },

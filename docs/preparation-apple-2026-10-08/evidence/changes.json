@@ -1,0 +1,30 @@
+{
+  "date": "2026-10-08",
+  "permissionsRemoved": [
+    "microphone",
+    "Face ID",
+    "permanent location"
+  ],
+  "packagesPatched": {
+    "shell-quote": "1.12.0",
+    "brace-expansion": "1.1.21",
+    "http-cache-semantics": "4.3.0",
+    "source-map-js": "1.2.2"
+  },
+  "deployedMigration": "20261008141936_prelaunch_function_search_paths",
+  "verifiedMutablePublicFunctions": 0,
+  "testsPassed": {
+    "application": 317,
+    "server": 136,
+    "postgres": 4,
+    "paymentGuard": 5
+  },
+  "lintWarnings": 158,
+  "lintErrors": 0,
+  "iosJavascriptExport": "passed",
+  "nativeBuild": "BUILD SUCCEEDED \u2014 unsigned Release iOS Simulator, Xcode 26.6 / SDK 26.5",
+  "remoteBuild": "not started - explicit approval for source upload required",
+  "appleSubmission": "not performed",
+  "testRuntime": "@electric-sql/pglite@0.3.14 pinned dev dependency",
+  "contactCorrections": "Legal text, owner profile and FR/EN translations"
+}

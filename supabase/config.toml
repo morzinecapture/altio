@@ -297,8 +297,10 @@ max_frequency = "5s"
 # `discord`, `facebook`, `github`, `gitlab`, `google`, `keycloak`, `linkedin_oidc`, `notion`, `twitch`,
 # `twitter`, `slack`, `spotify`, `workos`, `zoom`.
 [auth.external.apple]
-enabled = false
-client_id = ""
+enabled = true
+# Keep the identifier out of version control. In production this must be the
+# Services ID / bundle identifier registered in Apple Developer for Altio.
+client_id = "env(SUPABASE_AUTH_EXTERNAL_APPLE_CLIENT_ID)"
 # DO NOT commit your OAuth provider secret to git. Use environment variable substitution instead:
 secret = "env(SUPABASE_AUTH_EXTERNAL_APPLE_SECRET)"
 # Overrides the default auth redirectUrl.
@@ -376,6 +378,18 @@ verify_jwt = false
 [functions.stripe-webhook]
 verify_jwt = false
 
+[functions.privacy-page]
+verify_jwt = false
+
+[functions.support-page]
+verify_jwt = false
+
+[functions.account-deletion-page]
+verify_jwt = false
+
+[functions.google-calendar-callback]
+verify_jwt = false
+
 [edge_runtime]
 enabled = true
 # Supported request policies: `oneshot`, `per_worker`.
@@ -408,3 +422,38 @@ s3_region = "env(S3_REGION)"
 s3_access_key = "env(S3_ACCESS_KEY)"
 # Configures AWS_SECRET_ACCESS_KEY for S3 bucket
 s3_secret_key = "env(S3_SECRET_KEY)"
+
+[functions.confirm-mission-payment]
+verify_jwt = false
+
+[functions.release-readiness]
+verify_jwt = false
+
+[functions.send-push]
+verify_jwt = false
+
+[functions.generate-credit-note]
+verify_jwt = false
+[functions.emergency-completion]
+verify_jwt = false
+
+[functions.process-completion-steps]
+verify_jwt = false
+
+[functions.sync-ical]
+# JWTs and the internal cron credential are validated by the handler.
+verify_jwt = false
+
+[functions.process-refund-events]
+# Internal credential or configured service key checked by the handler.
+verify_jwt = false
+
+# Internal worker: exact configured service secret or trusted service auth.
+[functions.process-account-erasures]
+verify_jwt = false
+
+[functions.submit-withdrawal]
+verify_jwt = false # Authentication and active session checked inside handler.
+
+[functions.process-withdrawal-receipts]
+verify_jwt = false # Internal worker key or authenticated service call only.

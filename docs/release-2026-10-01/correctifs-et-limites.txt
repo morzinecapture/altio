@@ -1,0 +1,26 @@
+HISTORIQUE — PREMIÈRE ÉTAPE UNIQUEMENT
+Les mentions ci-dessous décrivent le début de la session et ne reflètent plus l’état final.
+Consulter corrections.html pour les corrections serveur déployées, 260 tests mobiles, 44 tests serveur et les points encore ouverts.
+
+CORRECTIONS RÉALISÉES LOCALEMENT
+
+frontend/src/auth.tsx
+- Purge du cache des requêtes et mutations lors d’un changement d’identité.
+- Ancien profil et état utilisateur effacés avant le chargement du nouveau compte.
+- Résultats de profils obsolètes ignorés après déconnexion, changement de compte, requête plus récente ou démontage.
+- Une erreur de lecture SQL du profil ne déclenche plus l’envoi de bienvenue réservé à un profil absent.
+- L’erreur de signOut est propagée au lieu d’être ignorée.
+
+frontend/src/services/session-scope.ts et __tests__/session-scope.test.ts
+- 4 tests de régression : déconnexion/changement A→B ; conservation du cache lors du refresh du même compte ; réponses périmées ; requête privée en vol qui ne repeuple pas le cache.
+
+VÉRIFICATION
+- 11 suites / 247 tests réussis ; TypeScript sans erreur ; lint des fichiers modifiés sans erreur ni avertissement.
+- Les tests de session utilisent le vrai QueryClient. Le composant AuthProvider n’est pas monté par ces tests ; une validation sur appareil est encore requise.
+
+LIMITES
+- Aucun déploiement Supabase, EAS ou App Store Connect.
+- Aucune donnée de production modifiée, aucun compte supprimé, aucun paiement ni message émis.
+- Les règles de sécurité du backend et le webhook restent à corriger.
+- Le skill flow-guardian cité dans CLAUDE.md est absent : aucun changement des flux financiers/statuts n’a été entrepris.
+- Ne pas remplacer des captures connectées par des maquettes en les présentant comme des tests réalisés.

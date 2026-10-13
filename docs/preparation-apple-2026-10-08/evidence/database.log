@@ -1,0 +1,12 @@
+✔ refused repairs close only after an undisputed paid diagnostic (3749.741125ms)
+✔ completion window: ownership, deadline, reminders, claims, disputes and settlement (1886.328875ms)
+✔ real notification trigger cannot roll back an already captured completion (2341.776292ms)
+✔ fixed search paths reject caller and temporary table shadowing without changing function bodies (3637.713708ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 8230.110417

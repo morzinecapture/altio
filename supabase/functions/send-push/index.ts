@@ -1,12 +1,16 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { corsHeaders, handleCors } from '../_shared/cors.ts'
 import { assertUUID, assertString, ValidationError } from '../_shared/validate.ts'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { requireAuthOrServiceKey } from '../_shared/auth.ts'
+import { checkRateLimit } from '../_shared/rateLimit.ts'
 
 serve(async (req) => {
   const corsResponse = handleCors(req);
   if (corsResponse) return corsResponse;
 
   try {
+    const { user, token, isServiceCall } = await requireAuthOrServiceKey(req)
     const reqBody = await req.json()
 
     // ── Input validation ──
@@ -24,6 +28,19 @@ serve(async (req) => {
 
     if (!supabaseUrl || !supabaseKey) {
       throw new Error("Missing environment variables for Supabase connection")
+    }
+
+    if (!isServiceCall) {
+      const caller = createClient(supabaseUrl, Deno.env.get('SUPABASE_ANON_KEY')!, {
+        global: { headers: { Authorization: `Bearer ${token}` } },
+      })
+      const { data: allowed, error } = await caller.rpc('can_send_notification', {
+        p_recipient: userId, p_reference: referenceId,
+      })
+      if (error || allowed !== true) return new Response(JSON.stringify({ error: 'Notification non autorisée' }), {
+        status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+      await checkRateLimit(user!.id, 'send_push', 30, 60_000)
     }
 
     const serviceHeaders = {
@@ -91,6 +108,7 @@ serve(async (req) => {
     })
 
     const users = await res.json()
+    if (!res.ok) throw new Error('Lecture du téléphone destinataire impossible')
     let pushToken = users?.[0]?.expo_push_token
 
     // Fallback: check the push_tokens table if users column is empty
@@ -102,6 +120,7 @@ serve(async (req) => {
         }
       })
       const ptData = await ptRes.json()
+      if (!ptRes.ok) throw new Error('Lecture des téléphones destinataires impossible')
       pushToken = ptData?.[0]?.token
     }
 
@@ -123,6 +142,8 @@ serve(async (req) => {
       body: JSON.stringify({
         to: pushToken,
         sound: 'default',
+        priority: 'high',
+        channelId: 'default',
         title: title,
         body: body,
         data: data || {},
@@ -130,6 +151,15 @@ serve(async (req) => {
     })
 
     const expoData = await expoRes.json()
+    const tickets = Array.isArray(expoData.data) ? expoData.data : [expoData.data]
+    if (!expoRes.ok || expoData.errors?.length || !tickets.length || tickets.some(ticket => ticket?.status !== 'ok')) {
+      // Do not log Expo's message: it can contain the device token.
+      const code = tickets.find(ticket => ticket?.details?.error)?.details?.error || 'ExpoPushRejected'
+      console.error('[send-push] Expo rejected notification', { code })
+      return new Response(JSON.stringify({ success: false, error: code }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 502,
+      })
+    }
 
     return new Response(JSON.stringify({ success: true, expoResponse: expoData }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

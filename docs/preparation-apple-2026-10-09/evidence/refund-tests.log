@@ -1,0 +1,20 @@
+✔ partial and full refunds keep cumulative snapshots, not incremental amounts (4.312833ms)
+✔ expanded and legacy null PaymentIntents remain attributable to the charge (0.164542ms)
+✔ rejects malformed refund amounts or currency {"amount_refunded":-1} (0.196375ms)
+✔ rejects malformed refund amounts or currency {"amount_refunded":11001} (0.082458ms)
+✔ rejects malformed refund amounts or currency {"amount":1.5} (0.0915ms)
+✔ rejects malformed refund amounts or currency {"currency":"EURO"} (0.072917ms)
+✔ duplicate notifications preserve an already reconciled receipt (0.732ms)
+✔ database failure rejects receipt so the webhook can retry (0.327625ms)
+✔ webhook acknowledges a partial refund only after durable receipt (247.41975ms)
+✔ webhook returns retryable failure and releases claim if receipt persistence fails (24.728ms)
+✔ invalid Stripe signature cannot create a refund receipt (18.129292ms)
+✔ refund receipt table is private, deduplicated, and preserves reconciliation on replay (1097.791042ms)
+ℹ tests 12
+ℹ suites 0
+ℹ pass 12
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1254.254958

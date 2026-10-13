@@ -1,0 +1,8 @@
+[
+  {"id":"01","screen":"owner/dashboard","title":"Vos locations,\nl’esprit tranquille.","subtitle":"Logements, missions et planning réunis."},
+  {"id":"02","screen":"owner/planning","title":"Chaque intervention\nà sa place.","subtitle":"Gardez une vue claire sur votre planning."},
+  {"id":"03","screen":"owner/properties","title":"Vos logements.\nTous les détails.","subtitle":"Retrouvez les informations utiles au même endroit."},
+  {"id":"04","screen":"owner/providers","title":"Trouvez votre\nprochain prestataire.","subtitle":"Ménage, conciergerie et entretien."},
+  {"id":"05","screen":"mission/detail","title":"Suivez le travail,\nétape par étape.","subtitle":"Consignes, avancement et photos d’intervention."},
+  {"id":"06","screen":"provider/dashboard","title":"Votre savoir-faire.\nDe nouvelles missions.","subtitle":"Organisez votre activité avec Altio."}
+]

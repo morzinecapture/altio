@@ -1,0 +1,50 @@
+{
+  "checkedAt": "2026-10-09T09:37:11.058Z",
+  "passed": false,
+  "scope": "Local uniquement ; aucun déploiement ou envoi Apple.",
+  "results": [
+    {
+      "name": "typescript",
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "name": "lint",
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "name": "application",
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "name": "server",
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "name": "database",
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "name": "payment-guard",
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "name": "app-store",
+      "passed": false,
+      "exitCode": 1
+    }
+  ],
+  "databaseRecheckedAt": "2026-10-09T09:37:59.011833+00:00",
+  "testCounts": {
+    "application": 343,
+    "server": 238,
+    "database": 28,
+    "paymentGuard": 5,
+    "total": 614
+  }
+}

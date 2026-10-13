@@ -1,0 +1,27 @@
+{
+  "checkedAt": "2026-10-11",
+  "userAuthorization": "Oui, autoriser Expo EAS et TestFlight",
+  "scope": "Code/resources to EAS, binary to Apple TestFlight; no public release",
+  "buildId": "f689374f-928a-426e-a157-26231aff16bb",
+  "buildNumber": "20",
+  "version": "1.0.0",
+  "buildStatus": "FINISHED",
+  "profile": "testflight",
+  "stripeMode": "test",
+  "submissionId": "0803178a-c52f-4c5d-9fd2-19209ac3a20e",
+  "uploadStatus": "SUCCESS",
+  "appleObservedStatus": "Prêt à soumettre — traitement terminé, groupe Team (Expo), 1 testeur",
+  "appleObservedUploadTime": "2026-10-11 14:49 Europe/Paris",
+  "publicSubmission": false,
+  "publicRelease": false,
+  "archiveReview": {
+    "included": "frontend and .easignore only",
+    "excluded": "Private documents, PDFs, environment files, signing keys, outputs, website, backend and dependencies",
+    "uploadedMB": 9.9
+  },
+  "localChecks": {
+    "frontendTypes": "passed",
+    "websiteBuild": "passed"
+  },
+  "laterSourceChanges": "Legal text updated on 2026-10-11 after build 20; not included in build 20."
+}

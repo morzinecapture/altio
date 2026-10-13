@@ -97,6 +97,10 @@ const WebStorage = {
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     storage: Platform.OS === 'web' ? WebStorage : NativeStorageAdapter,
+    // Keep development sessions isolated from production. Bump this suffix
+    // when a revoked token in a dev client can no longer be removed because
+    // that build's Keychain entitlements have changed.
+    ...(__DEV__ ? { storageKey: 'altio-dev-auth-v2' } : {}),
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: Platform.OS === 'web',

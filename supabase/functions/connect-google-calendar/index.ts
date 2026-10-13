@@ -1,3 +1,4 @@
+import { requireActiveSession } from '../_shared/active-session.ts'
 /**
  * connect-google-calendar
  * Échange un authorization code Google contre access_token + refresh_token,
@@ -31,6 +32,7 @@ Deno.serve(async (req) => {
     );
     if (authErr || !user) throw new Error('Non authentifié');
 
+    await requireActiveSession(supabase, user.id, authHeader.replace('Bearer ', ''));
     await checkRateLimit(user.id, 'connect_google_calendar', 5, 60_000);
 
     const { code, code_verifier } = await req.json();

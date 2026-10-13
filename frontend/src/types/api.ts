@@ -183,6 +183,9 @@ export interface Mission {
   property_id: string;
   assigned_provider_id?: string | null;
   mission_type: string;
+  services?: string[];
+  priority?: 'normal' | 'urgent';
+  linen_service?: string | null;
   status: MissionStatus;
   description?: string;
   scheduled_date?: string;
@@ -206,6 +209,7 @@ export interface Mission {
 
 /** Enriched mission returned by getMissions (merged with property data) */
 export interface MergedMission extends Omit<Mission, 'status'> {
+  completion_steps?: import('../api/completion').CompletionStep[];
   mission_id: string;
   status: MissionStatus | EmergencyStatus;
   property_name?: string;
@@ -228,6 +232,7 @@ export interface MergedMission extends Omit<Mission, 'status'> {
   max_applications?: number;
   /** Only present on mapped emergencies */
   raw_status?: string;
+  bids_count?: number;
   /** Bid status for current provider on this emergency */
   my_bid_status?: string;
   /** Joined property object from Supabase */
@@ -249,6 +254,7 @@ export interface MergedMission extends Omit<Mission, 'status'> {
   assigned_provider_name?: string;
   /** Picture of the directly assigned provider */
   assigned_provider_picture?: string;
+  assigned_provider_is_vat_exempt?: boolean;
 }
 
 export interface MissionPhoto {
@@ -257,6 +263,9 @@ export interface MissionPhoto {
 }
 
 export interface CreateMissionPayload {
+  services?: string[];
+  priority?: 'normal' | 'urgent';
+  linen_service?: string;
   property_id: string;
   mission_type: string;
   description?: string;
@@ -288,6 +297,7 @@ export interface MissionApplicationEnriched extends MissionApplication {
   provider_picture?: string;
   provider_rating?: number;
   provider_reviews?: number;
+  provider_is_vat_exempt?: boolean;
   is_verified?: boolean;
   provider?: {
     name?: string;
@@ -320,6 +330,7 @@ export interface DayMission {
 // ─── Emergency ───────────────────────────────────────────────────────────────
 
 export interface EmergencyRequest {
+  priority?: 'normal' | 'urgent';
   id: string;
   owner_id: string;
   property_id?: string;
@@ -363,6 +374,7 @@ export interface EmergencyRequest {
 }
 
 export interface CreateEmergencyPayload {
+  priority?: 'normal' | 'urgent';
   property_id: string;
   service_type: string;
   description?: string;
@@ -400,7 +412,6 @@ export interface EmergencyBidEnriched extends EmergencyBid {
   provider_reviews?: number;
   provider_siret?: string;
   provider_company?: string;
-  provider_tva_status?: string;
   provider_is_vat_exempt?: boolean;
   provider_is_auto_entrepreneur?: boolean;
   provider?: {
@@ -413,6 +424,8 @@ export interface EmergencyBidEnriched extends EmergencyBid {
 // ─── Quotes ──────────────────────────────────────────────────────────────────
 
 export interface Quote {
+  tva_rate?: number | string | null;
+  is_vat_exempt?: boolean | null;
   id: string;
   emergency_request_id?: string;
   mission_id?: string;
@@ -477,7 +490,6 @@ export interface QuoteDetailEnriched extends QuoteWithLineItems {
   provider_zone?: string;
   provider_siret?: string;
   provider_company?: string;
-  provider_tva_status?: string;
   tva_rate?: number;
   is_vat_exempt?: boolean;
   valid_until?: string;

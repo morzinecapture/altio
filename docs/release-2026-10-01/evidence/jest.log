@@ -1,0 +1,20 @@
+
+> frontend@1.0.0 test
+> jest --runInBand
+
+PASS src/__tests__/e2e/provider-flow.test.ts (11.888 s)
+PASS src/api/__tests__/emergencies-flow.test.ts
+PASS src/api/__tests__/missions-flow.test.ts
+PASS src/__tests__/e2e/owner-flow.test.ts
+PASS src/services/__tests__/mission-state-machine.test.ts
+PASS src/services/__tests__/offline-queue.test.ts
+PASS src/api/__tests__/_client.test.ts
+PASS src/utils/__tests__/providerMissionViews.test.ts
+PASS src/config/__tests__/billing.test.ts
+PASS src/config/__tests__/emergencyFees.test.ts
+
+Test Suites: 10 passed, 10 total
+Tests:       243 passed, 243 total
+Snapshots:   0 total
+Time:        18.363 s
+Ran all test suites.

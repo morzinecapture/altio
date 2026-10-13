@@ -1,0 +1,42 @@
+
+/Users/maxime/altio/frontend/src/api/__tests__/payments-security.test.ts
+  2:34  warning  A `require()` style import is forbidden   @typescript-eslint/no-require-imports
+  6:1   warning  Import in body of module; reorder to top  import/first
+  7:1   warning  Import in body of module; reorder to top  import/first
+
+/Users/maxime/altio/frontend/src/api/emergencies.ts
+  5:32   warning  'checkFunctionError' is defined but never used                             @typescript-eslint/no-unused-vars
+  6:15   warning  'EmergencyStatus' is defined but never used                                @typescript-eslint/no-unused-vars
+  6:106  warning  'EmergencyRequest' is defined but never used                               @typescript-eslint/no-unused-vars
+  6:124  warning  'EmergencyBidEnriched' is defined but never used                           @typescript-eslint/no-unused-vars
+  6:160  warning  'SupabaseError' is defined but never used                                  @typescript-eslint/no-unused-vars
+  6:196  warning  '/Users/maxime/altio/frontend/src/api/_client.ts' imported multiple times  import/no-duplicates
+  7:29   warning  'BidRow' is defined but never used                                         @typescript-eslint/no-unused-vars
+  7:37   warning  'ProviderWithUser' is defined but never used                               @typescript-eslint/no-unused-vars
+  7:61   warning  '/Users/maxime/altio/frontend/src/api/_client.ts' imported multiple times  import/no-duplicates
+
+/Users/maxime/altio/frontend/src/api/missions.ts
+     4:58   warning  'getPropertyName' is defined but never used                  @typescript-eslint/no-unused-vars
+     5:75   warning  'MergedMission' is defined but never used                    @typescript-eslint/no-unused-vars
+     5:90   warning  'MissionApplicationEnriched' is defined but never used       @typescript-eslint/no-unused-vars
+     5:145  warning  'ApplicationRow' is defined but never used                   @typescript-eslint/no-unused-vars
+     5:161  warning  'ProviderWithUser' is defined but never used                 @typescript-eslint/no-unused-vars
+   457:19   warning  'mission' is assigned a value but never used                 @typescript-eslint/no-unused-vars
+  1019:10   warning  Array type using 'Array<T>' is forbidden. Use 'T[]' instead  @typescript-eslint/array-type
+
+/Users/maxime/altio/frontend/src/api/notifications.ts
+  1:20  warning  'checkError' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/maxime/altio/frontend/src/api/properties.ts
+    6:61  warning  'Reservation' is defined but never used                                                                @typescript-eslint/no-unused-vars
+    6:74  warning  'ReservationRow' is defined but never used                                                             @typescript-eslint/no-unused-vars
+  125:3   warning  Unused eslint-disable directive (no problems were reported from '@typescript-eslint/no-var-requires')
+  126:28  warning  A `require()` style import is forbidden                                                                @typescript-eslint/no-require-imports
+  231:39  warning  Array type using 'Array<T>' is forbidden. Use 'T[]' instead                                            @typescript-eslint/array-type
+  288:39  warning  Array type using 'Array<T>' is forbidden. Use 'T[]' instead                                            @typescript-eslint/array-type
+  338:39  warning  Array type using 'Array<T>' is forbidden. Use 'T[]' instead                                            @typescript-eslint/array-type
+  378:39  warning  Array type using 'Array<T>' is forbidden. Use 'T[]' instead                                            @typescript-eslint/array-type
+
+✖ 28 problems (0 errors, 28 warnings)
+  0 errors and 9 warnings potentially fixable with the `--fix` option.
+

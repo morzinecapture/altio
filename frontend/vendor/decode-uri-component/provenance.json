@@ -1,0 +1,7 @@
+{
+  "upstream": "https://registry.npmjs.org/decode-uri-component/-/decode-uri-component-0.5.0.tgz",
+  "sha1": "4592fa1e1d640ec5e2760e2e168ad2ab5f2c9da1",
+  "change": "Only export default function becomes module.exports = function; algorithm and license unchanged.",
+  "reason": "query-string 7 expects require() to return a function; upstream 0.5.0 is ESM-only. Fixes GHSA-vcc3-ghjq-m6fr.",
+  "removeWhen": "Expo/query-string depends on a compatible patched decoder."
+}

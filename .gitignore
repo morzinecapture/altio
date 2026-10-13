@@ -79,6 +79,7 @@ agenthub/agents/youtube/db
 npm-cache/
 .claude/settings.local.json
 .claude/*.local.json
+.claude/worktrees/
 test_reports/
 
 # Accidental files
@@ -94,3 +95,9 @@ android-sdk/ -e
 # Environment files
 *.env
 *.env.*
+
+# Local release verification logs
+outputs/release-preflight/
+
+.private/
+website-static/.vercel/

@@ -120,7 +120,7 @@ export default function AdminUserDetail() {
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-            <Ionicons name="arrow-back" size={22} color="#1E3A5F" />
+            <Ionicons name="arrow-back" size={22} color={COLORS.textPrimary} />
           </TouchableOpacity>
           <Text style={styles.title} numberOfLines={1}>{u?.name || t('admin.user_detail.user_default')}</Text>
           {u?.suspended && (
@@ -288,16 +288,16 @@ const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   header: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, paddingHorizontal: SPACING.lg, paddingVertical: SPACING.md, borderBottomWidth: 1, borderBottomColor: COLORS.border, backgroundColor: '#FFFFFF' },
   backBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center' },
-  title: { flex: 1, fontFamily: 'Inter_700Bold', fontSize: 18, color: '#1E3A5F' },
+  title: { flex: 1, fontFamily: 'PlusJakartaSans_700Bold', fontSize: 18, color: COLORS.textPrimary },
   suspendedBadge: { backgroundColor: COLORS.urgencySoft, paddingHorizontal: SPACING.sm, paddingVertical: 3, borderRadius: RADIUS.full },
   suspendedBadgeText: { ...FONTS.caption, color: COLORS.urgency, fontSize: 9 },
   section: { paddingHorizontal: SPACING.xl, paddingTop: SPACING.lg },
-  sectionTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 13, color: COLORS.textSecondary, marginBottom: SPACING.sm, textTransform: 'uppercase', letterSpacing: 0.5 },
+  sectionTitle: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 13, color: COLORS.textSecondary, marginBottom: SPACING.sm, textTransform: 'uppercase', letterSpacing: 0.5 },
   avatarRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.lg },
   avatarBig: { width: 64, height: 64, borderRadius: 32, backgroundColor: COLORS.purpleSoft, justifyContent: 'center', alignItems: 'center' },
-  avatarBigLetter: { fontFamily: 'Inter_700Bold', fontSize: 28, color: COLORS.purple },
+  avatarBigLetter: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 28, color: COLORS.purple },
   avatarInfo: { flex: 1 },
-  userName: { fontFamily: 'Inter_700Bold', fontSize: 18, color: '#1E3A5F' },
+  userName: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 18, color: COLORS.textPrimary },
   userEmail: { ...FONTS.bodySmall, color: COLORS.textSecondary, marginTop: 2 },
   chip: { paddingHorizontal: SPACING.sm, paddingVertical: 3, borderRadius: RADIUS.full, alignSelf: 'flex-start' },
   chipText: { ...FONTS.caption, fontSize: 9 },
@@ -305,17 +305,17 @@ const styles = StyleSheet.create({
   infoRow: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACING.sm, paddingVertical: SPACING.sm, borderBottomWidth: 1, borderBottomColor: COLORS.border },
   infoText: { flex: 1 },
   infoLabel: { ...FONTS.bodySmall, color: COLORS.textTertiary },
-  infoValue: { ...FONTS.bodySmall, color: '#1E3A5F', marginTop: 2 },
+  infoValue: { ...FONTS.bodySmall, color: COLORS.textPrimary, marginTop: 2 },
   docRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, marginBottom: SPACING.sm },
-  docType: { fontFamily: 'Inter_600SemiBold', fontSize: 14, color: '#1E3A5F', textTransform: 'capitalize' },
+  docType: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 14, color: COLORS.textPrimary, textTransform: 'capitalize' },
   docStatus: { paddingHorizontal: SPACING.sm, paddingVertical: 2, borderRadius: RADIUS.full, alignSelf: 'flex-start', marginTop: 4 },
   docStatusText: { ...FONTS.caption, fontSize: 9 },
   docBtn: { width: 32, height: 32, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
-  missionTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 14, color: '#1E3A5F' },
+  missionTitle: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 14, color: COLORS.textPrimary },
   missionDate: { ...FONTS.bodySmall, color: COLORS.textTertiary, marginTop: 4 },
   actionBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.sm, paddingVertical: SPACING.md, borderRadius: RADIUS.lg, marginBottom: SPACING.sm },
   actionBtnText: { ...FONTS.bodySmall, color: COLORS.textInverse, fontWeight: '600' },
-  auditAction: { fontFamily: 'Inter_600SemiBold', fontSize: 13, color: '#1E3A5F', textTransform: 'capitalize' },
+  auditAction: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 13, color: COLORS.textPrimary, textTransform: 'capitalize' },
   auditMeta: { ...FONTS.bodySmall, color: COLORS.textSecondary, marginTop: 2 },
   auditDate: { ...FONTS.caption, color: COLORS.textTertiary, marginTop: 4 },
 });

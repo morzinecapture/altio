@@ -2,10 +2,11 @@ import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import { useTranslation } from 'react-i18next';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
-import { COLORS, FONTS, SPACING, RADIUS, SHADOWS, STATUS_COLORS } from '../../src/theme';
+import { COLORS, SPACING, RADIUS, SHADOWS } from '../../src/theme';
+import { EmptyState } from '../../src/components/ui';
+import OwnerPageHeader from '../../src/components/owner/OwnerPageHeader';
 import { getInvoices } from '../../src/api';
 import type { Invoice } from '../../src/types/api';
 
@@ -35,12 +36,12 @@ const INVOICE_ISSUER: Record<string, string> = {
 };
 
 const STATUS_STYLE: Record<string, { bg: string; text: string }> = {
-  draft: { bg: COLORS.warningSoft, text: COLORS.warning },
-  issued: { bg: COLORS.infoSoft, text: COLORS.info },
-  sent: { bg: COLORS.infoSoft, text: COLORS.info },
-  paid: { bg: COLORS.successSoft, text: COLORS.success },
-  overdue: { bg: COLORS.urgencySoft, text: COLORS.urgency },
-  cancelled: { bg: COLORS.urgencySoft, text: COLORS.urgency },
+  draft: { bg: '#F59E0B', text: '#FFFFFF' },
+  issued: { bg: '#2563EB', text: '#FFFFFF' },
+  sent: { bg: '#2563EB', text: '#FFFFFF' },
+  paid: { bg: '#10B981', text: '#FFFFFF' },
+  overdue: { bg: '#EF4444', text: '#FFFFFF' },
+  cancelled: { bg: '#EF4444', text: '#FFFFFF' },
 };
 
 const formatDate = (iso: string) => {
@@ -61,23 +62,20 @@ const OWNER_FILTERS: { label: string; value: string | null }[] = [
 ];
 
 export default function OwnerInvoices() {
-  const { t } = useTranslation();
   const router = useRouter();
   const [filter, setFilter] = useState<string | null>(null);
 
-  const { data: invoices = [] as Invoice[], isLoading: loading, refetch } = useQuery({
+  const { data: invoices = [] as Invoice[], isLoading: loading, isError, isRefetching, refetch } = useQuery({
     queryKey: ['invoices', 'buyer'],
     queryFn: () => getInvoices('buyer'),
   });
+
+  useFocusEffect(React.useCallback(() => { void refetch(); }, [refetch]));
 
   const filtered = filter ? invoices.filter((i: Invoice) => i.invoice_type === filter) : invoices;
 
   const handleViewDetail = (invoiceId: string) => {
     router.push({ pathname: '/invoice/[id]' as any, params: { id: invoiceId } });
-  };
-
-  const handleDownload = (url: string, invoiceNumber: string) => {
-    if (url) router.push({ pathname: '/invoice-viewer', params: { url, title: invoiceNumber } });
   };
 
   if (loading) {
@@ -90,16 +88,17 @@ export default function OwnerInvoices() {
 
   return (
     <SafeAreaView style={styles.container}>
+      {isError && <TouchableOpacity accessibilityRole="button" onPress={() => refetch()} style={{ padding: SPACING.lg }}><Text>Impossible de charger les factures. Appuyez pour réessayer.</Text></TouchableOpacity>}
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
-        refreshControl={<RefreshControl refreshing={false} onRefresh={() => refetch()} />}
+        refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={() => refetch()} />}
       >
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>Factures</Text>
-          <Text style={styles.headerSubtitle}>{filtered.length} facture{filtered.length !== 1 ? 's' : ''}</Text>
-        </View>
+        <OwnerPageHeader
+          title="Factures"
+          subtitle={`${filtered.length} facture${filtered.length !== 1 ? 's' : ''} · Paiements et justificatifs`}
+          icon="receipt-outline"
+        />
 
         {/* Filter chips */}
         <ScrollView
@@ -123,15 +122,12 @@ export default function OwnerInvoices() {
         </ScrollView>
 
         {filtered.length === 0 ? (
-          <View style={styles.emptyState}>
-            <View style={styles.emptyIcon}>
-              <Ionicons name="receipt-outline" size={48} color={COLORS.textTertiary} />
-            </View>
-            <Text style={styles.emptyTitle}>Aucune facture</Text>
-            <Text style={styles.emptyText}>
-              Vos factures apparaitront ici apres chaque mission terminee.
-            </Text>
-          </View>
+          <EmptyState
+            icon="receipt-outline"
+            title="Aucune facture"
+            subtitle="Vos factures apparaîtront ici après chaque mission terminée."
+            testID="owner-invoices-empty"
+          />
         ) : (
           filtered.map((invoice: { id: string; invoice_number: string; invoice_type: string; status: string; amount_ttc: number; created_at: string; pdf_url?: string; mission?: { mission_type?: string; property?: { name?: string } }; emergency?: { service_type?: string } }) => {
             const statusStyle = STATUS_STYLE[invoice.status] || STATUS_STYLE.draft;
@@ -152,11 +148,11 @@ export default function OwnerInvoices() {
               <TouchableOpacity key={invoice.id} style={styles.card} onPress={() => handleViewDetail(invoice.id)} activeOpacity={0.7}>
                 <View style={styles.cardHeader}>
                   <View style={styles.cardHeaderLeft}>
-                    <View style={[styles.invoiceIconWrap, isAltioInvoice && { backgroundColor: '#EDE9FE' }]}>
+                    <View style={[styles.invoiceIconWrap, isAltioInvoice && { backgroundColor: '#16233A' }]}>
                       <Ionicons
                         name={isAltioInvoice ? 'business-outline' : 'construct-outline'}
                         size={20}
-                        color={isAltioInvoice ? '#7C3AED' : COLORS.brandPrimary}
+                        color="#FFFFFF"
                       />
                     </View>
                     <View>
@@ -171,8 +167,8 @@ export default function OwnerInvoices() {
                 </View>
 
                 <View style={styles.typeRow}>
-                  <View style={[styles.typeBadge, isAltioInvoice ? { backgroundColor: '#EDE9FE' } : { backgroundColor: COLORS.infoSoft }]}>
-                    <Text style={[styles.typeText, isAltioInvoice ? { color: '#7C3AED' } : { color: COLORS.brandPrimary }]}>{typeLabel}</Text>
+                  <View style={[styles.typeBadge, isAltioInvoice ? { backgroundColor: '#16233A' } : { backgroundColor: '#2563EB' }]}>
+                    <Text style={styles.typeText}>{typeLabel}</Text>
                   </View>
                 </View>
 
@@ -201,51 +197,6 @@ const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFFFFF' },
   scrollContent: { paddingBottom: SPACING.xxxl },
 
-  header: {
-    paddingHorizontal: SPACING.xl,
-    paddingTop: SPACING.xl,
-    paddingBottom: SPACING.lg,
-  },
-  headerTitle: {
-    fontFamily: 'PlusJakartaSans_700Bold',
-    fontSize: 24,
-    color: '#1E3A5F',
-  },
-  headerSubtitle: {
-    fontFamily: 'PlusJakartaSans_400Regular',
-    fontSize: 14,
-    color: COLORS.textSecondary,
-    marginTop: 2,
-  },
-
-  emptyState: {
-    alignItems: 'center',
-    paddingHorizontal: SPACING.xxxl,
-    paddingTop: 80,
-  },
-  emptyIcon: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: COLORS.subtle,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: SPACING.xl,
-  },
-  emptyTitle: {
-    fontFamily: 'PlusJakartaSans_600SemiBold',
-    fontSize: 18,
-    color: COLORS.textPrimary,
-    marginBottom: SPACING.sm,
-  },
-  emptyText: {
-    fontFamily: 'PlusJakartaSans_400Regular',
-    fontSize: 14,
-    color: COLORS.textSecondary,
-    textAlign: 'center',
-    lineHeight: 22,
-  },
-
   card: {
     marginHorizontal: SPACING.xl,
     marginBottom: SPACING.lg,
@@ -253,7 +204,7 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.md,
     padding: SPACING.lg,
     borderWidth: 1,
-    borderColor: '#F1F5F9',
+    borderColor: '#CBD5E1',
     ...SHADOWS.card,
   },
   cardHeader: {
@@ -271,14 +222,14 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: COLORS.infoSoft,
+    backgroundColor: '#2563EB',
     justifyContent: 'center',
     alignItems: 'center',
   },
   invoiceNumber: {
     fontFamily: 'PlusJakartaSans_600SemiBold',
     fontSize: 15,
-    color: '#1E3A5F',
+    color: COLORS.textPrimary,
   },
   invoiceDate: {
     fontFamily: 'PlusJakartaSans_400Regular',
@@ -318,6 +269,7 @@ const styles = StyleSheet.create({
   typeText: {
     fontFamily: 'PlusJakartaSans_600SemiBold',
     fontSize: 12,
+    color: '#FFFFFF',
   },
 
   amountRow: {
@@ -337,7 +289,7 @@ const styles = StyleSheet.create({
   amountValue: {
     fontFamily: 'PlusJakartaSans_700Bold',
     fontSize: 20,
-    color: '#1E3A5F',
+    color: COLORS.textPrimary,
   },
 
   detailHint: {
@@ -355,6 +307,7 @@ const styles = StyleSheet.create({
 
   chipBar: {
     paddingHorizontal: SPACING.xl,
+    paddingTop: SPACING.lg,
     paddingBottom: SPACING.lg,
     gap: SPACING.sm,
   },
@@ -362,7 +315,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.sm,
     borderRadius: RADIUS.full,
-    backgroundColor: COLORS.subtle,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
   },
   chipActive: {
     backgroundColor: COLORS.brandPrimary,

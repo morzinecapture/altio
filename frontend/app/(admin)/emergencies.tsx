@@ -49,6 +49,18 @@ export default function AdminEmergencies() {
     queryKey: ['admin-emergencies'],
     queryFn: getAdminEmergencies,
   });
+  const { data: paymentIssues = [], error: paymentIssuesError } = useQuery({
+    queryKey: ['admin-completion-issues'],
+    refetchInterval: 30000,
+    queryFn: async () => {
+      const { data, error } = await supabase.from('emergency_completion_steps')
+        .select('id,emergency_id,phase,status,dispute_reason,payment_error,paid_at')
+        // Paid steps keep status 'paid' when contested; disputed_at keeps them in the support queue.
+        .or('status.in.(disputed,payment_required,processing),disputed_at.not.is.null').order('declared_at').limit(100);
+      if (error) throw error;
+      return data || [];
+    },
+  });
 
   const EMERGENCY_STATUS_LABELS: Record<string, string> = {
     open: t('admin.emergencies.status_open'),
@@ -121,6 +133,12 @@ export default function AdminEmergencies() {
           showsVerticalScrollIndicator={false}
           refreshControl={<RefreshControl refreshing={false} onRefresh={() => refetch()} />}
         >
+          {!!paymentIssuesError && <Text style={{color:COLORS.urgency,padding:16}}>Impossible de charger les contestations et paiements à vérifier.</Text>}
+          {paymentIssues.map(issue => <TouchableOpacity key={issue.id} style={{padding:16}} onPress={() => router.push({pathname:'/emergency',params:{id:issue.emergency_id}})}>
+            <Text style={{fontWeight:'700'}}>Paiement à examiner — {issue.phase === 'visit' ? 'Diagnostic' : 'Réparation'}</Text>
+            <Text>{issue.dispute_reason || issue.payment_error || 'Capture en cours ; vérifier si le traitement tarde.'}</Text>
+            <Text>{issue.paid_at ? 'Déjà encaissé : examiner le recours ou remboursement.' : 'Paiement non confirmé.'}</Text>
+          </TouchableOpacity>)}
           {active.length === 0 && history.length === 0 ? (
             <View style={styles.empty}>
               <Ionicons name="checkmark-circle-outline" size={50} color={COLORS.success} />
@@ -189,7 +207,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFFFFF' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: SPACING.xl, paddingTop: SPACING.lg, paddingBottom: SPACING.sm },
-  title: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 24, color: '#1E3A5F' },
+  title: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 24, color: COLORS.textPrimary },
   realtimeBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 3 },
   realtimeDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: COLORS.success },
   realtimeText: { ...FONTS.caption, color: COLORS.success, fontSize: 9 },
@@ -201,7 +219,7 @@ const styles = StyleSheet.create({
   chip: { paddingHorizontal: SPACING.md, paddingVertical: 3, borderRadius: RADIUS.full },
   chipText: { ...FONTS.caption, fontSize: 9 },
   cardTime: { ...FONTS.bodySmall, color: COLORS.textTertiary },
-  cardTitle: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 15, color: '#1E3A5F' },
+  cardTitle: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 15, color: COLORS.textPrimary },
   cardAddr: { ...FONTS.bodySmall, color: COLORS.textSecondary, marginTop: 2 },
   cardMeta: { flexDirection: 'row', gap: SPACING.md, marginTop: SPACING.sm, flexWrap: 'wrap' },
   metaItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },

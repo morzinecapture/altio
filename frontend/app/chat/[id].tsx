@@ -68,6 +68,16 @@ export default function ChatScreen() {
         }
     };
 
+    const reportConversation = () => {
+        if (!receiverId) return;
+        router.push({
+            pathname: '/reclamation',
+            params: {
+                reportContext: `${type === 'mission' ? 'Mission' : 'Urgence'} ${id} — utilisateur ${receiverId}`,
+            },
+        });
+    };
+
     const renderItem = ({ item }: { item: { id: string; sender_id: string; content: string; created_at: string } }) => {
         const isMe = item.sender_id === user?.id;
         return (
@@ -91,7 +101,14 @@ export default function ChatScreen() {
                     <Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>{title || t('chat.default_title')}</Text>
-                <View style={{ width: 44 }} />
+                <TouchableOpacity
+                    accessibilityRole="button"
+                    accessibilityLabel="Signaler cette conversation"
+                    onPress={reportConversation}
+                    style={styles.reportBtn}
+                >
+                    <Ionicons name="flag-outline" size={21} color={COLORS.urgency} />
+                </TouchableOpacity>
             </View>
 
             <KeyboardAvoidingView
@@ -149,6 +166,7 @@ const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: COLORS.background },
     header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: SPACING.xl, paddingVertical: SPACING.md, borderBottomWidth: 1, borderBottomColor: COLORS.border },
     backBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: COLORS.paper, justifyContent: 'center', alignItems: 'center', ...SHADOWS.card },
+    reportBtn: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
     headerTitle: { ...FONTS.h3, color: COLORS.textPrimary },
     content: { flex: 1 },
     listContent: { padding: SPACING.md, paddingBottom: SPACING.xxl },
@@ -165,7 +183,7 @@ const styles = StyleSheet.create({
     inputContainer: { flexDirection: 'row', alignItems: 'flex-end', padding: SPACING.md, backgroundColor: COLORS.paper, borderTopWidth: 1, borderTopColor: COLORS.border },
     input: { flex: 1, backgroundColor: COLORS.background, borderRadius: RADIUS.lg, paddingHorizontal: SPACING.md, paddingVertical: 12, minHeight: 44, maxHeight: 100, ...FONTS.body, color: COLORS.textPrimary, marginRight: SPACING.md },
     sendBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: COLORS.brandPrimary, justifyContent: 'center', alignItems: 'center' },
-    blockedBanner: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FEF2F2', paddingHorizontal: SPACING.xl, paddingVertical: SPACING.md, gap: SPACING.sm, borderBottomWidth: 1, borderBottomColor: '#FECACA' },
+    blockedBanner: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.urgencySoft, paddingHorizontal: SPACING.xl, paddingVertical: SPACING.md, gap: SPACING.sm, borderBottomWidth: 1, borderBottomColor: '#FECACA' },
     blockedBannerText: { ...FONTS.bodySmall, color: COLORS.urgency, flex: 1 },
     unblockBtn: { backgroundColor: COLORS.paper, paddingHorizontal: SPACING.md, paddingVertical: SPACING.xs, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border },
     unblockBtnText: { ...FONTS.bodySmall, color: COLORS.textPrimary, fontWeight: '600' as const },

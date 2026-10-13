@@ -3,17 +3,41 @@ import { View, Text, TouchableOpacity, StyleSheet, FlatList, ActivityIndicator, 
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useTranslation } from 'react-i18next';
-import { COLORS, FONTS, SPACING, RADIUS, SHADOWS, GRADIENT } from '../../src/theme';
+import { COLORS, FONTS, SPACING, RADIUS, SHADOWS } from '../../src/theme';
+import { EmptyState } from '../../src/components/ui';
 import { SkeletonList } from '../../src/components/Skeleton';
-import { useProperties, useDeleteProperty, useSyncIcal } from '../../src/hooks';
+import OwnerPageHeader from '../../src/components/owner/OwnerPageHeader';
+import { useProperties, useDeleteProperty, useSyncIcal, useMissions } from '../../src/hooks';
 import type { Property } from '../../src/types/api';
+
+function PropertyThumbnail({ property }: { property: Property }) {
+  const [photoFailed, setPhotoFailed] = useState(false);
+  const photoUri = property.photos?.[0];
+
+  if (!photoUri || photoFailed) {
+    return (
+      <View style={styles.propIconPlaceholder}>
+        <Ionicons name="home-outline" size={27} color="#FFFFFF" />
+      </View>
+    );
+  }
+
+  return (
+    <Image
+      source={{ uri: photoUri }}
+      style={styles.propIcon}
+      resizeMode="cover"
+      onError={() => setPhotoFailed(true)}
+    />
+  );
+}
 
 export default function PropertiesScreen() {
   const router = useRouter();
   const { t } = useTranslation();
   const { data: properties = [], isLoading, refetch } = useProperties();
+  const { data: missions = [] } = useMissions();
   const [syncing, setSyncing] = useState<string | null>(null);
   const deleteMut = useDeleteProperty();
   const syncMut = useSyncIcal();
@@ -48,28 +72,29 @@ export default function PropertiesScreen() {
         keyExtractor={(prop) => prop.id}
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={false} onRefresh={() => refetch()} />}
-        contentContainerStyle={{ paddingBottom: 100 }}
+        contentContainerStyle={{ paddingBottom: 110 }}
         ListHeaderComponent={
-          <LinearGradient
-            colors={GRADIENT.header}
-            start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-            style={styles.header}
-          >
-            <Text style={styles.title}>{t('owner.properties.title')}</Text>
-            <TouchableOpacity testID="add-property-btn" style={styles.addBtn} onPress={() => router.push('/property/add')}>
-              <Ionicons name="add" size={24} color={COLORS.textInverse} />
-            </TouchableOpacity>
-          </LinearGradient>
+          <View style={styles.listHeader}>
+            <OwnerPageHeader
+              title={t('owner.properties.title')}
+              subtitle={t('alpine.propertiesSubtitle')}
+              icon="home-outline"
+              actionIcon="add"
+              onAction={() => router.push('/property/add')}
+              testID="add-property-btn"
+            />
+            <Text style={styles.countLabel}>{properties.length} logement{properties.length !== 1 ? 's' : ''}</Text>
+          </View>
         }
         ListEmptyComponent={
-          <View style={styles.empty}>
-            <Ionicons name="home-outline" size={60} color={COLORS.textTertiary} />
-            <Text style={styles.emptyTitle}>{t('owner.properties.empty')}</Text>
-            <Text style={styles.emptySubtext}>{t('owner.properties.empty_sub')}</Text>
-            <TouchableOpacity style={styles.emptyBtn} onPress={() => router.push('/property/add')}>
-              <Text style={styles.emptyBtnText}>{t('owner.properties.add')}</Text>
-            </TouchableOpacity>
-          </View>
+          <EmptyState
+            icon="home-outline"
+            title={t('owner.properties.empty')}
+            subtitle={t('owner.properties.empty_sub')}
+            actionLabel={t('owner.properties.add')}
+            onAction={() => router.push('/property/add')}
+            testID="owner-properties-empty"
+          />
         }
         renderItem={({ item: prop }) => (
           <TouchableOpacity
@@ -77,16 +102,13 @@ export default function PropertiesScreen() {
             style={styles.card}
             onPress={() => router.push(`/property/${prop.id}`)}
           >
+            <PropertyThumbnail property={prop} />
             <View style={styles.cardHeader}>
-              <Image
-                source={{ uri: `https://ui-avatars.com/api/?name=${prop.name.replace(/\s/g, '+')}&background=random&color=fff&size=200&font-size=0.4` }}
-                style={styles.propIcon}
-              />
               <View style={styles.cardInfo}>
                 <Text style={styles.propName}>{prop.name}</Text>
                 <Text style={styles.propAddress}>{prop.address}</Text>
               </View>
-              <TouchableOpacity onPress={() => handleDelete(prop.id, prop.name)}>
+              <TouchableOpacity accessibilityLabel={t('common.delete')} style={{ width: 48, height: 48, alignItems: 'center', justifyContent: 'center' }} onPress={() => handleDelete(prop.id, prop.name)}>
                 <Ionicons name="trash-outline" size={20} color={COLORS.textTertiary} />
               </TouchableOpacity>
             </View>
@@ -104,7 +126,11 @@ export default function PropertiesScreen() {
               </View>
             </View>
 
-            {prop.ical_url && (
+            {(() => {
+              const next = missions.filter(m => m.property_id === prop.id && !m.is_emergency && ['assigned', 'in_progress'].includes(m.status)).sort((a, b) => Date.parse(a.scheduled_date || '') - Date.parse(b.scheduled_date || ''))[0];
+              return next ? <TouchableOpacity style={styles.nextMission} onPress={() => router.push(`/mission/${next.mission_id}`)}><Ionicons name="calendar-outline" size={18} color={COLORS.success} /><View style={{ flex: 1 }}><Text style={styles.nextTitle}>{t('alpine.nextMission')}</Text><Text style={styles.metaText}>{next.scheduled_date ? new Date(next.scheduled_date).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : t('alpine.datePending')}</Text></View><Ionicons name="chevron-forward" size={18} color={COLORS.textSecondary} /></TouchableOpacity> : null;
+            })()}
+            {(prop.ical_url || prop.ical_airbnb_url || prop.ical_booking_url) && (
               <TouchableOpacity
                 testID={`sync-ical-${prop.id}`}
                 style={styles.syncBtn}
@@ -112,9 +138,9 @@ export default function PropertiesScreen() {
                 disabled={syncing === prop.id}
               >
                 {syncing === prop.id ? (
-                  <ActivityIndicator size="small" color={COLORS.info} />
+                  <ActivityIndicator size="small" color="#FFFFFF" />
                 ) : (
-                  <Ionicons name="sync-outline" size={16} color={COLORS.info} />
+                  <Ionicons name="sync-outline" size={16} color="#FFFFFF" />
                 )}
                 <Text style={styles.syncText}>{t('owner.properties.sync_ical')}</Text>
               </TouchableOpacity>
@@ -127,36 +153,22 @@ export default function PropertiesScreen() {
 }
 
 const styles = StyleSheet.create({
+  nextMission: { minHeight: 64, flexDirection: 'row', alignItems: 'center', gap: SPACING.md, backgroundColor: COLORS.successSoft, borderRadius: RADIUS.md, padding: SPACING.md, marginTop: SPACING.lg },
+  nextTitle: { ...FONTS.bodySmall, fontFamily: FONTS.h3.fontFamily, color: COLORS.success },
   container: { flex: 1, backgroundColor: COLORS.background },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.background },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: SPACING.xl,
-    paddingTop: SPACING.lg,
-    paddingBottom: SPACING.xl,
-    borderBottomLeftRadius: RADIUS.lg,
-    borderBottomRightRadius: RADIUS.lg,
-    marginBottom: SPACING.lg,
-    ...SHADOWS.card
-  },
-  title: { ...FONTS.h1, color: COLORS.textPrimary },
-  addBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: COLORS.brandPrimary, justifyContent: 'center', alignItems: 'center', ...SHADOWS.float },
-  empty: { alignItems: 'center', paddingVertical: SPACING.xxxl * 2, paddingHorizontal: SPACING.xxl },
-  emptyTitle: { ...FONTS.h2, color: COLORS.textSecondary, marginTop: SPACING.lg },
-  emptySubtext: { ...FONTS.body, color: COLORS.textTertiary, textAlign: 'center', marginTop: SPACING.sm, lineHeight: 22 },
-  emptyBtn: { marginTop: SPACING.xl, backgroundColor: COLORS.brandPrimary, paddingHorizontal: SPACING.xxl, paddingVertical: SPACING.lg, borderRadius: RADIUS.xl, ...SHADOWS.cardHover },
-  emptyBtnText: { ...FONTS.h3, color: COLORS.textInverse },
-  card: { backgroundColor: COLORS.paper, marginHorizontal: SPACING.xl, marginBottom: SPACING.lg, padding: SPACING.xl, borderRadius: RADIUS.xl, ...SHADOWS.card, borderWidth: 1, borderColor: COLORS.border },
+  listHeader: { marginBottom: SPACING.lg },
+  countLabel: { marginHorizontal: SPACING.xl, marginTop: SPACING.lg, fontFamily: 'PlusJakartaSans_700Bold', fontSize: 12, color: COLORS.brandPrimary, textTransform: 'uppercase', letterSpacing: 0.7 },
+  card: { backgroundColor: '#FFFFFF', marginHorizontal: SPACING.xl, marginBottom: SPACING.lg, padding: SPACING.lg, borderRadius: RADIUS.xl, ...SHADOWS.card, borderWidth: 1, borderColor: COLORS.border },
   cardHeader: { flexDirection: 'row', alignItems: 'center' },
-  propIcon: { width: 56, height: 56, borderRadius: 16, backgroundColor: COLORS.brandPrimary + '15', justifyContent: 'center', alignItems: 'center', marginRight: SPACING.md, borderWidth: 1, borderColor: COLORS.brandPrimary + '30' },
+  propIcon: { width: '100%', height: 150, borderRadius: RADIUS.lg, backgroundColor: COLORS.navy, marginBottom: SPACING.lg },
+  propIconPlaceholder: { width: '100%', height: 110, borderRadius: RADIUS.lg, backgroundColor: COLORS.navy, justifyContent: 'center', alignItems: 'center', marginBottom: SPACING.lg },
   cardInfo: { flex: 1 },
   propName: { ...FONTS.h2, color: COLORS.textPrimary, fontSize: 18, marginBottom: 2 },
   propAddress: { ...FONTS.bodySmall, color: COLORS.textSecondary, marginTop: 4 },
-  cardMeta: { flexDirection: 'row', gap: SPACING.xl, marginTop: SPACING.md, paddingTop: SPACING.md, borderTopWidth: 1, borderTopColor: COLORS.border },
+  cardMeta: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.xl, marginTop: SPACING.md, paddingTop: SPACING.md, borderTopWidth: 1, borderTopColor: COLORS.border },
   metaItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   metaText: { ...FONTS.bodySmall, color: COLORS.textSecondary, fontWeight: '500' },
-  syncBtn: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginTop: SPACING.md, paddingTop: SPACING.md, borderTopWidth: 1, borderTopColor: COLORS.border },
-  syncText: { ...FONTS.bodySmall, color: COLORS.info, fontWeight: '600' },
+  syncBtn: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginTop: SPACING.md, paddingHorizontal: 13, paddingVertical: 9, borderRadius: 11, backgroundColor: '#2563EB' },
+  syncText: { ...FONTS.bodySmall, color: '#FFFFFF', fontWeight: '700' },
 });

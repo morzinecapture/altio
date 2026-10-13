@@ -1,13 +1,16 @@
+import { PageHeader } from '../../src/components/alpine/AlpineHeader';
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, RefreshControl, TouchableOpacity, Linking, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, Linking, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { COLORS, FONTS, SPACING, RADIUS, SHADOWS, GRADIENT } from '../../src/theme';
+import { COLORS, FONTS, SPACING, RADIUS, SHADOWS } from '../../src/theme';
 import { getMissionTypeLabel } from '../../src/utils/serviceLabels';
+import { SkeletonProfile } from '../../src/components/Skeleton';
+import { Card, EmptyState, SectionHeader } from '../../src/components/ui';
 import { useProviderStats } from '../../src/hooks';
 import { getMyInvoices } from '../../src/api';
 import type { ProviderStats, Invoice, RecentMission } from '../../src/types/api';
@@ -18,11 +21,11 @@ const INVOICE_STATUS_COLORS: Record<string, { bg: string; text: string }> = {
   issued:    { bg: '#EFF6FF', text: '#2563EB' },
   sent:      { bg: COLORS.infoSoft, text: COLORS.info },
   paid:      { bg: COLORS.successSoft, text: COLORS.success },
-  cancelled: { bg: '#FEF2F2', text: COLORS.urgency },
+  cancelled: { bg: COLORS.urgencySoft, text: COLORS.urgency },
 };
 
 export default function RevenueScreen() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const router = useRouter();
   const [activeTab, setActiveTab]   = useState<Tab>('revenus');
 
@@ -52,13 +55,11 @@ export default function RevenueScreen() {
     router.push({ pathname: '/invoice-viewer', params: { url, title: invoiceNumber || 'Facture' } });
   };
 
-  if (isLoading) return <View style={styles.center}><ActivityIndicator size="large" color={COLORS.brandPrimary} /></View>;
+  if (isLoading) return <SafeAreaView style={styles.container} edges={['top']}><SkeletonProfile /></SafeAreaView>;
 
   return (
     <SafeAreaView style={styles.container} testID="revenue-screen">
-      <View style={styles.header}>
-        <Text style={styles.title}>{t('provider.revenue.title')}</Text>
-      </View>
+      <PageHeader title={t('provider.revenue.title')} subtitle={t('alpine.revenueSubtitle')} />
 
       {/* Tabs */}
       <View style={styles.tabBar}>
@@ -83,12 +84,12 @@ export default function RevenueScreen() {
         {activeTab === 'revenus' && (
           <>
             <LinearGradient
-              colors={GRADIENT.brandButton}
+              colors={[COLORS.navy, COLORS.textPrimary]}
               start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
               style={styles.earningsCard}
             >
-              <Text style={styles.earningsLabel}>Net perçu</Text>
-              <Text style={styles.earningsValue}>{(stats?.total_earnings || 0).toFixed(2)}€</Text>
+              <Text style={styles.earningsLabel}>{t('alpine.totalEarnings')}</Text>
+              <Text style={styles.earningsValue}>{(stats?.total_earnings || 0).toLocaleString(i18n.language === 'en' ? 'en-GB' : 'fr-FR', { style: 'currency', currency: 'EUR' })}</Text>
               <View style={styles.earningsRow}>
                 <View style={styles.earningStat}>
                   <Ionicons name="checkmark-circle" size={16} color="#86EFAC" />
@@ -99,12 +100,57 @@ export default function RevenueScreen() {
                   </Text>
                 </View>
                 <View style={styles.earningStat}>
-                  <Ionicons name="star" size={16} color={COLORS.warning} />
+                  <Ionicons name="star" size={16} color={COLORS.gold} />
                   <Text style={styles.earningStatText}>{stats?.rating || 0}/5 ({stats?.total_reviews || 0} avis)</Text>
                 </View>
               </View>
             </LinearGradient>
 
+            <View style={styles.statsGrid}>
+              <View style={styles.statCard}>
+                <Ionicons name="checkmark-circle-outline" size={24} color={COLORS.success} />
+                <Text style={styles.statValue}>{stats?.completed_missions || 0}</Text>
+                <Text style={styles.statLabel}>{t('provider.revenue.stat_completed')}</Text>
+              </View>
+              <View style={styles.statCard}>
+                <Ionicons name="play-circle-outline" size={24} color={COLORS.info} />
+                <Text style={styles.statValue}>{stats?.in_progress_missions || 0}</Text>
+                <Text style={styles.statLabel}>{t('provider.revenue.stat_in_progress')}</Text>
+              </View>
+              <View style={styles.statCard}>
+                <Ionicons name="time-outline" size={24} color={COLORS.warning} />
+                <Text style={styles.statValue}>{stats?.pending_applications || 0}</Text>
+                <Text style={styles.statLabel}>{t('provider.revenue.stat_applications')}</Text>
+              </View>
+            </View>
+
+            <View style={styles.section}>
+              <SectionHeader title={t('provider.revenue.recent_missions')} />
+              {(stats?.recent_missions || []).length === 0 ? (
+                <Card variant="flat" padding="xxl">
+                  <EmptyState
+                    icon="briefcase-outline"
+                    title={t('provider.revenue.no_completed_missions')}
+                    compact
+                  />
+                </Card>
+              ) : (
+                (stats?.recent_missions || []).map((m: RecentMission) => (
+                  <View key={m.mission_id} style={styles.missionItem}>
+                    <View style={styles.missionLeft}>
+                      <Ionicons name="checkmark-circle" size={20} color={COLORS.success} />
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text numberOfLines={2} style={styles.missionTitle}>{m.description || getMissionTypeLabel(m.mission_type ?? '')}</Text>
+                        <Text style={styles.missionDate}>
+                          {m.completed_at ? new Date(m.completed_at).toLocaleDateString('fr-FR') : '-'}
+                        </Text>
+                      </View>
+                    </View>
+                    <Text style={styles.missionAmount}>{m.fixed_rate || 0}€</Text>
+                  </View>
+                ))
+              )}
+            </View>
             {/* Bandeau obligation fiscale — art. 242 bis CGI */}
             <View style={styles.fiscalBanner}>
               <View style={styles.fiscalBannerHeader}>
@@ -132,47 +178,6 @@ export default function RevenueScreen() {
               </View>
             </View>
 
-            <View style={styles.statsGrid}>
-              <View style={styles.statCard}>
-                <Ionicons name="checkmark-circle-outline" size={24} color={COLORS.success} />
-                <Text style={styles.statValue}>{stats?.completed_missions || 0}</Text>
-                <Text style={styles.statLabel}>{t('provider.revenue.stat_completed')}</Text>
-              </View>
-              <View style={styles.statCard}>
-                <Ionicons name="play-circle-outline" size={24} color={COLORS.info} />
-                <Text style={styles.statValue}>{stats?.in_progress_missions || 0}</Text>
-                <Text style={styles.statLabel}>{t('provider.revenue.stat_in_progress')}</Text>
-              </View>
-              <View style={styles.statCard}>
-                <Ionicons name="time-outline" size={24} color={COLORS.warning} />
-                <Text style={styles.statValue}>{stats?.pending_applications || 0}</Text>
-                <Text style={styles.statLabel}>{t('provider.revenue.stat_applications')}</Text>
-              </View>
-            </View>
-
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>{t('provider.revenue.recent_missions')}</Text>
-              {(stats?.recent_missions || []).length === 0 ? (
-                <View style={styles.emptyCard}>
-                  <Text style={styles.emptyText}>{t('provider.revenue.no_completed_missions')}</Text>
-                </View>
-              ) : (
-                (stats?.recent_missions || []).map((m: RecentMission) => (
-                  <View key={m.mission_id} style={styles.missionItem}>
-                    <View style={styles.missionLeft}>
-                      <Ionicons name="checkmark-circle" size={20} color={COLORS.success} />
-                      <View>
-                        <Text style={styles.missionTitle}>{m.description || getMissionTypeLabel(m.mission_type ?? '')}</Text>
-                        <Text style={styles.missionDate}>
-                          {m.completed_at ? new Date(m.completed_at).toLocaleDateString('fr-FR') : '-'}
-                        </Text>
-                      </View>
-                    </View>
-                    <Text style={styles.missionAmount}>{m.fixed_rate || 0}€</Text>
-                  </View>
-                ))
-              )}
-            </View>
           </>
         )}
 
@@ -180,11 +185,14 @@ export default function RevenueScreen() {
         {activeTab === 'factures' && (
           <View style={styles.section}>
             {invoices.length === 0 ? (
-              <View style={styles.emptyCard}>
-                <Ionicons name="document-text-outline" size={32} color={COLORS.textTertiary} style={{ marginBottom: SPACING.md }} />
-                <Text style={styles.emptyText}>{t('provider.revenue.no_invoices')}</Text>
-                <Text style={[styles.emptyText, { fontSize: 12, marginTop: 4 }]}>{t('provider.revenue.no_invoices_sub')}</Text>
-              </View>
+              <Card variant="flat" padding="xxl">
+                <EmptyState
+                  icon="document-text-outline"
+                  title={t('provider.revenue.no_invoices')}
+                  subtitle={t('provider.revenue.no_invoices_sub')}
+                  compact
+                />
+              </Card>
             ) : (
               invoices.map((inv) => {
                 const statusColor = INVOICE_STATUS_COLORS[inv.status] || INVOICE_STATUS_COLORS.issued;
@@ -229,19 +237,18 @@ export default function RevenueScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FFFFFF' },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFFFFF' },
+  container: { flex: 1, backgroundColor: COLORS.background },
   header: { paddingHorizontal: SPACING.xl, paddingTop: SPACING.xl, paddingBottom: SPACING.lg },
-  title: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 24, color: '#1E3A5F' },
-  tabBar: { flexDirection: 'row', marginHorizontal: SPACING.xl, backgroundColor: COLORS.subtle, borderRadius: RADIUS.lg, padding: 4, marginBottom: SPACING.sm },
-  tab: { flex: 1, paddingVertical: SPACING.sm, borderRadius: RADIUS.md, alignItems: 'center' },
+  title: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 24, color: COLORS.textPrimary },
+  tabBar: { flexDirection: 'row', marginHorizontal: SPACING.xl, backgroundColor: COLORS.subtle, borderRadius: RADIUS.lg, padding: 4, marginBottom: SPACING.sm, marginTop: SPACING.lg },
+  tab: { flex: 1, minHeight: 48, justifyContent: 'center', paddingVertical: SPACING.sm, borderRadius: RADIUS.md, alignItems: 'center' },
   tabActive: { backgroundColor: COLORS.paper, ...SHADOWS.card },
   tabText: { ...FONTS.bodySmall, color: COLORS.textSecondary, fontWeight: '500' },
   tabTextActive: { color: COLORS.brandPrimary, fontWeight: '700' },
   earningsCard: { marginHorizontal: SPACING.xl, marginTop: SPACING.xxl, padding: SPACING.xxl, borderRadius: RADIUS.xxl, ...SHADOWS.float },
   earningsLabel: { ...FONTS.bodySmall, color: COLORS.textInverse, opacity: 0.9, fontWeight: '500' },
   earningsValue: { ...FONTS.h1, color: COLORS.textInverse, fontSize: 40, marginVertical: SPACING.sm },
-  earningsRow: { flexDirection: 'row', gap: SPACING.xl, marginTop: SPACING.md },
+  earningsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.xl, marginTop: SPACING.md },
   earningStat: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   earningStatText: { ...FONTS.bodySmall, color: COLORS.textInverse, fontWeight: '600' },
   statsGrid: { flexDirection: 'row', paddingHorizontal: SPACING.xl, gap: SPACING.md, marginTop: SPACING.xl },
@@ -249,14 +256,11 @@ const styles = StyleSheet.create({
   statValue: { ...FONTS.h2, color: COLORS.textPrimary, marginTop: SPACING.sm },
   statLabel: { ...FONTS.caption, color: COLORS.textSecondary, marginTop: 4, fontWeight: '600' },
   section: { paddingHorizontal: SPACING.xl, marginTop: SPACING.xxxl },
-  sectionTitle: { ...FONTS.h3, color: COLORS.textPrimary, marginBottom: SPACING.lg },
-  emptyCard: { backgroundColor: COLORS.paper, padding: SPACING.xxl, borderRadius: RADIUS.xl, alignItems: 'center', borderWidth: 1, borderColor: COLORS.border },
-  emptyText: { ...FONTS.body, color: COLORS.textTertiary, textAlign: 'center' },
   missionItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: COLORS.paper, padding: SPACING.lg, borderRadius: RADIUS.xl, marginBottom: SPACING.md, ...SHADOWS.card, borderWidth: 1, borderColor: COLORS.border },
   missionLeft: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, flex: 1 },
   missionTitle: { ...FONTS.bodySmall, color: COLORS.textPrimary, fontWeight: '600' },
   missionDate: { ...FONTS.caption, color: COLORS.textTertiary, marginTop: 2 },
-  missionAmount: { ...FONTS.h3, color: COLORS.success },
+  missionAmount: { ...FONTS.h3, color: COLORS.textPrimary, flexShrink: 0, marginLeft: SPACING.md },
   invoiceCard: { backgroundColor: COLORS.paper, borderRadius: RADIUS.xl, padding: SPACING.lg, marginBottom: SPACING.md, ...SHADOWS.card, borderWidth: 1, borderColor: COLORS.border },
   invoiceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   invoiceLeft: { flex: 1, gap: 3 },

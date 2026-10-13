@@ -1,0 +1,65 @@
+{
+  "checkedAt": "2026-10-11T13:10:15.933Z",
+  "scope": "Dedicated demo accounts; no payment or customer record mutations",
+  "checks": [
+    {
+      "name": "provider: login",
+      "pass": true
+    },
+    {
+      "name": "provider: two demo missions",
+      "pass": true,
+      "detail": 2
+    },
+    {
+      "name": "provider: other private profile inaccessible",
+      "pass": true,
+      "detail": 0
+    },
+    {
+      "name": "provider: owner message visible",
+      "pass": true,
+      "detail": 2
+    },
+    {
+      "name": "provider: deletion preflight endpoint available",
+      "pass": false,
+      "detail": {
+        "status": 404,
+        "error": "Requested function was not found"
+      }
+    },
+    {
+      "name": "owner: login",
+      "pass": true
+    },
+    {
+      "name": "owner: two demo missions",
+      "pass": true,
+      "detail": 2
+    },
+    {
+      "name": "owner: other private profile inaccessible",
+      "pass": true,
+      "detail": 0
+    },
+    {
+      "name": "owner: owner message visible",
+      "pass": true,
+      "detail": 2
+    },
+    {
+      "name": "owner: deletion preflight endpoint available",
+      "pass": false,
+      "detail": {
+        "status": 404,
+        "error": "Requested function was not found"
+      }
+    },
+    {
+      "name": "anonymous: demo missions inaccessible",
+      "pass": true,
+      "detail": "permission denied for table missions"
+    }
+  ]
+}

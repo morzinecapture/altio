@@ -1,0 +1,12 @@
+iPhone 17 / iOS 26.5 / build Debug local non signé
+PASS : compilation, installation, démarrage de l’accueil
+PASS : navigation accueil → connexion email
+PASS : formulaire de connexion vide → Champs requis / Veuillez remplir tous les champs
+PASS : ouverture Mot de passe oublié
+PASS : ouverture inscription
+OBSERVÉ : role-select sans profil affiche Bienvenue, !
+OBSERVÉ : barre de statut blanche peu lisible sur écran auth clair
+OBSERVÉ : avertissement Keychain expo-notifications (entitlements absents sur cette compilation non signée), Sentry.wrap avant init sans DSN dev
+NON TESTÉ : connexion effective, récupération email envoyée, création/suppression compte, paiement, parcours propriétaire/prestataire, push sur appareil.
+PASS : écran legal?tab=privacy accessible, onglet RGPD et texte affichés.
+OBSERVÉ : éditeur toujours en cours d’immatriculation ; texte affiché mentionne Frankfurt (EU-WEST-1), à harmoniser avec la région réelle.

@@ -1,4 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { requireConnectSplit } from '../_shared/connect-split.ts'
+import { connectStripe } from '../_shared/stripe-connect.ts'
 import Stripe from 'npm:stripe@^14.0.0'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { requireAuth } from '../_shared/auth.ts'
@@ -143,21 +145,7 @@ serve(async (req) => {
         },
       }
 
-      if (profile?.stripe_account_id) {
-        try {
-          const account = await stripe.accounts.retrieve(profile.stripe_account_id)
-          if (account.charges_enabled) {
-            intentParams.transfer_data = { destination: profile.stripe_account_id }
-            intentParams.application_fee_amount = Math.round(amountCents * 2 / 11)
-          } else {
-            intentParams.metadata = { ...intentParams.metadata, needs_manual_transfer: 'true' }
-          }
-        } catch (_e) {
-          intentParams.metadata = { ...intentParams.metadata, needs_manual_transfer: 'true' }
-        }
-      } else {
-        intentParams.metadata = { ...intentParams.metadata, needs_manual_transfer: 'true' }
-      }
+      Object.assign(intentParams, await requireConnectSplit(connectStripe, profile?.stripe_account_id, amountCents))
 
       try {
         const pi = await stripe.paymentIntents.create(intentParams)

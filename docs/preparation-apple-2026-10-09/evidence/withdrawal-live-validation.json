@@ -1,0 +1,10 @@
+{
+  "checkedAt": "2026-10-11T13:54:52.851Z",
+  "requestId": "29d7ead9-3181-4715-b627-4062eb90e172",
+  "status": 200,
+  "accepted": true,
+  "receiptAvailable": true,
+  "emailSent": false,
+  "idempotent": true,
+  "retrievable": true
+}

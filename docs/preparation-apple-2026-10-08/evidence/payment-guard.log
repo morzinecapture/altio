@@ -1,0 +1,13 @@
+✔ development build remains available (66.116959ms)
+✔ production refuses a test key (71.014709ms)
+✔ release blocks unresolved readiness issues {"EAS_BUILD_PROFILE":"production"} (69.327292ms)
+✔ release blocks unresolved readiness issues {"EXPO_PUBLIC_APP_ENV":"production"} (72.380458ms)
+✔ TestFlight accepts explicit test configuration only (402.184208ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 792.866458

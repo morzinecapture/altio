@@ -114,7 +114,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
     ...SHADOWS.card,
   },
-  cardSelected: { borderColor: COLORS.brandPrimary, backgroundColor: '#F8FAFC' },
+  cardSelected: { borderColor: COLORS.brandPrimary, backgroundColor: COLORS.background },
   iconCircle: {
     width: 60, height: 60, borderRadius: 30,
     backgroundColor: COLORS.subtle,

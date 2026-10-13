@@ -4,8 +4,12 @@
 import { supabase, checkError, captureError, unwrapJoin, getPropertyName, haversineKm, assertMissionTransition } from './_client';
 import type { MissionStatus, CreateMissionPayload, ApplyToMissionPayload, MergedMission, MissionApplicationEnriched, SupabaseError, MissionRow, ApplicationRow, ProviderWithUser } from './_client';
 import { sendPushNotification } from './notifications';
+import { signMissionPhoto } from './private-photos';
 import { getEmergency } from './emergencies';
+import { getCompletionStepsForMissions } from './completion';
 import { geocodeAddress } from './profile';
+import { getMissionServices, validateMissionServices } from '../utils/missionPresentation';
+import { getMissionTypeLabel } from '../utils/serviceLabels';
 
 
 // Missions
@@ -16,7 +20,7 @@ export const getMissions = async (status?: string, missionType?: string, forProv
   let query = supabase.from('missions').select('*, property:properties(name, address, city, access_code, instructions, deposit_location, latitude, longitude)').order('created_at', { ascending: false });
 
   if (status) query = query.eq('status', status);
-  if (missionType) query = query.eq('mission_type', missionType);
+  // Filter after merging so linen also finds combined cleaning + linen jobs.
 
   const { data, error } = await query;
   checkError(error);
@@ -37,13 +41,19 @@ export const getMissions = async (status?: string, missionType?: string, forProv
   let emQuery = supabase.from('emergency_requests').select('*, property:properties(name, address, city, access_code, instructions, deposit_location, latitude, longitude)').order('created_at', { ascending: false });
   if (missionType) emQuery = emQuery.eq('service_type', missionType);
 
-  const { data: emData } = await emQuery;
+  const { data: emData, error: emError } = await emQuery;
+  checkError(emError);
+
+  const completionSteps = await getCompletionStepsForMissions((emData || [])
+    .filter(e => uid && (e.owner_id === uid || e.accepted_provider_id === uid))
+    .map(e => e.id));
 
   let emergencies = (emData || []).map((e) => {
     let mappedStatus = 'pending';
     if (e.status === 'bids_open') mappedStatus = 'pending';
     else if (e.status === 'provider_accepted' || e.status === 'bid_accepted') mappedStatus = 'assigned';
     else if (e.status === 'completed') mappedStatus = 'completed';
+    else if (e.status === 'expired') mappedStatus = 'expired';
     else if (e.status === 'cancelled') mappedStatus = 'cancelled';
     else if (e.status === 'refunded') mappedStatus = 'refunded';
     else if (e.status === 'awaiting_payment' || e.status === 'quote_accepted' || e.status === 'quote_paid') mappedStatus = 'awaiting_payment';
@@ -57,9 +67,11 @@ export const getMissions = async (status?: string, missionType?: string, forProv
       mission_type: e.service_type,
       status: mappedStatus,
       raw_status: e.status,
+      completion_steps: completionSteps.filter(step => step.emergency_id === e.id),
       assigned_provider_id: e.accepted_provider_id,
       fixed_rate,
-      scheduled_date: e.created_at,
+      scheduled_date: e.scheduled_date || null,
+      priority: e.priority || (e.scheduled_date ? 'normal' : 'urgent'),
       property_name: unwrapJoin(e.property)?.name,
       property_address: forProvider && e.accepted_provider_id !== uid ? (unwrapJoin(e.property)?.city || '') : unwrapJoin(e.property)?.address,
       access_code: (e.property as MissionRow['property'])?.access_code,
@@ -74,6 +86,17 @@ export const getMissions = async (status?: string, missionType?: string, forProv
   if (status) emergencies = emergencies.filter((e) => e.status === status);
 
   mergedMissions = ([...mergedMissions, ...emergencies] as typeof mergedMissions).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+  if (missionType) mergedMissions = mergedMissions.filter(m => getMissionServices(m).includes(missionType));
+
+  if (!forProvider && uid && emergencies.length) {
+    const { data: bids, error: bidsError } = await supabase.from('emergency_bids')
+      .select('emergency_request_id').in('emergency_request_id', emergencies.map(e => e.mission_id)).eq('status', 'pending');
+    checkError(bidsError);
+    const counts = new Map<string, number>();
+    for (const bid of bids || []) counts.set(bid.emergency_request_id, (counts.get(bid.emergency_request_id) || 0) + 1);
+    mergedMissions = mergedMissions.map(m => ({ ...m, bids_count: m.is_emergency ? counts.get(m.mission_id) || 0 : undefined }));
+  }
 
   if (forProvider && uid) {
     const { data: pp } = await supabase
@@ -104,7 +127,7 @@ export const getMissions = async (status?: string, missionType?: string, forProv
             }
           }
 
-          if (specialties.length > 0 && !specialties.includes(m.mission_type)) return false;
+          if (specialties.length > 0 && !getMissionServices(m).every(service => specialties.includes(service))) return false;
           if (pLat && pLng && m.property_lat && m.property_lng) {
             const dist = haversineKm(pLat, pLng, m.property_lat, m.property_lng);
             if (dist > radius_km) return false;
@@ -139,6 +162,10 @@ export const createMission = async (data: CreateMissionPayload) => {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.user) throw new Error('Not authenticated');
 
+  const services = data.services?.length ? [...new Set(data.services)] : [data.mission_type];
+  const validation = validateMissionServices(services);
+  if (validation) throw new Error(validation);
+  const isCombined = services.length > 1;
   const { data: prop } = await supabase.from('properties').select('fixed_rate').eq('id', data.property_id).single();
 
   // Check if owner has favorites
@@ -148,7 +175,7 @@ export const createMission = async (data: CreateMissionPayload) => {
     .eq('owner_id', session.user.id);
 
   const hasFavorites = favorites && favorites.length > 0;
-  const favoritesOnlyUntil = hasFavorites
+  const favoritesOnlyUntil = hasFavorites && data.priority !== 'urgent'
     ? new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString() // 2H priority
     : null;
 
@@ -157,7 +184,9 @@ export const createMission = async (data: CreateMissionPayload) => {
     .insert({
       ...data,
       owner_id: session.user.id,
-      fixed_rate: data.fixed_rate || prop?.fixed_rate,
+      services,
+      mission_type: services.includes('cleaning') ? 'cleaning' : services[0],
+      fixed_rate: data.fixed_rate ?? (data.mode !== 'bidding' && !isCombined && data.mission_type === 'cleaning' ? prop?.fixed_rate : null),
       favorites_only_until: favoritesOnlyUntil,
       status: data.assigned_provider_id ? 'pending_provider_approval' : 'pending',
       assigned_provider_id: data.assigned_provider_id || null,
@@ -172,7 +201,7 @@ export const createMission = async (data: CreateMissionPayload) => {
 export const getMission = async (id: string) => {
   const { data: mission, error } = await supabase
     .from('missions')
-    .select('*, property:properties(name, address, city, access_code, instructions, deposit_location, linen_instructions, latitude, longitude), applications:mission_applications(*, provider:users!mission_applications_provider_id_fkey(name, picture, profile:provider_profiles(average_rating, total_reviews))), assigned_provider:users!missions_assigned_provider_id_fkey(name, picture)')
+    .select('*, property:properties(name, address, city, access_code, instructions, deposit_location, linen_instructions, latitude, longitude), applications:mission_applications(*, provider:public_profiles!mission_applications_provider_id_fkey(name, picture, is_vat_exempt, profile:public_provider_profiles(average_rating, total_reviews))), assigned_provider:public_profiles!missions_assigned_provider_id_fkey(name, picture, is_vat_exempt)')
     .eq('id', id)
     .single();
 
@@ -231,7 +260,7 @@ export const getMission = async (id: string) => {
     mission.deposit_location = mission.property?.deposit_location;
     mission.linen_instructions = mission.property?.linen_instructions;
 
-    mission.applications = (mission.applications as { id: string; provider_id: string; proposed_rate?: number; message?: string; status: string; created_at: string; provider?: { name?: string; picture?: string; profile?: { average_rating?: number; total_reviews?: number } | { average_rating?: number; total_reviews?: number }[] } | { name?: string; picture?: string; profile?: { average_rating?: number; total_reviews?: number } | { average_rating?: number; total_reviews?: number }[] }[] }[] | undefined)?.map((app) => {
+    mission.applications = (mission.applications as { id: string; provider_id: string; proposed_rate?: number; message?: string; status: string; created_at: string; provider?: { name?: string; picture?: string; is_vat_exempt?: boolean; profile?: { average_rating?: number; total_reviews?: number } | { average_rating?: number; total_reviews?: number }[] } | { name?: string; picture?: string; is_vat_exempt?: boolean; profile?: { average_rating?: number; total_reviews?: number } | { average_rating?: number; total_reviews?: number }[] }[] }[] | undefined)?.map((app) => {
       const prov = unwrapJoin(app.provider);
       const profile = Array.isArray(prov?.profile) ? prov.profile[0] : prov?.profile;
       return {
@@ -240,6 +269,7 @@ export const getMission = async (id: string) => {
         provider_picture: prov?.picture,
         provider_rating: profile?.average_rating,
         provider_reviews: profile?.total_reviews,
+        provider_is_vat_exempt: prov?.is_vat_exempt === true,
       };
     });
 
@@ -249,11 +279,12 @@ export const getMission = async (id: string) => {
       .eq('mission_id', id)
       .order('uploaded_at', { ascending: false });
     if (photosError && __DEV__) console.warn('mission_photos query error:', photosError.message, photosError.code);
-    mission.photos = photosData || [];
+    mission.photos = await Promise.all((photosData || []).map(signMissionPhoto));
 
     const ap = unwrapJoin(mission.assigned_provider as unknown);
     mission.assigned_provider_name = (ap as { name?: string } | null)?.name;
     mission.assigned_provider_picture = (ap as { picture?: string } | null)?.picture;
+    mission.assigned_provider_is_vat_exempt = (ap as { is_vat_exempt?: boolean } | null)?.is_vat_exempt === true;
   }
 
   return mission;
@@ -275,12 +306,15 @@ export const applyToMission = async (missionId: string, data: ApplyToMissionPayl
   // Vérifier que la mission est bien en 'pending_provider_approval' (anti-pattern #8)
   const { data: missionCheck } = await supabase
     .from('missions')
-    .select('status')
+    .select('status, fixed_rate')
     .eq('id', missionId)
     .single();
   if (!missionCheck || !['pending', 'pending_provider_approval'].includes(missionCheck.status)) {
     throw new Error('Cette mission n\'est plus disponible pour candidature.');
   }
+
+  const proposedRate = data.proposed_rate ?? missionCheck.fixed_rate;
+  if (!Number.isFinite(proposedRate) || proposedRate <= 0) throw new Error('Indiquez un tarif total pour l’ensemble des prestations.');
 
   // Guard: empêcher les candidatures en double
   const { count: existingCount } = await supabase
@@ -309,7 +343,7 @@ export const applyToMission = async (missionId: string, data: ApplyToMissionPayl
     .insert({
       mission_id: missionId,
       provider_id: session.user.id,
-      proposed_rate: data.proposed_rate,
+      proposed_rate: proposedRate,
       message: data.message
     })
     .select()
@@ -320,7 +354,7 @@ export const applyToMission = async (missionId: string, data: ApplyToMissionPayl
   // Notifier le propriétaire de la mission
   const { data: mission } = await supabase
     .from('missions')
-    .select('owner_id, mission_type, provider:users!missions_assigned_provider_id_fkey(name)')
+    .select('owner_id, mission_type, provider:public_profiles!missions_assigned_provider_id_fkey(name)')
     .eq('id', missionId)
     .single();
 
@@ -333,7 +367,7 @@ export const applyToMission = async (missionId: string, data: ApplyToMissionPayl
     sendPushNotification(
       mission.owner_id,
       '📋 Nouvelle candidature',
-      `${providerUser?.name || 'Un prestataire'} a postulé à votre mission de ${mission.mission_type || 'service'}.`,
+      `${providerUser?.name || 'Un prestataire'} a postulé à votre mission de ${getMissionTypeLabel(mission.mission_type || 'service').toLocaleLowerCase('fr-FR')}.`,
       { missionId }
     ).catch(err => captureError(err, { context: 'push-notification-new-application', userId: mission.owner_id }));
   }
@@ -360,7 +394,7 @@ export const declineBroadcastMission = async (missionId: string) => {
     throw new Error('Cette mission n\'est plus ouverte.');
   }
   if (missionCheck.assigned_provider_id) {
-    throw new Error('Cette mission n\'est pas en broadcast.');
+    throw new Error('Cette mission n\'est pas diffusée au réseau.');
   }
 
   // Prevent duplicate decline
@@ -427,6 +461,8 @@ export const getMyApplications = async () => {
     ...app,
     mission_id: unwrapJoin(app.mission)?.id,
     mission_type: unwrapJoin(app.mission)?.mission_type,
+    services: unwrapJoin(app.mission)?.services,
+    priority: unwrapJoin(app.mission)?.priority,
     property_name: unwrapJoin(unwrapJoin(app.mission)?.property)?.name,
     property_address: unwrapJoin(unwrapJoin(app.mission)?.property)?.city || unwrapJoin(unwrapJoin(app.mission)?.property)?.address,
     description: unwrapJoin(app.mission)?.description,
@@ -444,6 +480,7 @@ export const handleApplication = async (missionId: string, appId: string, action
     .from('mission_applications')
     .update({ status })
     .eq('id', appId)
+    .eq('mission_id', missionId)
     .eq('status', 'pending')
     .select()
     .single();
@@ -461,7 +498,7 @@ export const handleApplication = async (missionId: string, appId: string, action
     // R3: Mission must be in pending or pending_provider_approval to transition to assigned
     const { error: assignError } = await supabase
       .from('missions')
-      .update({ status: 'assigned', assigned_provider_id: data.provider_id })
+      .update({ status: 'assigned', assigned_provider_id: data.provider_id, ...(Number.isFinite(Number(data.proposed_rate)) && Number(data.proposed_rate) > 0 ? { fixed_rate: Number(data.proposed_rate) } : {}) })
       .eq('id', missionId)
       .eq('owner_id', session.user.id)
       .in('status', ['pending', 'pending_provider_approval'])
@@ -584,7 +621,7 @@ export const addMissionPhoto = async (missionId: string, uri: string): Promise<{
     photo_url: uploadedUrl,
   }).select('photo_url, uploaded_at').single();
   checkError(error);
-  return data!;
+  return signMissionPhoto(data!);
 };
 
 export const acceptDirectMission = async (missionId: string) => {
@@ -597,7 +634,7 @@ export const acceptDirectMission = async (missionId: string) => {
     .eq('id', missionId)
     .eq('assigned_provider_id', session.user.id)
     .eq('status', 'pending_provider_approval')
-    .select('*, owner:users!missions_owner_id_fkey(name), provider:users!missions_assigned_provider_id_fkey(name)')
+    .select('*, owner:public_profiles!missions_owner_id_fkey(name), provider:public_profiles!missions_assigned_provider_id_fkey(name)')
     .single();
   if (error || !data) throw new Error('Impossible d\'accepter cette mission. Vérifiez qu\'elle vous est bien attribuée.');
 
@@ -620,7 +657,7 @@ export const rejectDirectMission = async (missionId: string) => {
     .eq('id', missionId)
     .eq('assigned_provider_id', session.user.id)
     .eq('status', 'pending_provider_approval')
-    .select('*, provider:users!missions_assigned_provider_id_fkey(name)')
+    .select('*, provider:public_profiles!missions_assigned_provider_id_fkey(name)')
     .single();
   if (error || !data) throw new Error('Impossible de refuser cette mission.');
 
@@ -695,7 +732,7 @@ export const getOwnerDashboard = async () => {
     supabase.from('emergency_requests').select('id', { count: 'exact', head: true }).eq('owner_id', uid).eq('status', 'bids_open'),
     supabase.from('emergency_requests').select('id', { count: 'exact', head: true }).eq('owner_id', uid).neq('status', 'bids_open').neq('status', 'completed').neq('status', 'cancelled').neq('status', 'refunded'),
     supabase.from('emergency_requests')
-      .select('id, status, service_type, created_at, displacement_fee, diagnostic_fee, description, property:properties(name, address)')
+      .select('id, status, service_type, created_at, scheduled_date, priority, displacement_fee, diagnostic_fee, description, property:properties(name, address)')
       .eq('owner_id', uid)
       .neq('status', 'completed')
       .neq('status', 'cancelled')
@@ -716,6 +753,7 @@ export const getOwnerDashboard = async () => {
     let mappedStatus = 'pending';
     if (e.status === 'bids_open') mappedStatus = 'pending';
     else if (e.status === 'provider_accepted' || e.status === 'bid_accepted') mappedStatus = 'assigned';
+    else if (e.status === 'expired') mappedStatus = 'expired';
     else if (e.status === 'cancelled') mappedStatus = 'cancelled';
     else if (e.status === 'refunded') mappedStatus = 'refunded';
     else if (e.status === 'completed') mappedStatus = 'completed';
@@ -727,7 +765,8 @@ export const getOwnerDashboard = async () => {
       status: mappedStatus,
       raw_status: e.status,
       fixed_rate: (e.displacement_fee || 0) + (e.diagnostic_fee || 0),
-      scheduled_date: e.created_at,
+      scheduled_date: e.scheduled_date || null,
+      priority: e.priority || (e.scheduled_date ? 'normal' : 'urgent'),
       description: e.description,
       property_name: unwrapJoin(e.property)?.name,
       property_address: unwrapJoin(e.property)?.address,
@@ -809,21 +848,26 @@ export const openDispute = async (missionId: string, reason: string) => {
 
   const { data: mission, error: fetchErr } = await supabase
     .from('missions')
-    .select('status, owner_id, assigned_provider_id, mission_type, property:properties(name)')
+    .select('status, paid_at, owner_id, assigned_provider_id, mission_type, property:properties(name)')
     .eq('id', missionId)
     .eq('owner_id', session.user.id)
     .single();
 
   if (fetchErr || !mission) throw new Error('Mission introuvable');
   assertMissionTransition(mission.status as MissionStatus, 'dispute');
+  if (mission.paid_at) throw new Error('Le paiement est déjà confirmé. Ouvrez une réclamation depuis la mission.');
 
-  const { error } = await supabase
+  // A validated mission whose payment sheet was abandoned stays disputable.
+  const { data: updated, error } = await supabase
     .from('missions')
     .update({ status: 'dispute', dispute_reason: reason, dispute_at: new Date().toISOString() })
     .eq('id', missionId)
-    .eq('status', 'awaiting_payment')
-    .eq('owner_id', session.user.id);
+    .in('status', ['awaiting_payment', 'validated'])
+    .is('paid_at', null)
+    .eq('owner_id', session.user.id)
+    .select('id');
   checkError(error);
+  if (!updated?.length) throw new Error('Cette mission a changé de statut. Actualisez la page.');
 
   // Notifications are now handled server-side via DB trigger (trg_notify_mission_status)
 };
@@ -860,7 +904,7 @@ export const getQuoteDetails = async (quoteId: string) => {
 
   const { data: quote, error: qError } = await supabase
     .from('mission_quotes')
-    .select('*, provider:users!mission_quotes_provider_id_fkey(name, picture, email, siren, company_name, profile:provider_profiles(average_rating, total_reviews, specialties, bio, zone))')
+    .select('*, provider:public_profiles!mission_quotes_provider_id_fkey(name, picture, email, siren, company_name, profile:public_provider_profiles(average_rating, total_reviews, specialties, bio, zone))')
     .eq('id', quoteId)
     .single();
   checkError(qError);
@@ -956,7 +1000,7 @@ export const acceptQuote = async (quoteId: string, missionId?: string, emergency
     .select('provider_id, repair_cost')
     .eq('id', quoteId)
     .single();
-  if (quote?.provider_id) {
+  if (quote?.provider_id && !emergencyId) {
     sendPushNotification(
       quote.provider_id,
       'Devis accepté',
@@ -1000,7 +1044,7 @@ export const refuseQuote = async (quoteId: string, reason?: string) => {
       .eq('status', 'quote_sent');
   }
 
-  if (quote?.provider_id) {
+  if (quote?.provider_id && !quote.emergency_request_id) {
     sendPushNotification(
       quote.provider_id,
       'Devis refusé',
@@ -1147,7 +1191,7 @@ export const submitQuoteWithLines = async (data: {
     ? (await supabase.from('emergency_requests').select('owner_id').eq('id', data.emergencyId).single()).data?.owner_id
     : (await supabase.from('missions').select('owner_id').eq('id', data.missionId!).single()).data?.owner_id;
 
-  if (ownerId) {
+  if (ownerId && !data.emergencyId) {
     sendPushNotification(
       ownerId,
       'Nouveau devis reçu',

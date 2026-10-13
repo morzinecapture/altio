@@ -1,0 +1,31 @@
+PASS src/__tests__/e2e/provider-flow.test.ts
+PASS src/__tests__/e2e/owner-flow.test.ts
+PASS src/api/__tests__/missions-flow.test.ts
+PASS src/api/__tests__/payments-security.test.ts
+PASS src/services/__tests__/session-scope.test.ts
+PASS src/api/__tests__/emergencies-flow.test.ts
+PASS src/services/__tests__/mission-state-machine.test.ts
+PASS src/api/__tests__/unified-missions.test.ts
+PASS src/api/__tests__/account-deletion.test.ts
+PASS src/api/__tests__/withdrawal.test.ts
+PASS src/__tests__/notifications.test.ts
+PASS src/services/__tests__/offline-queue.test.ts
+PASS src/services/__tests__/account-deletion-apple.test.ts
+PASS src/api/__tests__/_client.test.ts
+PASS src/utils/__tests__/providerMissionFollowUp.test.ts
+PASS src/services/__tests__/early-execution-consent.test.ts
+PASS src/config/__tests__/billing.test.ts
+PASS src/utils/__tests__/quotePrice.test.ts
+PASS src/utils/__tests__/providerMissionViews.test.ts
+PASS src/utils/__tests__/missionPresentation.test.ts
+PASS src/config/__tests__/emergencyFees.test.ts
+PASS src/api/__tests__/notifications-registration.test.ts
+PASS src/api/__tests__/completion.test.ts
+PASS src/utils/__tests__/ownerMissionFollowUp.test.ts
+PASS src/api/__tests__/private-photos.test.ts
+
+Test Suites: 25 passed, 25 total
+Tests:       352 passed, 352 total
+Snapshots:   0 total
+Time:        1.625 s, estimated 2 s
+Ran all test suites.

@@ -1,0 +1,27 @@
+PASS src/api/__tests__/emergencies-flow.test.ts
+PASS src/__tests__/e2e/provider-flow.test.ts
+PASS src/__tests__/e2e/owner-flow.test.ts
+PASS src/api/__tests__/missions-flow.test.ts
+PASS src/services/__tests__/session-scope.test.ts
+PASS src/api/__tests__/payments-security.test.ts
+PASS src/services/__tests__/mission-state-machine.test.ts
+PASS src/api/__tests__/unified-missions.test.ts
+PASS src/__tests__/notifications.test.ts
+PASS src/utils/__tests__/missionPresentation.test.ts
+PASS src/services/__tests__/offline-queue.test.ts
+PASS src/api/__tests__/_client.test.ts
+PASS src/utils/__tests__/providerMissionViews.test.ts
+PASS src/utils/__tests__/providerMissionFollowUp.test.ts
+PASS src/api/__tests__/notifications-registration.test.ts
+PASS src/utils/__tests__/quotePrice.test.ts
+PASS src/utils/__tests__/ownerMissionFollowUp.test.ts
+PASS src/config/__tests__/emergencyFees.test.ts
+PASS src/api/__tests__/private-photos.test.ts
+PASS src/api/__tests__/completion.test.ts
+PASS src/config/__tests__/billing.test.ts
+
+Test Suites: 21 passed, 21 total
+Tests:       317 passed, 317 total
+Snapshots:   0 total
+Time:        6.891 s
+Ran all test suites.

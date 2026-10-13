@@ -1,0 +1,29 @@
+{
+  "checkedAt": "2026-10-11T13:51:55.918Z",
+  "readOnly": true,
+  "checks": [
+    {
+      "account": "owner",
+      "check": "login",
+      "pass": true
+    },
+    {
+      "account": "owner",
+      "check": "submit-withdrawal",
+      "status": 404,
+      "error": "Requested function was not found",
+      "pass": false
+    },
+    {
+      "account": "deletion",
+      "check": "login",
+      "pass": true
+    },
+    {
+      "account": "deletion",
+      "check": "prepare-account-deletion",
+      "status": 200,
+      "pass": true
+    }
+  ]
+}

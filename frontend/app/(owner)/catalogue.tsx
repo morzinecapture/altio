@@ -5,7 +5,6 @@ import {
   ScrollView,
   TouchableOpacity,
   StyleSheet,
-  ActivityIndicator,
   Image,
   Linking,
   TextInput,
@@ -15,18 +14,20 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
-import { COLORS, SPACING, RADIUS, SHADOWS } from '../../src/theme';
+import { COLORS, SPACING, RADIUS, SHADOWS, getServiceVisual } from '../../src/theme';
+import { SkeletonList } from '../../src/components/Skeleton';
+import { EmptyState } from '../../src/components/ui';
 import { getPartners } from '../../src/api';
 import type { LocalPartner } from '../../src/types/api';
 
 const CATEGORY_ICONS: Record<string, { icon: string; color: string; bg: string; labelKey: string }> = {
-  restaurant:   { icon: 'restaurant-outline',  color: '#F97316', bg: '#FFEDD5', labelKey: 'catalogue.category_restaurant' },
-  activite:     { icon: 'bicycle-outline',      color: '#10B981', bg: '#D1FAE5', labelKey: 'catalogue.category_activite' },
-  spa:          { icon: 'sparkles-outline',     color: '#8B5CF6', bg: '#EDE9FE', labelKey: 'catalogue.category_spa' },
-  transport:    { icon: 'car-outline',          color: '#3B82F6', bg: '#EFF6FF', labelKey: 'catalogue.category_transport' },
-  shopping:     { icon: 'bag-outline',          color: '#EC4899', bg: '#FCE7F3', labelKey: 'catalogue.category_shopping' },
-  location:     { icon: 'key-outline',          color: '#EAB308', bg: '#FEF9C3', labelKey: 'catalogue.category_location' },
-  autre:        { icon: 'ellipsis-horizontal-outline', color: '#64748B', bg: '#F1F5F9', labelKey: 'catalogue.category_autre' },
+  restaurant: { ...getServiceVisual('restaurant'), labelKey: 'catalogue.category_restaurant' },
+  activite:   { ...getServiceVisual('activite'),   labelKey: 'catalogue.category_activite' },
+  spa:        { ...getServiceVisual('spa'),        labelKey: 'catalogue.category_spa' },
+  transport:  { ...getServiceVisual('transport'),  labelKey: 'catalogue.category_transport' },
+  shopping:   { ...getServiceVisual('shopping'),   labelKey: 'catalogue.category_shopping' },
+  location:   { ...getServiceVisual('location'),   labelKey: 'catalogue.category_location' },
+  autre:      { ...getServiceVisual('autre'),      labelKey: 'catalogue.category_autre' },
 };
 
 const ZONE_NAMES = ['Morzine', 'Chamonix', 'Megève', 'Courchevel', 'Val d\'Isère', 'Les Gets'];
@@ -60,7 +61,7 @@ export default function CatalogueScreen() {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="arrow-back" size={22} color="#1E3A5F" />
+          <Ionicons name="arrow-back" size={22} color={COLORS.textPrimary} />
         </TouchableOpacity>
         <View>
           <Text style={styles.title}>{t('catalogue.title')}</Text>
@@ -135,13 +136,14 @@ export default function CatalogueScreen() {
         {/* Content */}
         <View style={styles.content}>
           {loading ? (
-            <ActivityIndicator size="large" color={COLORS.brandPrimary} style={{ marginTop: 40 }} />
+            <SkeletonList count={4} />
           ) : filtered.length === 0 ? (
-            <View style={styles.empty}>
-              <Ionicons name="storefront-outline" size={48} color="#CBD5E1" />
-              <Text style={styles.emptyTitle}>{t('catalogue.empty_title')}</Text>
-              <Text style={styles.emptyText}>{t('catalogue.empty_text')}</Text>
-            </View>
+            <EmptyState
+              icon="storefront-outline"
+              title={t('catalogue.empty_title')}
+              subtitle={t('catalogue.empty_text')}
+              testID="catalogue-empty"
+            />
           ) : (
             filtered.map(partner => {
               const cfg = CATEGORY_ICONS[partner.category] || CATEGORY_ICONS.autre;
@@ -200,7 +202,7 @@ export default function CatalogueScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F8FAFC' },
+  container: { flex: 1, backgroundColor: COLORS.background },
 
   header: {
     flexDirection: 'row',
@@ -209,7 +211,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.lg,
     paddingTop: SPACING.md,
     paddingBottom: SPACING.sm,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: COLORS.background,
   },
   backBtn: {
     width: 38,
@@ -221,10 +223,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E2E8F0',
   },
-  title: { fontFamily: 'Inter_700Bold', fontSize: 22, color: '#1E3A5F' },
-  subtitle: { fontFamily: 'Inter_400Regular', fontSize: 13, color: '#64748B', marginTop: 2 },
+  title: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 22, color: COLORS.textPrimary },
+  subtitle: { fontFamily: 'PlusJakartaSans_400Regular', fontSize: 13, color: '#64748B', marginTop: 2 },
 
-  filtersBlock: { backgroundColor: '#F8FAFC', paddingBottom: SPACING.sm, borderBottomWidth: 1, borderBottomColor: '#E2E8F0' },
+  filtersBlock: { backgroundColor: COLORS.background, paddingBottom: SPACING.sm, borderBottomWidth: 1, borderBottomColor: '#E2E8F0' },
 
   searchRow: {
     flexDirection: 'row', alignItems: 'center',
@@ -233,7 +235,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.md, paddingVertical: 10,
     borderWidth: 1, borderColor: '#E2E8F0',
   },
-  searchInput: { flex: 1, fontFamily: 'Inter_400Regular', fontSize: 14, color: '#1E3A5F' },
+  searchInput: { flex: 1, fontFamily: 'PlusJakartaSans_400Regular', fontSize: 14, color: COLORS.textPrimary },
 
   pills: { paddingHorizontal: SPACING.lg, paddingVertical: SPACING.sm, gap: SPACING.sm },
   pill: {
@@ -241,8 +243,8 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.full, borderWidth: 1.5, borderColor: '#E2E8F0',
     backgroundColor: '#FFFFFF',
   },
-  pillActive: { backgroundColor: '#1E3A5F', borderColor: '#1E3A5F' },
-  pillText: { fontFamily: 'Inter_500Medium', fontSize: 12, color: '#64748B' },
+  pillActive: { backgroundColor: COLORS.brandPrimary, borderColor: COLORS.brandPrimary },
+  pillText: { fontFamily: 'PlusJakartaSans_500Medium', fontSize: 12, color: '#64748B' },
   pillTextActive: { color: '#FFFFFF' },
 
   chip: {
@@ -251,15 +253,12 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.full, borderWidth: 1.5, borderColor: '#E2E8F0',
     backgroundColor: '#FFFFFF',
   },
-  chipActive: { backgroundColor: '#1E3A5F', borderColor: '#1E3A5F' },
-  chipText: { fontFamily: 'Inter_500Medium', fontSize: 12, color: '#64748B' },
+  chipActive: { backgroundColor: COLORS.brandPrimary, borderColor: COLORS.brandPrimary },
+  chipText: { fontFamily: 'PlusJakartaSans_500Medium', fontSize: 12, color: '#64748B' },
   chipTextActive: { color: '#FFFFFF' },
 
   content: { padding: SPACING.lg, gap: SPACING.md },
 
-  empty: { alignItems: 'center', paddingVertical: 60, gap: SPACING.sm },
-  emptyTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 16, color: '#94A3B8' },
-  emptyText: { fontFamily: 'Inter_400Regular', fontSize: 13, color: '#CBD5E1', textAlign: 'center' },
 
   card: {
     flexDirection: 'row', alignItems: 'center',
@@ -275,11 +274,11 @@ const styles = StyleSheet.create({
   logo: { width: 56, height: 56 },
   cardBody: { flex: 1, gap: 4 },
   cardTop: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
-  cardName: { fontFamily: 'Inter_600SemiBold', fontSize: 15, color: '#1E3A5F', flex: 1 },
+  cardName: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 15, color: COLORS.textPrimary, flex: 1 },
   badge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6 },
-  badgeText: { fontFamily: 'Inter_600SemiBold', fontSize: 10 },
-  cardDesc: { fontFamily: 'Inter_400Regular', fontSize: 12, color: '#64748B', lineHeight: 17 },
+  badgeText: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 10 },
+  cardDesc: { fontFamily: 'PlusJakartaSans_400Regular', fontSize: 12, color: '#64748B', lineHeight: 17 },
   cardMeta: { flexDirection: 'row', gap: SPACING.md, marginTop: 2 },
   metaItem: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  metaText: { fontFamily: 'Inter_400Regular', fontSize: 11, color: '#94A3B8' },
+  metaText: { fontFamily: 'PlusJakartaSans_400Regular', fontSize: 11, color: '#94A3B8' },
 });

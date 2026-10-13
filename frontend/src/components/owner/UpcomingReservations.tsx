@@ -54,7 +54,7 @@ function ReservationCard({ r }: { r: UpcomingReservation }) {
         </View>
         {r.has_mission ? (
           <View style={styles.missionOk}>
-            <Ionicons name="checkmark-circle" size={14} color="#16A34A" />
+            <Ionicons name="checkmark-circle" size={14} color={COLORS.success} />
             <Text style={styles.missionOkText}>Ménage planifié</Text>
           </View>
         ) : (
@@ -94,7 +94,7 @@ export default function UpcomingReservations() {
 
 const styles = StyleSheet.create({
   section: { paddingHorizontal: SPACING.xl, marginBottom: SPACING.xxl },
-  sectionTitle: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 18, color: '#1E3A5F', marginBottom: SPACING.lg },
+  sectionTitle: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 18, color: COLORS.textPrimary, marginBottom: SPACING.lg },
 
   card: {
     backgroundColor: '#FFFFFF',
@@ -110,7 +110,7 @@ const styles = StyleSheet.create({
     borderColor: '#F1F5F9',
   },
   cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: SPACING.sm },
-  guestName: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 15, color: '#1E3A5F' },
+  guestName: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 15, color: COLORS.textPrimary },
   propertyName: { fontFamily: 'PlusJakartaSans_400Regular', fontSize: 12, color: '#94A3B8', marginTop: 2 },
 
   sourceBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
@@ -121,7 +121,7 @@ const styles = StyleSheet.create({
   dateText: { fontFamily: 'PlusJakartaSans_500Medium', fontSize: 13, color: '#64748B' },
 
   missionOk: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  missionOkText: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 12, color: '#16A34A' },
+  missionOkText: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 12, color: COLORS.success },
   missionWarn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   missionWarnText: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 12, color: '#D97706' },
 });

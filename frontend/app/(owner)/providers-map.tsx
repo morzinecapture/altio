@@ -13,27 +13,19 @@ import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
-import { COLORS, SPACING, RADIUS, SHADOWS } from '../../src/theme';
+import { COLORS, SPACING, RADIUS, SHADOWS, getServiceVisual } from '../../src/theme';
 import { getProviders } from '../../src/api';
 import type { ProviderProfile } from '../../src/types/api';
 
 const SPECIALTY_CONFIG: Record<string, { color: string; bg: string; icon: string; labelKey: string }> = {
-  plumbing:   { color: '#3B82F6', bg: '#EFF6FF', icon: 'water-outline',    labelKey: 'providers_map.specialty_plumbing'   },
-  electrical: { color: '#EAB308', bg: '#FEF9C3', icon: 'flash-outline',    labelKey: 'providers_map.specialty_electrical' },
-  cleaning:   { color: '#10B981', bg: '#D1FAE5', icon: 'sparkles-outline', labelKey: 'providers_map.specialty_cleaning'   },
-  repair:     { color: '#F97316', bg: '#FFEDD5', icon: 'hammer-outline',   labelKey: 'providers_map.specialty_repair'     },
-  locksmith:  { color: '#8B5CF6', bg: '#EDE9FE', icon: 'key-outline',      labelKey: 'providers_map.specialty_locksmith'  },
-  jacuzzi:    { color: '#06B6D4', bg: '#CFFAFE', icon: 'sunny-outline',    labelKey: 'providers_map.specialty_jacuzzi'    },
-  linen:      { color: '#EC4899', bg: '#FCE7F3', icon: 'shirt-outline',    labelKey: 'providers_map.specialty_linen'      },
+  plumbing:   { ...getServiceVisual('plumbing'),   labelKey: 'providers_map.specialty_plumbing' },
+  electrical: { ...getServiceVisual('electrical'), labelKey: 'providers_map.specialty_electrical' },
+  cleaning:   { ...getServiceVisual('cleaning'),   labelKey: 'providers_map.specialty_cleaning' },
+  repair:     { ...getServiceVisual('repair'),     labelKey: 'providers_map.specialty_repair' },
+  locksmith:  { ...getServiceVisual('locksmith'),  labelKey: 'providers_map.specialty_locksmith' },
+  jacuzzi:    { ...getServiceVisual('jacuzzi'),    labelKey: 'providers_map.specialty_jacuzzi' },
+  linen:      { ...getServiceVisual('linen'),      labelKey: 'providers_map.specialty_linen' },
 };
-
-const FALLBACK_COORDS = [
-  { latitude: 46.0037, longitude: 6.7952 },  // Morzine
-  { latitude: 45.9237, longitude: 6.8694 },  // Chamonix
-  { latitude: 45.8326, longitude: 6.8652 },  // Argentière
-  { latitude: 46.0769, longitude: 7.0854 },  // Verbier area
-  { latitude: 45.6979, longitude: 6.7682 },  // Megève
-];
 
 const DEFAULT_REGION = {
   latitude: 45.92,
@@ -59,15 +51,14 @@ export default function ProvidersMap() {
       .finally(() => setLoading(false));
   }, []));
 
-  const enriched = providers.map((p, i) => {
-    if (p.latitude && p.longitude) return p;
-    const fb = FALLBACK_COORDS[i % FALLBACK_COORDS.length];
-    return { ...p, latitude: fb.latitude, longitude: fb.longitude };
-  });
+  const located = providers.filter(p =>
+    typeof p.latitude === 'number' && Number.isFinite(p.latitude) && Math.abs(p.latitude) <= 90 &&
+    typeof p.longitude === 'number' && Number.isFinite(p.longitude) && Math.abs(p.longitude) <= 180
+  );
 
   const filtered = selectedSpecialty
-    ? enriched.filter((p) => (p.specialties || []).includes(selectedSpecialty))
-    : enriched;
+    ? located.filter((p) => (p.specialties || []).includes(selectedSpecialty))
+    : located;
 
   const allSpecialties = Array.from(
     new Set(providers.flatMap((p) => p.specialties || []))
@@ -93,8 +84,9 @@ export default function ProvidersMap() {
         {filtered.map((provider) => {
           const mainSpecialty = (provider.specialties || [])[0];
           const cfg = SPECIALTY_CONFIG[mainSpecialty] || { color: '#64748B', bg: '#F1F5F9', icon: 'person-outline', labelKey: 'providers_map.general_label' };
-          const avatarUrl = provider.user?.picture
-            || `https://ui-avatars.com/api/?name=${encodeURIComponent(provider.user?.name || 'P')}&background=1E3A5F&color=fff&size=100`;
+          const avatarSource = provider.user?.picture ? { uri: provider.user.picture } : require('../../assets/images/icon.png');
+          const ratingLabel = typeof provider.rating === 'number' && Number.isFinite(provider.rating) && provider.rating >= 1 && provider.rating <= 5 && (provider.total_reviews ?? 0) > 0
+            ? `${provider.rating.toFixed(1)} (${provider.total_reviews})` : 'Aucun avis';
 
           return (
             <Marker
@@ -116,7 +108,7 @@ export default function ProvidersMap() {
               >
                 <View style={styles.callout}>
                   {/* Flèche en bas de la card */}
-                  <Image source={{ uri: avatarUrl }} style={styles.calloutAvatar} />
+                  <Image source={avatarSource} style={styles.calloutAvatar} />
 
                   <View style={styles.calloutBody}>
                     <Text style={styles.calloutName} numberOfLines={1}>
@@ -125,10 +117,8 @@ export default function ProvidersMap() {
 
                     {/* Rating */}
                     <View style={styles.calloutRating}>
-                      {[1,2,3,4,5].map(i => (
-                        <Ionicons key={i} name="star" size={11} color="#FBBF24" />
-                      ))}
-                      <Text style={styles.calloutRatingText}>4.9</Text>
+                      <Ionicons name="star" size={11} color={COLORS.warning} />
+                      <Text style={styles.calloutRatingText}>{ratingLabel}</Text>
                     </View>
 
                     {/* Spécialité principale */}
@@ -165,6 +155,7 @@ export default function ProvidersMap() {
         <View style={styles.headerCard} pointerEvents="auto">
           <Text style={styles.headerTitle}>{t('providers_map.title')}</Text>
           <Text style={styles.headerSub}>{t('providers_map.count_in_zone', { count: filtered.length })}</Text>
+          {providers.length > located.length && <Text style={styles.headerSub}>Les profils sans localisation renseignée ne sont pas placés sur la carte.</Text>}
         </View>
 
         {/* Filtres spécialités */}
@@ -216,8 +207,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.lg, paddingVertical: SPACING.md,
     alignItems: 'center', ...SHADOWS.cardHover,
   },
-  headerTitle: { fontFamily: 'Inter_700Bold', fontSize: 16, color: '#1E3A5F' },
-  headerSub: { fontFamily: 'Inter_400Regular', fontSize: 12, color: '#64748B' },
+  headerTitle: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 16, color: COLORS.textPrimary },
+  headerSub: { fontFamily: 'PlusJakartaSans_400Regular', fontSize: 12, color: '#64748B' },
 
   /* Chips */
   chips: { paddingHorizontal: SPACING.lg, paddingBottom: SPACING.md, gap: SPACING.sm },
@@ -226,8 +217,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF', paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm,
     borderRadius: RADIUS.full, borderWidth: 1.5, borderColor: '#E2E8F0', ...SHADOWS.card,
   },
-  chipActive: { backgroundColor: '#1E3A5F', borderColor: '#1E3A5F' },
-  chipText: { fontFamily: 'Inter_600SemiBold', fontSize: 12, color: '#64748B' },
+  chipActive: { backgroundColor: COLORS.brandPrimary, borderColor: COLORS.brandPrimary },
+  chipText: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 12, color: '#64748B' },
   chipTextActive: { color: '#FFFFFF' },
 
   /* Pin sur la carte */
@@ -276,12 +267,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#F1F5F9',
   },
   calloutBody: { flex: 1, justifyContent: 'center', gap: 3 },
-  calloutName: { fontFamily: 'Inter_700Bold', fontSize: 14, color: '#1E3A5F' },
+  calloutName: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 14, color: COLORS.textPrimary },
   calloutRating: { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  calloutRatingText: { fontFamily: 'Inter_600SemiBold', fontSize: 12, color: '#1E3A5F', marginLeft: 3 },
+  calloutRatingText: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 12, color: COLORS.textPrimary, marginLeft: 3 },
   calloutBadge: { alignSelf: 'flex-start', paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6 },
-  calloutBadgeText: { fontFamily: 'Inter_600SemiBold', fontSize: 11 },
+  calloutBadgeText: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 11 },
   calloutLocation: { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  calloutLocationText: { fontFamily: 'Inter_400Regular', fontSize: 11, color: '#94A3B8', flex: 1 },
-  calloutCta: { fontFamily: 'Inter_600SemiBold', fontSize: 12, color: '#3B82F6', marginTop: 2 },
+  calloutLocationText: { fontFamily: 'PlusJakartaSans_400Regular', fontSize: 11, color: '#94A3B8', flex: 1 },
+  calloutCta: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 12, color: '#3B82F6', marginTop: 2 },
 });

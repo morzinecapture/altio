@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { COLORS, FONTS, SPACING, RADIUS, SHADOWS, STATUS_COLORS } from '../../src/theme';
@@ -64,10 +64,12 @@ export default function ProviderInvoices() {
   const router = useRouter();
   const [filter, setFilter] = useState<string | null>(null);
 
-  const { data: invoices = [], isLoading, refetch } = useQuery<Invoice[]>({
+  const { data: invoices = [], isLoading, isError, isRefetching, refetch } = useQuery<Invoice[]>({
     queryKey: ['invoices', 'seller'],
     queryFn: () => getInvoices('seller'),
   });
+
+  useFocusEffect(React.useCallback(() => { void refetch(); }, [refetch]));
 
   const filtered = filter ? invoices.filter((i) => i.invoice_type === filter) : invoices;
 
@@ -89,10 +91,11 @@ export default function ProviderInvoices() {
 
   return (
     <SafeAreaView style={styles.container}>
+      {isError && <TouchableOpacity accessibilityRole="button" onPress={() => refetch()} style={{ padding: SPACING.lg }}><Text>Impossible de charger les factures. Appuyez pour réessayer.</Text></TouchableOpacity>}
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
-        refreshControl={<RefreshControl refreshing={false} onRefresh={() => refetch()} />}
+        refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={() => refetch()} />}
       >
         {/* Header */}
         <View style={styles.header}>
@@ -218,7 +221,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontFamily: 'PlusJakartaSans_700Bold',
     fontSize: 24,
-    color: '#1E3A5F',
+    color: COLORS.textPrimary,
   },
   headerSubtitle: {
     fontFamily: 'PlusJakartaSans_400Regular',
@@ -287,7 +290,7 @@ const styles = StyleSheet.create({
   invoiceNumber: {
     fontFamily: 'PlusJakartaSans_600SemiBold',
     fontSize: 15,
-    color: '#1E3A5F',
+    color: COLORS.textPrimary,
   },
   invoiceDate: {
     fontFamily: 'PlusJakartaSans_400Regular',
@@ -346,7 +349,7 @@ const styles = StyleSheet.create({
   amountValue: {
     fontFamily: 'PlusJakartaSans_700Bold',
     fontSize: 20,
-    color: '#1E3A5F',
+    color: COLORS.textPrimary,
   },
 
   detailHint: {

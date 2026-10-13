@@ -1,0 +1,95 @@
+{
+  "date": "2026-10-01",
+  "results": [
+    {
+      "check": "anonymous_users",
+      "passed": true,
+      "http": 401
+    },
+    {
+      "check": "anonymous_provider_profiles",
+      "passed": true,
+      "http": 401
+    },
+    {
+      "check": "anonymous_properties",
+      "passed": true,
+      "http": 401
+    },
+    {
+      "check": "anonymous_missions",
+      "passed": true,
+      "http": 401
+    },
+    {
+      "check": "anonymous_messages",
+      "passed": true,
+      "http": 401
+    },
+    {
+      "check": "anonymous_emergency_requests",
+      "passed": true,
+      "http": 401
+    },
+    {
+      "check": "anonymous_invoices",
+      "passed": true,
+      "http": 401
+    },
+    {
+      "check": "/functions/v1/generate-credit-note",
+      "passed": true,
+      "http": 403
+    },
+    {
+      "check": "/functions/v1/send-push",
+      "passed": true,
+      "http": 403
+    },
+    {
+      "check": "underpayment_rejected",
+      "passed": true,
+      "http": 400
+    },
+    {
+      "check": "foreign_payer_rejected",
+      "passed": true,
+      "http": 400
+    },
+    {
+      "check": "private_provider_hidden",
+      "passed": true,
+      "http": 200
+    },
+    {
+      "check": "mission_directory_joins",
+      "passed": true,
+      "http": 200
+    },
+    {
+      "check": "owner_photo_upload",
+      "passed": true,
+      "http": 200
+    },
+    {
+      "check": "foreign_photo_overwrite_rejected",
+      "passed": true,
+      "http": 400
+    },
+    {
+      "check": "owner_private_photo_signature",
+      "passed": true,
+      "http": 200
+    },
+    {
+      "check": "public_photo_url_rejected",
+      "passed": true,
+      "http": 400
+    },
+    {
+      "check": "owner_test_photo_cleanup",
+      "passed": true,
+      "http": 200
+    }
+  ]
+}

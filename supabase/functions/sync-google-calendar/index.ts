@@ -11,6 +11,7 @@
  */
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders, handleCors } from '../_shared/cors.ts';
+import { requireAuthOrServiceKey } from '../_shared/auth.ts';
 
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
@@ -25,22 +26,48 @@ Deno.serve(async (req) => {
   if (corsResponse) return corsResponse;
 
   try {
-    const { mission_id, action } = await req.json() as { mission_id: string; action: 'create' | 'delete' };
-    if (!mission_id || !action) throw new Error('mission_id et action requis');
+    const { user, isServiceCall } = await requireAuthOrServiceKey(req);
+    const { mission_id, intervention_id, action } = await req.json() as { mission_id?: string; intervention_id?: string; action: 'create' | 'delete' };
+    if (Number(Boolean(mission_id)) + Number(Boolean(intervention_id)) !== 1 || !['create', 'delete'].includes(action)) throw new Error('Une mission ou intervention et une action valide sont requises');
 
-    // Fetch mission + property + assigned provider
-    const { data: mission, error: mErr } = await supabase
-      .from('missions')
-      .select(`
-        id, mission_type, scheduled_date, google_event_id,
-        assigned_provider_id,
-        properties ( name, address )
-      `)
-      .eq('id', mission_id)
-      .single();
+    // Unified fetch : support interventions or legacy missions
+    let mission: any, mErr: any;
+    const sourceTable = intervention_id ? 'interventions' : 'missions';
+    const sourceId = intervention_id || mission_id;
+    if (intervention_id) {
+      const r = await supabase
+        .from('interventions')
+        .select(`
+          id, service_type, mission_type, scheduled_at, google_event_id,
+          owner_id, assigned_provider_id,
+          properties ( name, address )
+        `)
+        .eq('id', intervention_id)
+        .single();
+      mission = r.data ? { ...r.data, scheduled_date: r.data.scheduled_at, mission_type: r.data.service_type || r.data.mission_type } : null;
+      mErr = r.error;
+    } else {
+      const r = await supabase
+        .from('missions')
+        .select(`
+          id, mission_type, scheduled_date, google_event_id,
+          owner_id, assigned_provider_id,
+          properties ( name, address )
+        `)
+        .eq('id', mission_id!)
+        .single();
+      mission = r.data;
+      mErr = r.error;
+    }
 
     if (mErr || !mission) throw new Error('Mission introuvable');
+    if (!isServiceCall && user?.id !== mission.owner_id && user?.id !== mission.assigned_provider_id) {
+      return new Response(JSON.stringify({ error: 'Accès interdit' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
     if (!mission.assigned_provider_id) throw new Error('Aucun prestataire assigné');
+    if (action === 'create' && mission.google_event_id) {
+      return new Response(JSON.stringify({ ok: true, skipped: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
 
     // Fetch provider's Google tokens
     const { data: providerUser } = await supabase
@@ -67,7 +94,7 @@ Deno.serve(async (req) => {
     if (action === 'create') {
       const eventId = await createCalendarEvent(accessToken, mission);
       // Store the event ID so we can delete it later
-      await supabase.from('missions').update({ google_event_id: eventId }).eq('id', mission_id);
+      await supabase.from(sourceTable).update({ google_event_id: eventId }).eq('id', sourceId);
       return new Response(
         JSON.stringify({ ok: true, event_id: eventId }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
@@ -77,7 +104,7 @@ Deno.serve(async (req) => {
     if (action === 'delete') {
       if (mission.google_event_id) {
         await deleteCalendarEvent(accessToken, mission.google_event_id);
-        await supabase.from('missions').update({ google_event_id: null }).eq('id', mission_id);
+        await supabase.from(sourceTable).update({ google_event_id: null }).eq('id', sourceId);
       }
       return new Response(
         JSON.stringify({ ok: true }),

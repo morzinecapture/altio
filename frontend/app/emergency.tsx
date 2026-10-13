@@ -1,3 +1,6 @@
+import { confirmEarlyExecution } from '../src/services/early-execution-consent';
+import { MARKETPLACE, MissionContact, QuoteChoice, marketStyles } from '../src/components/alpine/MarketplaceKit';
+import { providerMissionFollowUp } from '../src/utils/providerMissionFollowUp';
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput,
@@ -9,7 +12,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
-import { COLORS, FONTS, SPACING, RADIUS, SHADOWS, GRADIENT } from '../src/theme';
+import { COLORS, FONTS, SPACING, RADIUS, SHADOWS } from '../src/theme';
+import { isUrgentMission } from '../src/utils/missionPresentation';
 import { getServiceTypeLabel } from '../src/utils/serviceLabels';
 import { useStripe } from '@stripe/stripe-react-native';
 import { useQueryClient } from '@tanstack/react-query';
@@ -19,14 +23,22 @@ import {
   submitEmergencyBid, acceptEmergencyBid, rejectEmergencyBid,
   markEmergencyArrived,
   acceptEmergencyQuote, refuseEmergencyQuote,
-  completeEmergency, completeEmergencyWithCapture, createPaymentIntent,
+  createPaymentIntent,
   cancelEmergency,
 } from '../src/api';
 import { submitReview, getMissionReview } from '../src/api/reviews';
 import { addFavoriteProvider, removeFavoriteProvider, getFavoriteProviders } from '../src/api/partners';
 import { supabase } from '../src/lib/supabase';
 import { useTranslation } from 'react-i18next';
-import { PLATFORM_FEE_RATE, ownerMultiplier, providerMultiplier } from '../src/config/billing';
+import { priceFromTtc, providerVatRate } from '../src/utils/commission';
+import { quotePrice } from '../src/utils/quotePrice';
+import { completionAction, getCompletionSteps, type CompletionStep, type CompletionPhase } from '../src/api/completion';
+import {
+  MAX_DIAGNOSTIC_FEE_EUR,
+  MAX_TRAVEL_FEE_EUR,
+  MAX_VISIT_FEE_EUR,
+  validateEmergencyFees,
+} from '../src/config/emergencyFees';
 import type { EmergencyRequest, EmergencyBidEnriched, Property, QuoteLineItem } from '../src/types/api';
 import type { ComponentProps } from 'react';
 
@@ -75,6 +87,9 @@ export default function EmergencyScreen() {
   const queryClient = useQueryClient();
   const isOwner = user?.role === 'owner';
   const emergencyId = params.id as string | undefined;
+  useEffect(() => {
+    if (isOwner && !emergencyId) router.replace({ pathname: '/(owner)/missions', params: { create: '1', priority: 'urgent', ...(typeof params.property === 'string' ? { property: params.property } : {}) } });
+  }, [isOwner, emergencyId, router, params.property]);
 
   const [emergency, setEmergency] = useState<EmergencyRequest | null>(null);
   const [loading, setLoading] = useState(!!emergencyId);
@@ -108,11 +123,46 @@ export default function EmergencyScreen() {
   // Photo viewer (detail view)
   const [viewingPhoto, setViewingPhoto] = useState<string | null>(null);
 
+  const [completionSteps, setCompletionSteps] = useState<CompletionStep[]>([]);
+  const [completionError, setCompletionError] = useState('');
+  const [completionBusy, setCompletionBusy] = useState(false);
+  const [disputePhase, setDisputePhase] = useState<CompletionPhase | null>(null);
+  const [disputeReason, setDisputeReason] = useState('');
+  const fetchEmergency = useCallback(async () => {
+    try {
+      const data = await getEmergency(emergencyId!);
+      setEmergency(data);
+    } catch (e) { console.error(e); }
+    finally { setLoading(false); }
+  }, [emergencyId]);
+
+  const refreshCompletion = useCallback(async () => {
+    if (!emergencyId) return;
+    try { setCompletionSteps(await getCompletionSteps(emergencyId)); setCompletionError(''); }
+    catch { setCompletionError('Validation des étapes indisponible. Réessayez avant de poursuivre.'); }
+  }, [emergencyId]);
+  useFocusEffect(useCallback(() => { refreshCompletion(); }, [refreshCompletion]));
+  useEffect(() => {
+    if (!emergencyId) return;
+    const timer = setInterval(() => { void refreshCompletion(); void fetchEmergency(); }, 30000);
+    return () => clearInterval(timer);
+  }, [emergencyId, refreshCompletion, fetchEmergency]);
+  const actOnCompletion = async (phase: CompletionPhase, action: 'declare' | 'approve' | 'dispute', finishEmergency = false) => {
+    setCompletionBusy(true);
+    try {
+      const result = await completionAction(emergencyId!, phase, action, { reason: action === 'dispute' ? disputeReason : undefined, finishEmergency });
+      setCompletionSteps(previous => [...previous.filter(step => step.phase !== phase), result.step]);
+      queryClient.invalidateQueries({ queryKey: ['missions'] });
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      setDisputePhase(null); setDisputeReason('');
+      await refreshCompletion(); await fetchEmergency();
+      if (result.paymentPending) Alert.alert('Validation enregistrée', 'Le paiement reste en cours de vérification. Il n’est pas encore confirmé.');
+    } catch (error) { Alert.alert('Validation', error instanceof Error ? error.message : 'Réessayez'); }
+    finally { setCompletionBusy(false); }
+  };
+
   // Timer
   const [timeLeft, setTimeLeft] = useState('');
-
-  // Guard: show "Vous avez été choisi" alert only once per session
-  const [hasShownSelectedAlert, setHasShownSelectedAlert] = useState(false);
 
   // Stripe
   const { initPaymentSheet, presentPaymentSheet } = useStripe();
@@ -190,29 +240,6 @@ export default function EmergencyScreen() {
     })();
   }, [emergencyId, emergency?.status, emergency?.accepted_provider_id]);
 
-  // Show "Vous avez été choisi" alert exactly once when the owner selects this provider
-  useEffect(() => {
-    if (!emergency || isOwner) return;
-    if (
-      emergency.accepted_provider_id === user?.id &&
-      emergency.status === 'bid_accepted' &&
-      !hasShownSelectedAlert
-    ) {
-      setHasShownSelectedAlert(true);
-      Alert.alert(
-        t('emergency.selected_title'),
-        t('emergency.selected_msg')
-      );
-    }
-  }, [emergency?.accepted_provider_id, emergency?.status]);
-
-  const fetchEmergency = async () => {
-    try {
-      const data = await getEmergency(emergencyId!);
-      setEmergency(data);
-    } catch (e) { console.error(e); }
-    finally { setLoading(false); }
-  };
 
   const fetchProperties = async () => {
     try {
@@ -253,9 +280,9 @@ export default function EmergencyScreen() {
         bytes[j] = binaryString.charCodeAt(j);
       }
       const path = `${session.user.id}/emergency_${timestamp}_${i}.jpg`;
-      const { error } = await supabase.storage.from('avatars').upload(path, bytes.buffer, { contentType: 'image/jpeg' });
+      const { error } = await supabase.storage.from('emergency-photos').upload(path, bytes.buffer, { contentType: 'image/jpeg' });
       if (error) throw new Error(`Échec upload photo ${i + 1}: ${error.message}`);
-      const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path);
+      const { data: { publicUrl } } = supabase.storage.from('emergency-photos').getPublicUrl(path);
       urls.push(publicUrl);
     }
     return urls;
@@ -291,6 +318,15 @@ export default function EmergencyScreen() {
       Alert.alert(t('common.error'), t('emergency.bid_fill_fields'));
       return;
     }
+    const parsedTravelCost = Number(travelCost.replace(',', '.'));
+    const parsedDiagnosticCost = Number(diagnosticCost.replace(',', '.'));
+    try {
+      validateEmergencyFees(parsedTravelCost, parsedDiagnosticCost);
+    } catch (error) {
+      Alert.alert(t('common.error'), error instanceof Error ? error.message : String(error));
+      return;
+    }
+
     let arrivalTime: string;
     if (arrivalMode === 'quick') {
       if (selectedArrival === null) {
@@ -312,8 +348,8 @@ export default function EmergencyScreen() {
     }
     try {
       await submitEmergencyBid(emergencyId!, {
-        travel_cost: parseFloat(travelCost),
-        diagnostic_cost: parseFloat(diagnosticCost),
+        travel_cost: parsedTravelCost,
+        diagnostic_cost: parsedDiagnosticCost,
         estimated_arrival: arrivalTime,
       });
       Alert.alert(t('emergency.bid_sent_title'), t('emergency.bid_sent_msg'));
@@ -324,23 +360,19 @@ export default function EmergencyScreen() {
   // ===== OWNER: Accept bid =====
   const handleAcceptBid = (bid: EmergencyBidEnriched) => {
     const baseTotal = (bid.travel_cost || 0) + (bid.diagnostic_cost || 0);
-    const appFee = baseTotal * PLATFORM_FEE_RATE;
-    const ownerTotal = baseTotal * ownerMultiplier;
-    const isFranchise = bid.provider_tva_status === 'franchise'
-      || bid.provider_is_vat_exempt === true
-      || bid.provider_is_auto_entrepreneur === true;
-    const tvaAmount = isFranchise ? 0 : baseTotal * 0.2;
-    const baseTTC = baseTotal + tvaAmount;
+    const isFranchise = bid.provider_is_vat_exempt === true;
+    // Must match the server price: 10 % of the provider's HT amount.
+    const { fee: appFee, total: ownerTotal } = priceFromTtc(baseTotal, providerVatRate(bid.provider_is_vat_exempt));
 
     const arrivalStr = new Date(bid.estimated_arrival).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
     const providerLabel = bid.provider_company || bid.provider_name;
     const siretLine = bid.provider_siret ? `\nSIRET : ${bid.provider_siret}` : '';
     const tvaLine = isFranchise
       ? '\nTVA non applicable (art. 293 B CGI)'
-      : `\nTVA 20% : ${tvaAmount.toFixed(2)}€ (soit ${baseTTC.toFixed(2)}€ TTC)`;
+      : '\nTVA comprise dans le prix de la prestation';
     Alert.alert(
       t('emergency.owner_accept_title'),
-      `${t('emergency.owner_technician')} ${providerLabel}${siretLine}\n\n${t('emergency.owner_displacement')} ${baseTotal.toFixed(2)}€ HT${tvaLine}\n${t('emergency.owner_fee')} ${appFee.toFixed(2)}€\n\n${t('emergency.owner_total')} ${ownerTotal.toFixed(2)}€\n${t('emergency.owner_eta')} ${arrivalStr}`,
+      `${t('emergency.owner_technician')} ${providerLabel}${siretLine}\n\n${t('emergency.owner_displacement')} ${baseTotal.toFixed(2)}€ TTC${tvaLine}\n${t('emergency.owner_fee')} ${appFee.toFixed(2)}€ TTC\n\n${t('emergency.owner_total')} ${ownerTotal.toFixed(2)}€ TTC\n${t('emergency.owner_eta')} ${arrivalStr}\n\nEn cas d’absence, vous pourrez la signaler 30 minutes après l’heure annoncée. Le support vérifiera la situation avant remboursement.`,
       [
         { text: t('common.cancel'), style: 'cancel' },
         {
@@ -348,7 +380,7 @@ export default function EmergencyScreen() {
             try {
               setLoading(true);
               // Provider's Stripe Connect ID will be passed here when implemented (bid.provider_stripe_id)
-              const { clientSecret, paymentIntentId } = await createPaymentIntent(ownerTotal, { emergencyId, bidId: bid.id }, 'automatic');
+              const { clientSecret, paymentIntentId } = await createPaymentIntent(ownerTotal, { emergencyId, bidId: bid.id }, 'manual', undefined, undefined, await confirmEarlyExecution());
 
               const { error: initError } = await initPaymentSheet({
                 merchantDisplayName: 'Altio',
@@ -361,7 +393,7 @@ export default function EmergencyScreen() {
               if (presentError) throw new Error(presentError.message);
 
               await acceptEmergencyBid(emergencyId!, bid.id, bid.provider_id, paymentIntentId);
-              Alert.alert('Prestataire confirmé et déplacement payé', 'Votre technicien a été notifié et est en route.');
+              Alert.alert('Prestataire confirmé', 'Le montant est autorisé, pas encore encaissé. Après déclaration de fin, validez ou signalez un problème sous 48 heures.');
               fetchEmergency();
             } catch (e: unknown) { Alert.alert(t('common.error'), e instanceof Error ? e.message : String(e)); setLoading(false); }
           }
@@ -374,7 +406,7 @@ export default function EmergencyScreen() {
   const handleRejectBid = (bid: EmergencyBidEnriched) => {
     Alert.alert(
       'Refuser cette offre ?',
-      `${bid.provider_name} ne sera plus visible pour cette urgence.`,
+      `${bid.provider_name} ne sera plus visible pour cette mission.`,
       [
         { text: t('common.cancel'), style: 'cancel' },
         {
@@ -409,9 +441,7 @@ export default function EmergencyScreen() {
     const quote = emergency.quote;
     if (!quote) return;
 
-    const baseTotal = quote.repair_cost;
-    const appFee = baseTotal * PLATFORM_FEE_RATE;
-    const ownerTotal = baseTotal * ownerMultiplier;
+    const { service: baseTotal, fee: appFee, total: ownerTotal } = quotePrice(quote);
 
     Alert.alert(
       t('emergency.owner_quote_title'),
@@ -423,7 +453,7 @@ export default function EmergencyScreen() {
             try {
               setLoading(true);
               // Provider's Stripe Connect ID will be passed here when implemented
-              const { clientSecret, paymentIntentId } = await createPaymentIntent(ownerTotal, { emergencyId, quoteId: quote.id }, 'manual');
+              const { clientSecret, paymentIntentId } = await createPaymentIntent(ownerTotal, { emergencyId, quoteId: quote.id }, 'manual', undefined, undefined, await confirmEarlyExecution());
 
               const { error: initError } = await initPaymentSheet({
                 merchantDisplayName: 'Altio',
@@ -467,24 +497,50 @@ export default function EmergencyScreen() {
 
   // ===== PROVIDER: Complete =====
   const handleComplete = () => {
-    Alert.alert(t('emergency.complete_title'), t('emergency.complete_msg'), [
+    Alert.alert('Déclarer cette étape terminée ?', 'Le propriétaire pourra valider ou contester. Sans réponse, le paiement sera déclenché après 48 heures, avec un rappel à 24 heures.', [
       { text: t('common.cancel'), style: 'cancel' },
       {
         text: t('common.confirm'), onPress: async () => {
           try {
-            // If on_site without quote → complete directly (first hour was enough, no quote payment to capture)
-            // If quote_accepted/in_progress → capture quote payment then complete
-            if (emergency?.status === 'on_site') {
-              await completeEmergency(emergencyId!, {});
-            } else {
-              await completeEmergencyWithCapture(emergencyId!);
+            const phase = emergency?.status === 'on_site' ? 'visit' : 'repair';
+            // The repair step requires the diagnostic step; declare it first when it is missing.
+            if (phase === 'repair' && !completionSteps.some(step => step.phase === 'visit')) {
+              await completionAction(emergencyId!, 'visit', 'declare');
             }
-            Alert.alert(t('emergency.complete_done'), t('emergency.complete_done_msg'));
-            fetchEmergency();
+            await actOnCompletion(phase, 'declare', true);
           } catch (e: unknown) { Alert.alert(t('common.error'), e instanceof Error ? e.message : String(e)); }
         }
       },
     ]);
+  };
+
+  const handleReportNoShow = () => {
+    const acceptedBid = emergency?.bids?.find((bid: EmergencyBidEnriched) => bid.status === 'accepted');
+    const expectedAt = acceptedBid?.estimated_arrival ? new Date(acceptedBid.estimated_arrival).getTime() : null;
+    const reportAvailableAt = expectedAt ? expectedAt + 30 * 60 * 1000 : null;
+
+    if (reportAvailableAt && Date.now() < reportAvailableAt) {
+      Alert.alert(
+        'Prestataire en retard',
+        `Vous pourrez signaler une absence 30 minutes après l’heure d’arrivée annoncée, soit à ${new Date(reportAvailableAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}. Vous pouvez le contacter dès maintenant via la discussion.`,
+      );
+      return;
+    }
+
+    Alert.alert(
+      'Signaler l’absence du prestataire ?',
+      'Une réclamation sera ouverte. Le support vérifiera la situation et traitera le remboursement des frais de déplacement et de diagnostic si l’absence est confirmée.',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Continuer',
+          onPress: () => router.push({
+            pathname: '/reclamation',
+            params: { emergencyId, reason: 'no_show' },
+          }),
+        },
+      ],
+    );
   };
 
   if (loading) {
@@ -504,25 +560,59 @@ export default function EmergencyScreen() {
     const isMyEmergency = emergency.accepted_provider_id === user?.id;
     const myBid = emergency.bids?.find((b: EmergencyBidEnriched) => b.provider_id === user?.id && b.status !== 'cancelled');
     const quote = emergency.quote;
+    const followUp = providerMissionFollowUp({ ...emergency, is_emergency: true, completion_steps: completionSteps });
+    const visitFinished = completionSteps.some(step => step.phase === 'visit' && step.finish_emergency);
+    const repairFinished = completionSteps.some(step => step.phase === 'repair');
     const activeBids = (emergency.bids || []).filter((b: EmergencyBidEnriched) => b.status !== 'rejected' && b.status !== 'cancelled');
+    const acceptedBid = emergency.bids?.find((b: EmergencyBidEnriched) => b.status === 'accepted');
 
     return (
-      <SafeAreaView style={styles.container} testID="emergency-detail-screen" edges={['top']}>
+      <SafeAreaView style={[styles.container, { backgroundColor: MARKETPLACE.cobalt }]} testID="emergency-detail-screen" edges={['top']}>
         <LinearGradient
-          colors={GRADIENT.header}
+          colors={[MARKETPLACE.cobalt, MARKETPLACE.cobalt]}
           start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
           style={styles.header}
         >
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-            <Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} />
+            <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>{t('emergency.detail_title')}</Text>
+          <Text style={styles.headerTitle}>{"Détail de la mission"}</Text>
           <TouchableOpacity onPress={fetchEmergency} style={styles.refreshBtn}>
-            <Ionicons name="refresh-outline" size={22} color={COLORS.textPrimary} />
+            <Ionicons name="refresh-outline" size={22} color="#FFFFFF" />
           </TouchableOpacity>
         </LinearGradient>
 
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
+        <ScrollView style={{ backgroundColor: MARKETPLACE.canvas }} showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
+          <LinearGradient colors={[MARKETPLACE.cobalt, MARKETPLACE.cobalt]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.emergencyHero}>
+            <View style={styles.heroTopRow}>
+              <View style={styles.heroPriorityPill}>
+                <Ionicons name={isUrgentMission({ ...emergency, is_emergency: true }) ? "flash" : "calendar-outline"} size={13} color={MARKETPLACE.iceInk} />
+                <Text style={styles.heroPriorityText}>{isUrgentMission({ ...emergency, is_emergency: true }) ? 'MISSION URGENTE' : 'INTERVENTION PLANIFIÉE'}</Text>
+              </View>
+              <View style={[styles.heroStatusDot, { backgroundColor: statusInfo.color }]} />
+            </View>
+            <View style={styles.heroMainRow}>
+              <View style={styles.heroServiceIcon}>
+                <Ionicons name={statusInfo.icon as IoniconsName} size={28} color="#FFFFFF" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.heroServiceTitle}>{getServiceTypeLabel(emergency.service_type)}</Text>
+                <Text style={styles.heroPropertyName}>{emergency.property_name || 'Votre logement'}</Text>
+              </View>
+            </View>
+            <View style={styles.heroStatusRow}>
+              <Ionicons name={statusInfo.icon as IoniconsName} size={17} color="#CFE5F2" />
+              <Text style={styles.heroStatusText}>{!isOwner && followUp ? t(`alpine.${followUp}`) : statusInfo.label}</Text>
+              {timeLeft && emergency.status === 'bids_open' ? <Text style={styles.heroTimer}>{timeLeft}</Text> : null}
+            </View>
+          </LinearGradient>
+
+          {!isOwner && isMyEmergency && followUp && <View style={[styles.statusBanner, marketStyles.waiting]}>
+            <Ionicons name="time-outline" size={22} color={COLORS.textSecondary} />
+            <View style={{ flex: 1 }}><Text style={styles.sectionTitle}>{t(`alpine.${followUp}`)}</Text>
+              {followUp === 'completionWaiting' && <Text style={styles.waitText}>{t('alpine.completionWaitingHelp')}</Text>}
+            </View>
+          </View>}
           {/* R22: Stepper de progression — l'utilisateur sait où il en est */}
           {(() => {
             const steps = [
@@ -569,8 +659,41 @@ export default function EmergencyScreen() {
             );
           })()}
 
+          {(isOwner || isMyEmergency) && (completionSteps.length > 0 || !!completionError || (!isOwner && ['quote_sent', 'quote_submitted', 'quote_refused', 'quote_accepted', 'in_progress'].includes(emergency.status))) && (
+            <View style={[styles.card, followUp && marketStyles.waiting]}>
+              <Text style={styles.sectionTitle}>{t('alpine.validationAndPayment')}</Text>
+              <Text style={{ ...FONTS.bodySmall, marginVertical: 8 }}>Après déclaration de fin : validation par le propriétaire ou paiement après 48 h sans contestation, avec rappel à 24 h. Vos recours restent possibles après paiement.</Text>
+              {!!completionError && <Text style={{ color: COLORS.urgency }}>{completionError}</Text>}
+              {(['visit', 'repair'] as const).map(phase => {
+                const step = completionSteps.find(row => row.phase === phase);
+                const label = phase === 'visit' ? 'Déplacement et diagnostic' : 'Réparation';
+                const hasMainCompletionAction = (phase === 'visit' && emergency.status === 'on_site' && !quote) || (phase === 'repair' && emergency.status === 'quote_accepted');
+                const canDeclare = !hasMainCompletionAction && !isOwner && isMyEmergency && !step && (phase === 'visit'
+                  ? ['on_site', 'quote_sent', 'quote_submitted', 'quote_refused', 'quote_accepted', 'in_progress'].includes(emergency.status)
+                  : ['quote_accepted', 'in_progress'].includes(emergency.status));
+                if (!step && !canDeclare) return null;
+                return <View key={phase} style={{ marginTop: 12 }}>
+                  <Text style={{ ...FONTS.bodySmall, fontWeight: '700' }}>{label}</Text>
+                  {step && <Text style={FONTS.bodySmall}>{step.paid_at && step.disputed_at ? 'Paiement confirmé — contestation enregistrée, examen du support nécessaire' : step.status === 'paid' ? 'Paiement confirmé' : step.status === 'disputed' ? 'Contestation enregistrée — examen du support nécessaire' : step.status === 'payment_required' ? 'Autorisation à renouveler — contactez le support' : step.status === 'processing' ? 'Paiement en cours de vérification' : `À valider avant le ${new Date(step.due_at).toLocaleString('fr-FR')}`}</Text>}
+                  {!!step?.paid_at && <View style={{ marginTop: SPACING.sm }}>
+                    <Text style={FONTS.bodySmall}>{step.invoiced_at ? 'Factures disponibles' : step.invoice_error ? 'Paiement confirmé. La génération de la facture sera réessayée automatiquement.' : 'Paiement confirmé. Factures en préparation.'}</Text>
+                    <TouchableOpacity accessibilityRole="button" onPress={() => router.push(isOwner ? '/(owner)/invoices' : '/(provider)/invoices')} style={{ paddingVertical: SPACING.md }}><Text style={{ color: COLORS.brandPrimary }}>Consulter mes factures</Text></TouchableOpacity>
+                  </View>}
+                  {!isOwner && isMyEmergency && phase === 'visit' && step?.status === 'paid' && ['on_site','quote_refused'].includes(emergency.status) && <TouchableOpacity disabled={completionBusy} onPress={() => actOnCompletion('visit','declare',true)} style={{paddingVertical:12}}><Text>Clôturer sans réparation supplémentaire</Text></TouchableOpacity>}
+                  {canDeclare && <TouchableOpacity disabled={completionBusy || !!completionError} onPress={() => Alert.alert('Étape terminée ?', 'Cette déclaration ouvre le délai de validation de 48 heures.', [{text:'Annuler',style:'cancel'},{text:'Déclarer terminée',onPress:()=>actOnCompletion(phase,'declare')}])} style={styles.mainActionBtn}><Text style={{color:'white'}}>Déclarer cette étape terminée</Text></TouchableOpacity>}
+                  {isOwner && step?.status === 'pending' && <TouchableOpacity disabled={completionBusy} onPress={() => Alert.alert('Valider et payer ?', 'Vous confirmez la fin de cette étape et demandez le paiement du montant autorisé.', [{text:'Annuler',style:'cancel'},{text:'Valider et payer',onPress:()=>actOnCompletion(phase,'approve')}])} style={styles.mainActionBtn}><Text style={{color:'white'}}>Valider et payer cette étape</Text></TouchableOpacity>}
+                  {isOwner && step && !step.disputed_at && <TouchableOpacity disabled={completionBusy} onPress={() => setDisputePhase(phase)} style={{paddingVertical:12}}><Text style={{color:COLORS.urgency}}>Signaler un problème</Text></TouchableOpacity>}
+                  {disputePhase === phase && <View>
+                    <TextInput accessibilityLabel="Décrivez le problème" placeholder="Décrivez le problème (5 caractères minimum)" multiline maxLength={2000} value={disputeReason} onChangeText={setDisputeReason} style={{borderWidth:1,borderColor:COLORS.urgency,padding:12}} />
+                    <TouchableOpacity disabled={completionBusy || disputeReason.trim().length < 5} onPress={() => actOnCompletion(phase,'dispute')} style={{paddingVertical:12}}><Text>Envoyer la contestation</Text></TouchableOpacity>
+                  </View>}
+                </View>;
+              })}
+            </View>
+          )}
+
           {/* Status banner — hidden for providers during owner-facing search phase */}
-          {!(!isOwner && emergency.status === 'bids_open') && (
+          {!followUp && !(!isOwner && emergency.status === 'bids_open') && (
             <View style={[styles.statusBanner, { backgroundColor: statusInfo.color + '18' }]}>
               <Ionicons name={statusInfo.icon as IoniconsName} size={22} color={statusInfo.color} />
               <Text style={[styles.statusText, { color: statusInfo.color }]}>{statusInfo.label}</Text>
@@ -579,16 +702,9 @@ export default function EmergencyScreen() {
 
           {/* Emergency info */}
           <View style={[styles.card, styles.urgentCard]}>
-            <View style={styles.urgentBadge}>
-              <Ionicons name="warning" size={18} color={COLORS.urgency} />
-              <Text style={styles.urgentLabel}>🚨 {getServiceTypeLabel(emergency.service_type)}</Text>
-            </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: SPACING.md }}>
-              <Image
-                source={{ uri: `https://ui-avatars.com/api/?name=${emergency.property_name?.replace(/\s/g, '+') || 'Prop'}&background=FF6B6B&color=fff&size=200&font-size=0.4` }}
-                style={{ width: 44, height: 44, borderRadius: RADIUS.md, marginRight: SPACING.md }}
-              />
-              <Text style={styles.propName}>{emergency.property_name}</Text>
+            <View style={styles.signalementTitleRow}>
+              <View style={styles.signalementIcon}><Ionicons name="document-text-outline" size={18} color="#F36D45" /></View>
+              <Text style={styles.signalementTitle}>Signalement</Text>
             </View>
             {emergency.property_address ? (
               <View style={styles.addrRow}>
@@ -633,10 +749,8 @@ export default function EmergencyScreen() {
 
           {/* Global Chat Button after assignment */}
           {!!emergency.accepted_provider_id && (isOwner || (isMyEmergency && ['displacement_paid', 'on_site', 'quote_submitted', 'quote_sent', 'quote_accepted', 'in_progress', 'completed'].includes(emergency.status))) && (
-            <TouchableOpacity style={[styles.mainActionBtn, { backgroundColor: COLORS.info, marginBottom: SPACING.lg, marginTop: 0 }]} onPress={() => router.push(`/chat/${emergencyId}?type=emergency&receiverId=${isOwner ? emergency.accepted_provider_id : emergency.owner_id}&title=Discussion`)}>
-              <Ionicons name="chatbubbles-outline" size={20} color={COLORS.textInverse} />
-              <Text style={styles.mainActionBtnText}>{isOwner ? t('emergency.discuss_provider') : t('emergency.discuss_owner')}</Text>
-            </TouchableOpacity>
+            <MissionContact title={isOwner ? emergency.provider_name || t('alpine.yourProvider') : t('alpine.yourOwner')} subtitle={emergency.property_name}
+              onPress={() => router.push(`/chat/${emergencyId}?type=emergency&receiverId=${isOwner ? emergency.accepted_provider_id : emergency.owner_id}&title=Discussion`)} />
           )}
 
           {/* ━━━ OWNER: Timer + bids ━━━ */}
@@ -712,18 +826,18 @@ export default function EmergencyScreen() {
                       <View style={styles.bidDetails}>
                         <View style={styles.bidDetailItem}>
                           <Ionicons name="car-outline" size={13} color={COLORS.textTertiary} />
-                          <Text style={styles.bidDetailText}>{t('emergency.bid_displacement_detail')} {bid.travel_cost}€ HT</Text>
+                          <Text style={styles.bidDetailText}>{t('emergency.bid_displacement_detail')} {bid.travel_cost}€ TTC</Text>
                         </View>
                         <View style={styles.bidDetailItem}>
                           <Ionicons name="search-outline" size={13} color={COLORS.textTertiary} />
-                          <Text style={styles.bidDetailText}>{t('emergency.bid_diagnostic_detail')} {bid.diagnostic_cost}€ HT</Text>
+                          <Text style={styles.bidDetailText}>{t('emergency.bid_diagnostic_detail')} {bid.diagnostic_cost}€ TTC</Text>
                         </View>
                         <View style={styles.bidDetailItem}>
                           <Ionicons name="pricetag-outline" size={13} color={COLORS.textTertiary} />
                           <Text style={styles.bidDetailText}>
-                            {bid.provider_tva_status === 'franchise'
+                            {bid.provider_is_vat_exempt === true
                               ? 'TVA non applicable, art. 293 B du CGI'
-                              : `TVA 20% : ${(((bid.travel_cost || 0) + (bid.diagnostic_cost || 0)) * 0.2).toFixed(2)}€`}
+                              : 'TVA comprise dans le prix'}
                           </Text>
                         </View>
                         <View style={styles.bidDetailItem}>
@@ -784,11 +898,24 @@ export default function EmergencyScreen() {
                 <ActivityIndicator size="small" color={COLORS.info} />
                 <Text style={styles.waitText}>Il est en chemin — vous n'avez rien à faire, on vous prévient quand il arrive</Text>
               </View>
+              {acceptedBid?.estimated_arrival ? (
+                <Text style={{ fontFamily: 'PlusJakartaSans_400Regular', fontSize: 12, color: COLORS.textSecondary, marginTop: SPACING.sm }}>
+                  Arrivée annoncée : {new Date(acceptedBid.estimated_arrival).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                </Text>
+              ) : null}
+              <TouchableOpacity
+                style={{ marginTop: SPACING.md, paddingVertical: 11, alignItems: 'center', borderRadius: RADIUS.sm, borderWidth: 1, borderColor: '#FCA5A5', backgroundColor: COLORS.urgencySoft }}
+                onPress={handleReportNoShow}
+              >
+                <Text style={{ fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 13, color: COLORS.urgency }}>
+                  Le prestataire ne s’est pas présenté
+                </Text>
+              </TouchableOpacity>
             </View>
           )}
 
           {/* ━━━ OWNER: On site — diagnostic in progress (may complete without quote if first hour is enough) ━━━ */}
-          {isOwner && emergency.status === 'on_site' && !quote && (
+          {isOwner && emergency.status === 'on_site' && !quote && !visitFinished && (
             <View style={[styles.card, { borderLeftColor: COLORS.success, borderLeftWidth: 3 }]}>
               <View style={styles.waitRow}>
                 <Ionicons name="checkmark-circle" size={20} color={COLORS.success} />
@@ -806,7 +933,7 @@ export default function EmergencyScreen() {
               <Text style={styles.sectionTitle}>Devis reçu</Text>
               {/* R6: Prix total en gros, visible en 2 secondes */}
               <View style={{ alignItems: 'center', paddingVertical: SPACING.lg, marginBottom: SPACING.md, backgroundColor: COLORS.subtle, borderRadius: RADIUS.lg }}>
-                <Text style={{ fontFamily: 'PlusJakartaSans_400Regular', fontSize: 13, color: COLORS.textSecondary }}>Montant total HT</Text>
+                <Text style={{ fontFamily: 'PlusJakartaSans_400Regular', fontSize: 13, color: COLORS.textSecondary }}>Montant total TTC</Text>
                 <Text style={{ fontFamily: 'PlusJakartaSans_800ExtraBold', fontSize: 36, color: COLORS.textPrimary, marginTop: 4 }}>{quote.repair_cost}€</Text>
                 <Text style={{ fontFamily: 'PlusJakartaSans_400Regular', fontSize: 12, color: COLORS.textTertiary, marginTop: 4 }}>
                   Durée estimée : {quote.repair_delay_days ?? 0} {(quote.repair_delay_days ?? 0) > 1 ? 'jours' : 'jour'}
@@ -849,29 +976,29 @@ export default function EmergencyScreen() {
 
               <View style={{ marginTop: 4, marginBottom: SPACING.md, padding: SPACING.md, backgroundColor: COLORS.infoSoft, borderRadius: RADIUS.md }}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
-                  <Text style={{ fontFamily: 'PlusJakartaSans_400Regular', fontSize: 13, color: COLORS.textSecondary }}>Montant prestataire</Text>
-                  <Text style={{ fontFamily: 'PlusJakartaSans_500Medium', fontSize: 13, color: COLORS.textPrimary }}>{(quote.repair_cost || 0).toFixed(2)}€</Text>
+                  <Text style={{ fontFamily: 'PlusJakartaSans_400Regular', fontSize: 13, color: COLORS.textSecondary }}>Prestation TTC</Text>
+                  <Text style={{ fontFamily: 'PlusJakartaSans_500Medium', fontSize: 13, color: COLORS.textPrimary }}>{quotePrice(quote).service.toFixed(2)}€</Text>
                 </View>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
                   <Text style={{ fontFamily: 'PlusJakartaSans_400Regular', fontSize: 13, color: COLORS.textSecondary }}>Frais de service Altio</Text>
-                  <Text style={{ fontFamily: 'PlusJakartaSans_500Medium', fontSize: 13, color: COLORS.textPrimary }}>{(Math.round((quote.repair_cost || 0) * PLATFORM_FEE_RATE * 100) / 100).toFixed(2)}€</Text>
+                  <Text style={{ fontFamily: 'PlusJakartaSans_500Medium', fontSize: 13, color: COLORS.textPrimary }}>{quotePrice(quote).fee.toFixed(2)}€</Text>
                 </View>
                 <View style={{ height: 1, backgroundColor: COLORS.border, marginVertical: 6 }} />
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
                   <Text style={{ fontFamily: 'PlusJakartaSans_700Bold', fontSize: 14, color: COLORS.textPrimary }}>Total à payer</Text>
-                  <Text style={{ fontFamily: 'PlusJakartaSans_700Bold', fontSize: 14, color: COLORS.brandPrimary }}>{(Math.round((quote.repair_cost || 0) * ownerMultiplier * 100) / 100).toFixed(2)}€ TTC</Text>
+                  <Text style={{ fontFamily: 'PlusJakartaSans_700Bold', fontSize: 14, color: COLORS.brandPrimary }}>{quotePrice(quote).total.toFixed(2)}€ TTC</Text>
                 </View>
               </View>
 
               <View style={styles.quoteBanner}>
                 <Ionicons name="card-outline" size={15} color={COLORS.warning} />
                 <Text style={styles.quoteBannerText}>
-                  {t('emergency.hold_banner_text', { amount: quote.repair_cost })}
+                  {t('emergency.hold_banner_text', { amount: quotePrice(quote).total })}
                 </Text>
               </View>
               <TouchableOpacity style={styles.acceptBidBtn} onPress={handleAcceptQuote}>
                 <Ionicons name="checkmark-circle" size={18} color={COLORS.textInverse} />
-                <Text style={styles.acceptBidBtnText}>Accepter et payer {(Math.round((quote.repair_cost || 0) * ownerMultiplier * 100) / 100).toFixed(2)}€</Text>
+                <Text style={styles.acceptBidBtnText}>Accepter et payer {quotePrice(quote).total.toFixed(2)}€</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.refuseBtn} onPress={handleRefuseQuote}>
                 <Ionicons name="close" size={18} color={COLORS.urgency} />
@@ -891,7 +1018,7 @@ export default function EmergencyScreen() {
                 <View style={styles.captureInfo}>
                   <Ionicons name="lock-closed-outline" size={13} color={COLORS.textTertiary} />
                   <Text style={styles.captureText}>
-                    {t('emergency.hold_amount_info', { amount: quote.repair_cost, date: new Date(quote.stripe_capture_deadline).toLocaleDateString('fr-FR') })}
+                    {t('emergency.hold_amount_info', { amount: quotePrice(quote).total, date: new Date(quote.stripe_capture_deadline).toLocaleDateString('fr-FR') })}
                   </Text>
                 </View>
               ) : null}
@@ -1089,6 +1216,9 @@ export default function EmergencyScreen() {
                 placeholder="ex: 40"
                 placeholderTextColor={COLORS.textTertiary}
               />
+              <Text style={{ fontFamily: 'PlusJakartaSans_400Regular', fontSize: 11, color: COLORS.textTertiary, marginTop: -SPACING.sm, marginBottom: SPACING.md }}>
+                Plafond : {MAX_TRAVEL_FEE_EUR} €
+              </Text>
               <Text style={styles.fieldLabel}>{t('emergency.bid_diag')}</Text>
               <TextInput
                 style={styles.input}
@@ -1098,13 +1228,16 @@ export default function EmergencyScreen() {
                 placeholder="ex: 30"
                 placeholderTextColor={COLORS.textTertiary}
               />
+              <Text style={{ fontFamily: 'PlusJakartaSans_400Regular', fontSize: 11, color: COLORS.textTertiary, marginTop: -SPACING.sm, marginBottom: SPACING.md }}>
+                Plafond : {MAX_DIAGNOSTIC_FEE_EUR} € — total déplacement + diagnostic : {MAX_VISIT_FEE_EUR} € maximum
+              </Text>
               {(() => {
                 const travel = parseFloat(travelCost) || 0;
                 const diag = parseFloat(diagnosticCost) || 0;
                 if (travel + diag <= 0) return null;
                 return (
                   <Text style={{ fontFamily: 'PlusJakartaSans_700Bold', fontSize: 13, color: COLORS.success, marginTop: -SPACING.xs, marginBottom: SPACING.sm }}>
-                    {`Montant que vous recevrez : ${((travel + diag) * providerMultiplier).toFixed(2)}€`}
+                    {`Montant que vous recevrez : ${priceFromTtc(travel + diag, providerVatRate(user?.is_vat_exempt)).payout.toFixed(2)}€`}
                   </Text>
                 );
               })()}
@@ -1190,7 +1323,7 @@ export default function EmergencyScreen() {
               </View>
               <View style={[styles.amountRow, { borderBottomWidth: 0, paddingBottom: 0 }]}>
                 <Text style={[styles.amountLabel, { fontWeight: '700', color: COLORS.success }]}>Vous recevrez</Text>
-                <Text style={[styles.amountValue, { color: COLORS.success }]}>{(((myBid.travel_cost || 0) + (myBid.diagnostic_cost || 0)) * providerMultiplier).toFixed(2)}€</Text>
+                <Text style={[styles.amountValue, { color: COLORS.success }]}>{priceFromTtc((myBid.travel_cost || 0) + (myBid.diagnostic_cost || 0), providerVatRate(user?.is_vat_exempt)).payout.toFixed(2)}€</Text>
               </View>
               <View style={[styles.waitRow, { marginTop: SPACING.md }]}>
                 <ActivityIndicator size="small" color={COLORS.warning} />
@@ -1216,11 +1349,11 @@ export default function EmergencyScreen() {
                 }}
               >
                 <Ionicons name="navigate-outline" size={20} color={COLORS.textInverse} />
-                <Text style={styles.mainActionBtnText}>📍 Se rendre sur place</Text>
+                <Text style={styles.mainActionBtnText}>Se rendre sur place</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[styles.mainActionBtn, { backgroundColor: COLORS.success }]} onPress={handleMarkArrived}>
                 <Ionicons name="checkmark-circle" size={20} color={COLORS.textInverse} />
-                <Text style={styles.mainActionBtnText}>✅ Je suis arrivé sur place</Text>
+                <Text style={styles.mainActionBtnText}>Je suis arrivé sur place</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -1234,16 +1367,14 @@ export default function EmergencyScreen() {
           )}
 
           {/* ━━━ PROVIDER: On site — submit quote OR complete without quote ━━━ */}
-          {!isOwner && isMyEmergency && emergency.status === 'on_site' && !quote && (
-            <View>
-              <TouchableOpacity style={[styles.mainActionBtn, { backgroundColor: COLORS.success, marginBottom: SPACING.sm }]} onPress={handleComplete}>
+          {!isOwner && isMyEmergency && emergency.status === 'on_site' && !quote && !visitFinished && (
+            <View style={marketStyles.actionPanel}>
+              <Text style={styles.actionEyebrow}>{t('alpine.missionSummary')}</Text>
+              <TouchableOpacity disabled={completionBusy || !!completionError} style={[styles.mainActionBtn, { marginTop: 0, opacity: completionBusy || completionError ? 0.5 : 1 }]} onPress={handleComplete}>
                 <Ionicons name="checkmark-circle" size={20} color={COLORS.textInverse} />
                 <Text style={styles.mainActionBtnText}>{t('emergency.complete_no_quote_btn')}</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.mainActionBtn, { backgroundColor: COLORS.brandPrimary }]} onPress={handleOpenQuoteForm}>
-                <Ionicons name="document-text-outline" size={20} color={COLORS.textInverse} />
-                <Text style={styles.mainActionBtnText}>{t('emergency.quote_title')}</Text>
-              </TouchableOpacity>
+              <QuoteChoice disabled={completionBusy} onPress={handleOpenQuoteForm} />
             </View>
           )}
 
@@ -1279,7 +1410,7 @@ export default function EmergencyScreen() {
                   </View>
                   <View style={[styles.amountRow, { borderBottomWidth: 0, paddingBottom: 0 }]}>
                     <Text style={[styles.amountLabel, { fontWeight: '700', color: COLORS.success }]}>Vous recevrez si accepté</Text>
-                    <Text style={[styles.amountValue, { color: COLORS.success }]}>{((quote.repair_cost || 0) * providerMultiplier).toFixed(2)}€</Text>
+                    <Text style={[styles.amountValue, { color: COLORS.success }]}>{quotePrice(quote).payout.toFixed(2)}€</Text>
                   </View>
                   <TouchableOpacity
                     style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.sm, paddingVertical: SPACING.md, borderRadius: RADIUS.sm, backgroundColor: COLORS.infoSoft, marginTop: SPACING.md }}
@@ -1315,7 +1446,7 @@ export default function EmergencyScreen() {
                     </View>
                     <View style={[styles.amountRow, { borderBottomWidth: 0, paddingBottom: 0 }]}>
                       <Text style={[styles.amountLabel, { fontWeight: '700', color: COLORS.success }]}>Vous recevrez</Text>
-                      <Text style={[styles.amountValue, { color: COLORS.success }]}>{((quote.repair_cost || 0) * providerMultiplier).toFixed(2)}€</Text>
+                      <Text style={[styles.amountValue, { color: COLORS.success }]}>{quotePrice(quote).payout.toFixed(2)}€</Text>
                     </View>
                     <TouchableOpacity
                       style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.sm, paddingVertical: SPACING.md, borderRadius: RADIUS.sm, backgroundColor: COLORS.infoSoft, marginTop: SPACING.md }}
@@ -1327,10 +1458,10 @@ export default function EmergencyScreen() {
                   </>
                 )}
               </View>
-              <TouchableOpacity style={[styles.mainActionBtn, { backgroundColor: COLORS.success }]} onPress={handleComplete}>
+              {!repairFinished && <TouchableOpacity disabled={completionBusy || !!completionError} style={[styles.mainActionBtn, { backgroundColor: COLORS.success }]} onPress={handleComplete}>
                 <Ionicons name="checkmark-circle" size={20} color={COLORS.textInverse} />
                 <Text style={styles.mainActionBtnText}>{t('emergency.complete_btn')}</Text>
-              </TouchableOpacity>
+              </TouchableOpacity>}
             </>
           )}
 
@@ -1345,17 +1476,17 @@ export default function EmergencyScreen() {
           {/* ━━━ OWNER: Cancel emergency ━━━ */}
           {isOwner && (emergency.status === 'bids_open') && (
             <TouchableOpacity
-              style={{ marginHorizontal: 20, marginTop: 12, paddingVertical: 14, borderRadius: 12, borderWidth: 1, borderColor: '#FCA5A5', backgroundColor: '#FEF2F2', alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 }}
+              style={{ marginHorizontal: 20, marginTop: 12, paddingVertical: 14, borderRadius: 12, borderWidth: 1, borderColor: '#FCA5A5', backgroundColor: COLORS.urgencySoft, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 }}
               onPress={() => {
                 Alert.alert(
-                  'Annuler l\'urgence ?',
+                  'Annuler la mission ?',
                   'Les candidatures en cours seront annulées. Cette action est irréversible.',
                   [
                     { text: 'Non', style: 'cancel' },
                     { text: 'Oui, annuler', style: 'destructive', onPress: async () => {
                       try {
                         await cancelEmergency(emergencyId!);
-                        Alert.alert('Urgence annulée', 'Votre demande d\'urgence a été annulée.');
+                        Alert.alert('Mission annulée', 'Votre demande d\'intervention a été annulée.');
                         router.back();
                       } catch (e: unknown) {
                         Alert.alert('Erreur', e instanceof Error ? e.message : String(e));
@@ -1366,7 +1497,7 @@ export default function EmergencyScreen() {
               }}
             >
               <Ionicons name="close-circle-outline" size={18} color="#EF4444" />
-              <Text style={{ fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 14, color: '#EF4444' }}>Annuler l'urgence</Text>
+              <Text style={{ fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 14, color: '#EF4444' }}>Annuler la mission</Text>
             </TouchableOpacity>
           )}
 
@@ -1385,12 +1516,12 @@ export default function EmergencyScreen() {
     <SafeAreaView style={styles.container} testID="emergency-create-screen" edges={['top']}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <LinearGradient
-          colors={GRADIENT.header}
+          colors={[MARKETPLACE.cobalt, MARKETPLACE.cobalt]}
           start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
           style={styles.header}
         >
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-            <Ionicons name="close" size={24} color={COLORS.textPrimary} />
+            <Ionicons name="close" size={24} color="#FFFFFF" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>{t('emergency.new_header')}</Text>
           <View style={{ width: 48 }} />
@@ -1501,8 +1632,8 @@ export default function EmergencyScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.background },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.background },
+  container: { flex: 1, backgroundColor: MARKETPLACE.canvas },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F7F8F7' },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1510,20 +1641,33 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.xl,
     paddingVertical: SPACING.md,
     paddingBottom: SPACING.xl,
-    borderBottomLeftRadius: RADIUS.lg,
-    borderBottomRightRadius: RADIUS.lg,
-    ...SHADOWS.card
+    backgroundColor: MARKETPLACE.cobalt,
   },
-  backBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: COLORS.paper, justifyContent: 'center', alignItems: 'center', ...SHADOWS.card },
-  refreshBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: COLORS.paper, justifyContent: 'center', alignItems: 'center', ...SHADOWS.card },
-  headerTitle: { ...FONTS.h2, color: COLORS.textPrimary },
-  content: { paddingHorizontal: SPACING.xl, paddingBottom: SPACING.xxxl, paddingTop: SPACING.lg },
+  backBtn: { width: 44, height: 44, borderRadius: 15, backgroundColor: 'rgba(255,255,255,0.12)', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.16)' },
+  refreshBtn: { width: 44, height: 44, borderRadius: 15, backgroundColor: 'rgba(255,255,255,0.12)', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.16)' },
+  headerTitle: { ...FONTS.h2, color: '#FFFFFF' },
+  content: { paddingHorizontal: SPACING.xl, paddingBottom: SPACING.xxxl, paddingTop: 0 },
+  emergencyHero: { ...marketStyles.hero },
+  heroTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  heroPriorityPill: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 9, backgroundColor: MARKETPLACE.ice },
+  heroPriorityText: { fontFamily: 'PlusJakartaSans_700Bold', color: MARKETPLACE.iceInk, fontSize: 10, letterSpacing: 0.4 },
+  heroStatusDot: { width: 10, height: 10, borderRadius: 5, shadowColor: '#FFFFFF', shadowOpacity: 0.7, shadowRadius: 8 },
+  heroMainRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, marginTop: SPACING.lg, marginBottom: SPACING.lg },
+  heroServiceIcon: { width: 58, height: 58, borderRadius: 18, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.15)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)' },
+  heroServiceTitle: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 23, color: '#FFFFFF', textTransform: 'capitalize' },
+  heroPropertyName: { fontFamily: 'PlusJakartaSans_500Medium', fontSize: 14, color: '#CFE5F2', marginTop: 3 },
+  heroStatusRow: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingTop: SPACING.md, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.14)' },
+  heroStatusText: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 13, color: '#E9F4FA', flex: 1 },
+  heroTimer: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 13, color: '#FFFFFF' },
   // Status banner
-  statusBanner: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, padding: SPACING.lg, borderRadius: RADIUS.xl, marginBottom: SPACING.lg },
+  statusBanner: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, padding: SPACING.lg, borderRadius: 16, marginBottom: SPACING.lg, borderWidth: 1, borderColor: 'rgba(99,117,138,0.14)' },
   statusText: { ...FONTS.bodySmall, fontWeight: '700', flex: 1, fontSize: 13 },
   // Cards
-  card: { backgroundColor: COLORS.paper, padding: SPACING.xl, borderRadius: RADIUS.xl, marginBottom: SPACING.md, ...SHADOWS.card, borderWidth: 1, borderColor: COLORS.border },
-  urgentCard: { borderLeftWidth: 4, borderLeftColor: COLORS.urgency, ...SHADOWS.float },
+  card: { backgroundColor: '#FFFFFF', padding: SPACING.xl, borderRadius: 20, marginBottom: SPACING.md, shadowColor: '#1C2E42', shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.06, shadowRadius: 14, elevation: 2, borderWidth: 1, borderColor: '#E7ECEF' },
+  urgentCard: { borderTopWidth: 3, borderTopColor: '#F36D45' },
+  signalementTitleRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginBottom: SPACING.md },
+  signalementIcon: { width: 32, height: 32, borderRadius: 10, backgroundColor: '#FFF1E9', justifyContent: 'center', alignItems: 'center' },
+  signalementTitle: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 16, color: '#12233C' },
   urgentBadge: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginBottom: SPACING.xs },
   urgentLabel: { ...FONTS.bodySmall, color: COLORS.urgency, fontWeight: '700' },
   propName: { ...FONTS.h1, color: COLORS.textPrimary, fontSize: 24, marginBottom: 2 },
@@ -1585,16 +1729,17 @@ const styles = StyleSheet.create({
   arrivalChipText: { ...FONTS.bodySmall, color: COLORS.textTertiary, fontWeight: '600' },
   arrivalChipTextActive: { color: COLORS.textInverse },
   // Main action
-  mainActionBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.sm, backgroundColor: COLORS.brandPrimary, paddingVertical: SPACING.lg, borderRadius: RADIUS.xxl, marginTop: SPACING.md, ...SHADOWS.float },
+  mainActionBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.sm, backgroundColor: COLORS.brandPrimary, paddingVertical: SPACING.lg, borderRadius: 14, minHeight: 52, marginTop: SPACING.md },
   mainActionBtnText: { ...FONTS.h3, color: COLORS.textInverse },
+  actionEyebrow: { ...FONTS.caption, color: MARKETPLACE.iceInk, fontSize: 11, marginBottom: 12, textTransform: 'uppercase', letterSpacing: 1 },
   // Form
   fieldLabel: { ...FONTS.bodySmall, color: COLORS.textSecondary, fontWeight: '600', marginTop: SPACING.lg, marginBottom: SPACING.sm },
   input: { backgroundColor: COLORS.subtle, borderRadius: RADIUS.md, padding: SPACING.lg, ...FONTS.body, color: COLORS.textPrimary, marginBottom: SPACING.sm, borderWidth: 1, borderColor: COLORS.border },
   textArea: { minHeight: 90, textAlignVertical: 'top' },
   // Create form
-  urgentBanner: { alignItems: 'center', backgroundColor: COLORS.urgency + '15', padding: SPACING.xxl, borderRadius: RADIUS.xxl, marginBottom: SPACING.xl, borderWidth: 1, borderColor: COLORS.urgency + '30' },
-  urgentBannerTitle: { ...FONTS.h1, color: COLORS.urgency, marginTop: SPACING.md, textAlign: 'center' },
-  urgentBannerDesc: { ...FONTS.body, color: COLORS.textSecondary, textAlign: 'center', marginTop: SPACING.md, lineHeight: 24 },
+  urgentBanner: { alignItems: 'center', backgroundColor: '#FFF7F3', padding: SPACING.xxl, borderRadius: 24, marginBottom: SPACING.xl, borderWidth: 1, borderColor: '#FFD9C8', shadowColor: '#F36D45', shadowOffset: { width: 0, height: 7 }, shadowOpacity: 0.09, shadowRadius: 16, elevation: 2 },
+  urgentBannerTitle: { ...FONTS.h1, color: '#12233C', marginTop: SPACING.md, textAlign: 'center' },
+  urgentBannerDesc: { ...FONTS.body, color: '#63758A', textAlign: 'center', marginTop: SPACING.md, lineHeight: 24 },
   propScroll: { maxHeight: 50, marginBottom: SPACING.md },
   propChip: { paddingHorizontal: SPACING.xl, paddingVertical: 12, borderRadius: RADIUS.full, backgroundColor: COLORS.paper, marginRight: SPACING.sm, borderWidth: 1, borderColor: COLORS.border, ...SHADOWS.card },
   propChipActive: { backgroundColor: COLORS.brandPrimary, borderColor: COLORS.brandPrimary },
@@ -1603,11 +1748,11 @@ const styles = StyleSheet.create({
   addrPreview: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginBottom: SPACING.md, paddingHorizontal: SPACING.md, backgroundColor: COLORS.subtle, paddingVertical: SPACING.md, borderRadius: RADIUS.md },
   addrPreviewText: { ...FONTS.bodySmall, color: COLORS.textPrimary, fontWeight: '500' },
   typeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm },
-  serviceTypeCard: { width: '31%', padding: SPACING.lg, borderRadius: RADIUS.xl, backgroundColor: COLORS.paper, alignItems: 'center', borderWidth: 1, borderColor: COLORS.border, gap: SPACING.sm, ...SHADOWS.card },
-  serviceTypeActive: { backgroundColor: COLORS.urgency, borderColor: COLORS.urgency, ...SHADOWS.float },
+  serviceTypeCard: { width: '31%', padding: SPACING.lg, borderRadius: 18, backgroundColor: '#FFFFFF', alignItems: 'center', borderWidth: 1, borderColor: '#E7ECEF', gap: SPACING.sm },
+  serviceTypeActive: { backgroundColor: '#F36D45', borderColor: '#F36D45', shadowColor: '#F36D45', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.22, shadowRadius: 12, elevation: 4 },
   serviceTypeText: { ...FONTS.bodySmall, color: COLORS.textSecondary, fontSize: 11, textAlign: 'center', fontWeight: '600' },
   serviceTypeTextActive: { color: COLORS.textInverse },
-  emergencyBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.md, backgroundColor: COLORS.urgency, paddingVertical: SPACING.lg, borderRadius: RADIUS.xxl, marginTop: SPACING.xxl, ...SHADOWS.urgency },
+  emergencyBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.md, backgroundColor: '#F36D45', paddingVertical: SPACING.lg, borderRadius: 18, marginTop: SPACING.xxl, shadowColor: '#F36D45', shadowOffset: { width: 0, height: 9 }, shadowOpacity: 0.28, shadowRadius: 16, elevation: 6 },
   emergencyBtnText: { ...FONTS.h2, color: COLORS.textInverse },
   // Photo picker
   photoPickerBtn: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, paddingVertical: SPACING.md, paddingHorizontal: SPACING.lg, borderRadius: RADIUS.xl, borderWidth: 1, borderColor: COLORS.border, borderStyle: 'dashed', marginBottom: SPACING.md },

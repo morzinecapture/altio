@@ -1,108 +1,102 @@
+import { invoiceDocumentParties } from '../_shared/invoice-parties.ts'
+import { escapeDocumentText, escapePartyFields } from '../_shared/document-text.ts'
+import { requireLegalEntity } from '../_shared/legal-entity.ts'
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { corsHeaders, handleCors } from '../_shared/cors.ts'
+import { requireAuthOrServiceKey } from '../_shared/auth.ts'
+import { assertUUID, assertString } from '../_shared/validate.ts'
 
 serve(async (req) => {
   const corsResponse = handleCors(req);
   if (corsResponse) return corsResponse;
+  if (req.method !== 'POST') return new Response('Method not allowed', { status: 405, headers: corsHeaders });
 
   try {
+    const { user, isServiceCall } = await requireAuthOrServiceKey(req)
     const supabaseUrl     = Deno.env.get('SUPABASE_URL') as string
     const supabaseService = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') as string
     const db = createClient(supabaseUrl, supabaseService)
 
-    const { invoiceId, reason } = await req.json()
-    if (!invoiceId) throw new Error('Missing invoiceId')
-    if (!reason) throw new Error('Missing reason (motif de l\'avoir)')
+    if (!isServiceCall) {
+      const { data: caller, error } = await db.from('users').select('is_admin').eq('id', user!.id).single()
+      if (error || !caller?.is_admin) return new Response(JSON.stringify({ error: 'Accès administrateur requis' }), {
+        status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    const body = await req.json()
+    const invoiceId = assertUUID(body.invoiceId, 'invoiceId')
+    const targetCents = body.targetCents
+    if (targetCents !== undefined && (!isServiceCall || !Number.isSafeInteger(targetCents) || targetCents <= 0)) throw new Error('Cible d’avoir invalide')
+    const requestedReason = assertString(body.reason, 'reason')
+    if (requestedReason.length > 1000) throw new Error('Motif trop long')
 
     // ── 1. Fetch original invoice ────────────────────────────────────────────
-    const { data: originalInvoice, error: invErr } = await db
+    const { data: currentInvoice, error: invErr } = await db
       .from('invoices')
       .select('*')
       .eq('id', invoiceId)
       .single()
 
-    if (invErr || !originalInvoice) throw new Error('Invoice not found')
+    if (invErr || !currentInvoice) throw new Error('Facture introuvable')
+    if (currentInvoice.invoice_type === 'credit_note') throw new Error('Impossible de créditer un avoir')
+    const validationRunId = body.validationRunId && isServiceCall && body.validationRunId === invoiceId &&
+      currentInvoice.invoice_number === `TEST-RELEASE-${invoiceId}` ? invoiceId : null
+    if (body.validationRunId && !validationRunId) throw new Error('Référence de validation invalide')
 
-    if (originalInvoice.invoice_type === 'credit_note') {
-      throw new Error('Cannot create a credit note for another credit note')
-    }
-
-    // Check if a credit note already exists for this invoice
-    const { data: existingCN } = await db
-      .from('invoices')
-      .select('id')
-      .eq('related_invoice_id', invoiceId)
-      .eq('invoice_type', 'credit_note')
-      .maybeSingle()
-
-    if (existingCN) {
-      throw new Error('A credit note already exists for this invoice')
-    }
-
-    // ── 2. Fetch seller and buyer info ───────────────────────────────────────
-    interface CreditNoteParty {
-      id?: string;
-      name?: string;
-      email?: string;
-      company_name?: string;
-      siren?: string;
-      siret?: string;
-      vat_number?: string;
-      billing_address?: string;
-      address?: string;
-    }
-    let sellerUser: CreditNoteParty | null = null
-    let buyerUser: CreditNoteParty | null = null
-
-    if (originalInvoice.seller_id) {
-      const { data } = await db.from('users').select('*').eq('id', originalInvoice.seller_id).single()
-      sellerUser = data
-    }
-    if (originalInvoice.buyer_id) {
-      const { data } = await db.from('users').select('*').eq('id', originalInvoice.buyer_id).single()
-      buyerUser = data
-    }
-
-    // ── 3. Credit note numbering — separate sequence ALTIO-AV-YYYY-XXXX ─────
-    const year = new Date().getFullYear()
-    let seq: number
-    try {
-      const { data: seqData } = await db.rpc('nextval', { seq: 'credit_note_seq' }).single()
-      seq = seqData ?? Date.now()
-    } catch {
-      // Fallback if sequence doesn't exist yet
-      seq = Date.now()
-    }
-    const creditNoteNumber = `ALTIO-AV-${year}-${String(seq).padStart(4, '0')}`
+    // Billing snapshots survive profile deletion and do not follow later edits.
+    const parties = await invoiceDocumentParties(db, currentInvoice)
+    let sellerUser = parties.seller
+    let buyerUser = parties.buyer
+    const configuredEntity = requireLegalEntity((key) => Deno.env.get(key))
+    const { data: job, error: prepareError } = await db.rpc(targetCents === undefined ? 'prepare_credit_note' : 'prepare_partial_credit_note', {
+      ...(targetCents === undefined ? {} : { p_target_cents: targetCents }),
+      p_invoice_id: invoiceId, p_reason: requestedReason,
+      p_context: { seller: sellerUser, buyer: buyerUser, legalEntity: configuredEntity, ...(validationRunId ? { validationRunId } : {}) },
+    })
+    if (prepareError || !job) throw new Error('Préparation de l’avoir indisponible')
+    if (job.existing) return new Response(JSON.stringify({ success: true, creditNote: job.existing }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200,
+    })
+    // Every retry uses the same number, date, amounts and document snapshot.
+    const originalInvoice = job.original_invoice
+    const reason = job.reason
+    const legalEntity = job.document_context.legalEntity
+    sellerUser = escapePartyFields(job.document_context.seller)
+    buyerUser = escapePartyFields(job.document_context.buyer)
+    const year = new Date(job.created_at).getUTCFullYear()
+    const creditNoteNumber = job.invoice_number
 
     // ── 4. Amounts (same as original but negative) ───────────────────────────
-    const amountHt  = -Math.abs(Number(originalInvoice.amount_ht))
-    const amountTtc = -Math.abs(Number(originalInvoice.amount_ttc))
-    const vatRate   = Number(originalInvoice.vat_rate ?? 20)
+    const amountHt  = -Math.abs(Number(job.credit_ht ?? originalInvoice.amount_ht))
+    const amountTtc = -Math.abs(Number(job.credit_ttc ?? originalInvoice.amount_ttc))
+    const vatRate   = Number(originalInvoice.vat_rate)
     const vatExempt = vatRate === 0
     const vatAmount = parseFloat((amountTtc - amountHt).toFixed(2))
 
     // ── 5. Altio company info ────────────────────────────────────────────────
-    const altioSiren   = Deno.env.get('ALTIO_SIREN') || '000000000'
-    const altioSiret   = Deno.env.get('ALTIO_SIRET') || '00000000000000'
-    const altioVat     = Deno.env.get('ALTIO_TVA_NUMBER') || 'FR00000000000'
-    const altioRcs     = Deno.env.get('ALTIO_RCS') || 'RCS Thonon-les-Bains'
-    const altioAddress = Deno.env.get('ALTIO_ADDRESS') || 'Morzine, 74110 Haute-Savoie, France'
-    const altioCapital = Deno.env.get('ALTIO_CAPITAL') || '1 000'
+    const altioName = escapeDocumentText(legalEntity.name)
+    const altioForm = escapeDocumentText(legalEntity.form)
+    const altioSiren = legalEntity.siren
+    const altioSiret = legalEntity.siret
+    const altioVat = escapeDocumentText(legalEntity.vat)
+    const altioRcs = escapeDocumentText(legalEntity.rcs)
+    const altioAddress = escapeDocumentText(legalEntity.address)
+    const altioCapital = escapeDocumentText(legalEntity.capital)
 
     const invoiceType = originalInvoice.invoice_type
 
     // Determine seller display
     const isAltioSeller = invoiceType === 'commission' || invoiceType === 'service_fee'
     const sellerDetailHtml = isAltioSeller
-      ? `<div class="party-name">Altio SAS</div>
+      ? `<div class="party-name">${altioName}</div>
          <div class="party-detail">
-           SAS au capital de ${altioCapital} \u20AC<br>
+           ${altioForm}${altioCapital ? ` — capital : ${altioCapital} €` : ''}<br>
            SIREN : ${altioSiren}<br>
            SIRET : ${altioSiret}<br>
            ${altioRcs}<br>
-           N\u00B0 TVA : ${altioVat}<br>
+           ${altioVat ? `N° TVA : ${altioVat}<br>` : ''}
            ${altioAddress}
          </div>`
       : `<div class="party-name">${sellerUser?.company_name || sellerUser?.name || 'Prestataire'}</div>
@@ -121,8 +115,8 @@ serve(async (req) => {
       </div>`
 
     // Description
-    const originalInvoiceNumber = originalInvoice.invoice_number
-    const descriptionLine = `Avoir sur facture n\u00B0 ${originalInvoiceNumber} \u2014 Motif : ${reason}`
+    const originalInvoiceNumber = escapeDocumentText(originalInvoice.invoice_number)
+    const descriptionLine = `Avoir sur facture n\u00B0 ${originalInvoiceNumber} \u2014 Motif : ${escapeDocumentText(reason)}`
 
     // Badge label
     const badgeLabel = invoiceType === 'commission'
@@ -133,14 +127,14 @@ serve(async (req) => {
 
     // Mandate mention for F1 credit notes
     const mandateMention = invoiceType === 'service'
-      ? `<br><em>Avoir \u00E9mis par Altio SAS (SIREN : ${altioSiren}) au nom et pour le compte de ${sellerUser?.company_name || sellerUser?.name || 'Prestataire'} (SIREN : ${sellerUser?.siren || 'N/A'}) en vertu d'un mandat de facturation (art. 289-I-2 du CGI).</em><br>`
+      ? `<br><em>Avoir émis par ${altioName} (SIREN : ${altioSiren}) au nom et pour le compte de ${sellerUser?.company_name || sellerUser?.name || 'Prestataire'} (SIREN : ${sellerUser?.siren || 'N/A'}) en vertu d'un mandat de facturation (art. 289-I-2 du CGI).</em><br>`
       : ''
 
     const vatLine = vatExempt
       ? `<tr><td colspan="2" style="color:#6B7280;font-size:12px;padding:4px 0">TVA non applicable, art. 293 B du CGI</td></tr>`
       : `<tr><td style="color:#6B7280">TVA (${vatRate}%)</td><td style="text-align:right">${vatAmount.toFixed(2)} \u20AC</td></tr>`
 
-    const emissionDate = new Date().toLocaleDateString('fr-FR')
+    const emissionDate = new Date(job.created_at).toLocaleDateString('fr-FR', { timeZone: 'UTC' })
 
     // ── 6. Generate HTML credit note ─────────────────────────────────────────
     const html = `<!DOCTYPE html>
@@ -181,7 +175,7 @@ serve(async (req) => {
   <div class="header">
     <div>
       <div class="brand">\u2B1B Altio</div>
-      <div class="brand-sub">Plateforme de gestion de locations saisonni\u00E8res<br>contact@altio.fr</div>
+      <div class="brand-sub">Plateforme de gestion de locations saisonni\u00E8res<br>${escapeDocumentText(legalEntity.email)}</div>
     </div>
     <div class="invoice-meta">
       <div class="invoice-num">AVOIR ${creditNoteNumber}</div>
@@ -193,7 +187,7 @@ serve(async (req) => {
   <div class="avoir-banner">
     <h2>AVOIR</h2>
     <p>Avoir sur facture n\u00B0 ${originalInvoiceNumber}</p>
-    <p>Motif : ${reason}</p>
+    <p>Motif : ${escapeDocumentText(reason)}</p>
   </div>
 
   <div class="parties">
@@ -235,22 +229,22 @@ serve(async (req) => {
   <div class="legal">
     <strong>Nature du document :</strong> Facture d'avoir (note de cr\u00E9dit) au sens de l'article 289 du CGI.<br>
     <strong>R\u00E9f\u00E9rence facture d'origine :</strong> ${originalInvoiceNumber}<br>
-    <strong>Motif de l'avoir :</strong> ${reason}<br><br>
+    <strong>Motif de l'avoir :</strong> ${escapeDocumentText(reason)}<br><br>
     <strong>Conditions de remboursement :</strong> Le montant sera rembours\u00E9 par le m\u00EAme moyen de paiement que celui utilis\u00E9 pour la transaction initiale, dans un d\u00E9lai de 14 jours.<br>
     ${vatExempt ? '<br><em>TVA non applicable, art. 293 B du CGI.</em><br>' : ''}
     ${mandateMention}
     <br><strong>Cat\u00E9gorie de l'op\u00E9ration :</strong> Prestation de services<br>
-    Altio SAS \u2014 ${altioAddress} \u2014 SIREN : ${altioSiren} \u2014 ${altioRcs} \u2014 TVA : ${altioVat} \u2014 contact@altio.app<br>
-    M\u00E9diateur : CMAP, 39 av. Franklin D. Roosevelt, 75008 Paris \u2014 www.cmap.fr
+    ${altioName} — ${altioAddress} — SIREN : ${altioSiren} — ${altioRcs} ${altioVat ? `— TVA : ${altioVat}` : ''} — ${escapeDocumentText(legalEntity.email)}<br>
+    Médiateur Altio : ${escapeDocumentText(legalEntity.mediatorName)} — ${escapeDocumentText(legalEntity.mediatorAddress)} — ${escapeDocumentText(legalEntity.mediatorUrl)}
   </div>
 </body>
 </html>`
 
     // ── 7. Generate Factur-X XML (TypeCode 381 = credit note) ────────────────
-    const issueDateYYYYMMDD = new Date().toISOString().slice(0, 10).replace(/-/g, '')
+    const issueDateYYYYMMDD = new Date(job.created_at).toISOString().slice(0, 10).replace(/-/g, '')
 
-    const sellerName = isAltioSeller ? 'Altio SAS' : (sellerUser?.company_name || sellerUser?.name || 'N/A')
-    const sellerVatXml = isAltioSeller ? altioVat : (sellerUser?.vat_number || 'FR00000000000')
+    const sellerName = isAltioSeller ? altioName : (sellerUser?.company_name || sellerUser?.name || 'N/A')
+    const sellerVatXml = isAltioSeller ? altioVat : (sellerUser?.vat_number || '')
     const buyerName = buyerUser?.company_name || buyerUser?.name || 'N/A'
 
     const vatCategoryCode = vatExempt ? 'E' : 'S'
@@ -275,7 +269,7 @@ serve(async (req) => {
       <udt:DateTimeString format="102">${issueDateYYYYMMDD}</udt:DateTimeString>
     </ram:IssueDateTime>
     <ram:IncludedNote>
-      <ram:Content>Avoir sur facture ${originalInvoiceNumber} - ${reason}</ram:Content>
+      <ram:Content>Avoir sur facture ${originalInvoiceNumber} - ${escapeDocumentText(reason)}</ram:Content>
     </ram:IncludedNote>
   </rsm:ExchangedDocument>
 
@@ -289,7 +283,7 @@ serve(async (req) => {
       </ram:SpecifiedTradeProduct>
       <ram:SpecifiedLineTradeAgreement>
         <ram:NetPriceProductTradePrice>
-          <ram:ChargeAmount>${amountHt.toFixed(2)}</ram:ChargeAmount>
+          <ram:ChargeAmount>${Math.abs(amountHt).toFixed(2)}</ram:ChargeAmount>
         </ram:NetPriceProductTradePrice>
       </ram:SpecifiedLineTradeAgreement>
       <ram:SpecifiedLineTradeDelivery>
@@ -302,7 +296,7 @@ serve(async (req) => {
           <ram:RateApplicablePercent>${vatRateValue}</ram:RateApplicablePercent>
         </ram:ApplicableTradeTax>
         <ram:SpecifiedTradeSettlementLineMonetarySummation>
-          <ram:LineTotalAmount>${amountHt.toFixed(2)}</ram:LineTotalAmount>
+          <ram:LineTotalAmount>${Math.abs(amountHt).toFixed(2)}</ram:LineTotalAmount>
         </ram:SpecifiedTradeSettlementLineMonetarySummation>
       </ram:SpecifiedLineTradeSettlement>
     </ram:IncludedSupplyChainTradeLineItem>
@@ -310,9 +304,7 @@ serve(async (req) => {
     <ram:ApplicableHeaderTradeAgreement>
       <ram:SellerTradeParty>
         <ram:Name>${sellerName}</ram:Name>
-        <ram:SpecifiedTaxRegistration>
-          <ram:ID schemeID="VA">${sellerVatXml}</ram:ID>
-        </ram:SpecifiedTaxRegistration>
+        ${sellerVatXml ? `<ram:SpecifiedTaxRegistration><ram:ID schemeID="VA">${sellerVatXml}</ram:ID></ram:SpecifiedTaxRegistration>` : ''}
       </ram:SellerTradeParty>
       <ram:BuyerTradeParty>
         <ram:Name>${buyerName}</ram:Name>${buyerUser?.siren ? `
@@ -330,18 +322,18 @@ serve(async (req) => {
         <ram:IssuerAssignedID>${originalInvoiceNumber}</ram:IssuerAssignedID>
       </ram:InvoiceReferencedDocument>
       <ram:ApplicableTradeTax>
-        <ram:CalculatedAmount>${vatAmount.toFixed(2)}</ram:CalculatedAmount>
+        <ram:CalculatedAmount>${Math.abs(vatAmount).toFixed(2)}</ram:CalculatedAmount>
         <ram:TypeCode>VAT</ram:TypeCode>
-        <ram:BasisAmount>${amountHt.toFixed(2)}</ram:BasisAmount>
+        <ram:BasisAmount>${Math.abs(amountHt).toFixed(2)}</ram:BasisAmount>
         <ram:CategoryCode>${vatCategoryCode}</ram:CategoryCode>
         <ram:RateApplicablePercent>${vatRateValue}</ram:RateApplicablePercent>
       </ram:ApplicableTradeTax>
       <ram:SpecifiedTradeSettlementHeaderMonetarySummation>
-        <ram:LineTotalAmount>${amountHt.toFixed(2)}</ram:LineTotalAmount>
-        <ram:TaxBasisTotalAmount>${amountHt.toFixed(2)}</ram:TaxBasisTotalAmount>
-        <ram:TaxTotalAmount currencyID="EUR">${vatAmount.toFixed(2)}</ram:TaxTotalAmount>
-        <ram:GrandTotalAmount>${amountTtc.toFixed(2)}</ram:GrandTotalAmount>
-        <ram:DuePayableAmount>${amountTtc.toFixed(2)}</ram:DuePayableAmount>
+        <ram:LineTotalAmount>${Math.abs(amountHt).toFixed(2)}</ram:LineTotalAmount>
+        <ram:TaxBasisTotalAmount>${Math.abs(amountHt).toFixed(2)}</ram:TaxBasisTotalAmount>
+        <ram:TaxTotalAmount currencyID="EUR">${Math.abs(vatAmount).toFixed(2)}</ram:TaxTotalAmount>
+        <ram:GrandTotalAmount>${Math.abs(amountTtc).toFixed(2)}</ram:GrandTotalAmount>
+        <ram:DuePayableAmount>${Math.abs(amountTtc).toFixed(2)}</ram:DuePayableAmount>
       </ram:SpecifiedTradeSettlementHeaderMonetarySummation>
     </ram:ApplicableHeaderTradeSettlement>
   </rsm:SupplyChainTradeTransaction>
@@ -367,59 +359,12 @@ serve(async (req) => {
       })
     if (xmlUploadErr) throw new Error(`Factur-X XML upload failed: ${xmlUploadErr.message}`)
 
-    // ── 9. Insert credit note record ─────────────────────────────────────────
-    let creditNotePayload: Record<string, unknown> = {
-      invoice_number:      creditNoteNumber,
-      mission_id:          originalInvoice.mission_id ?? null,
-      emergency_id:        originalInvoice.emergency_id ?? null,
-      invoice_type:        'credit_note',
-      amount_ht:           amountHt,
-      amount_ttc:          amountTtc,
-      vat_rate:            vatRate,
-      seller_id:           originalInvoice.seller_id,
-      buyer_id:            originalInvoice.buyer_id,
-      pdf_url:             fileName,
-      stripe_pi_id:        originalInvoice.stripe_pi_id ?? null,
-      status:              'issued',
-      facturx_url:         xmlFileName,
-      related_invoice_id:  invoiceId,
-    }
-
-    let creditNote: Record<string, unknown> | null = null
-    let insertErr: { message: string } | null = null
-
-    const firstTry = await db.from('invoices').insert(creditNotePayload).select().single()
-    if (firstTry.error) {
-      const errMsg = firstTry.error.message || ''
-      const fieldsToRetry = ['facturx_url', 'emergency_id', 'related_invoice_id']
-      let retryPayload = { ...creditNotePayload }
-      let needsRetry = false
-      for (const field of fieldsToRetry) {
-        if (errMsg.includes(field)) {
-          delete retryPayload[field]
-          needsRetry = true
-        }
-      }
-      if (needsRetry) {
-        const secondTry = await db.from('invoices').insert(retryPayload).select().single()
-        creditNote = secondTry.data
-        insertErr  = secondTry.error
-      } else {
-        creditNote = firstTry.data
-        insertErr  = firstTry.error
-      }
-    } else {
-      creditNote = firstTry.data
-      insertErr  = firstTry.error
-    }
-
-    if (insertErr) throw new Error(`Credit note insert failed: ${insertErr.message}`)
-
-    // ── 10. Mark original invoice as cancelled ───────────────────────────────
-    await db
-      .from('invoices')
-      .update({ status: 'cancelled' })
-      .eq('id', invoiceId)
+    // Publish the credit and cancel its source in the same transaction, only
+    // after BOTH files exist. Failures leave a retryable reservation.
+    const { data: creditNote, error: finalizeError } = await db.rpc(targetCents === undefined ? 'finalize_credit_note' : 'finalize_partial_credit_note', {
+      p_invoice_id: invoiceId, p_job_id: job.id,
+    })
+    if (finalizeError || !creditNote) throw new Error('Publication de l’avoir indisponible')
 
     return new Response(
       JSON.stringify({ success: true, creditNote, facturx_url: xmlFileName }),

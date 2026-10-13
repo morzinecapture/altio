@@ -1,4 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { requireConnectSplit } from '../_shared/connect-split.ts'
+import { connectStripe } from '../_shared/stripe-connect.ts'
 import Stripe from 'npm:stripe@^14.0.0'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { requireAuth } from '../_shared/auth.ts'
@@ -154,7 +156,12 @@ serve(async (req) => {
               400,
             )
           }
+          const { data: retryProfile, error: retryProfileError } = await db.from('provider_profiles')
+            .select('stripe_account_id').eq('provider_id', iv.assigned_provider_id).single()
+          if (retryProfileError) throw new Error('Compte de paiement indisponible')
+          const retrySplit = await requireConnectSplit(connectStripe, retryProfile?.stripe_account_id, recreateAmount)
           const recreated = await stripe.paymentIntents.create({
+            ...retrySplit,
             amount: recreateAmount,
             currency: 'eur',
             capture_method: 'manual',
@@ -237,6 +244,18 @@ serve(async (req) => {
       return respond({ success: false, error: "Cette offre n'est plus disponible" }, 409)
     }
 
+    const displacementFee = Number(bid.displacement_fee ?? 0)
+    const diagnosticFee = Number(bid.diagnostic_fee ?? 0)
+    if (displacementFee < 0 || displacementFee > 80) {
+      return respond({ success: false, error: 'Les frais de déplacement sont plafonnés à 80 €.' }, 400)
+    }
+    if (diagnosticFee < 0 || diagnosticFee > 100) {
+      return respond({ success: false, error: 'Les frais de diagnostic sont plafonnés à 100 €.' }, 400)
+    }
+    if (displacementFee + diagnosticFee > 150) {
+      return respond({ success: false, error: 'Le total déplacement et diagnostic est plafonné à 150 €.' }, 400)
+    }
+
     // 3. Pre-authorize Stripe for displacement + 1re heure (FLOW.md §3.A.2)
     // Manual capture : capturé à l'arrivée sur place (mark-intervention-arrived).
     // Skip entirely si scheduled > 48h : la pré-auto se fera à l'acceptation
@@ -281,34 +300,7 @@ serve(async (req) => {
         },
       }
 
-      if (providerStripeAccountId) {
-        try {
-          const account = await stripe.accounts.retrieve(providerStripeAccountId)
-          if (account.charges_enabled) {
-            intentParams.transfer_data = { destination: providerStripeAccountId }
-            // 10% + 10% model: application_fee_amount = amount * 2/11
-            intentParams.application_fee_amount = Math.round(preauthCents * 2 / 11)
-            log('info', 'connect_split_enabled', { providerStripeAccountId })
-          } else {
-            intentParams.metadata = { ...intentParams.metadata, needs_manual_transfer: 'true' }
-            log('info', 'connect_not_ready', { providerStripeAccountId })
-          }
-        } catch (e) {
-          // Account retrieve raté : on loggue puis on fallback sur un PI sans
-          // transfer_data pour ne pas bloquer l'acceptation.
-          log('warn', 'connect_account_retrieve_failed', {
-            providerStripeAccountId,
-            err: e instanceof Error ? e.message : String(e),
-          })
-          intentParams.metadata = { ...intentParams.metadata, needs_manual_transfer: 'true' }
-        }
-      } else {
-        // Aucune configuration Connect : le PI est créé SANS transfer_data
-        // pour permettre les tests end-to-end avant onboarding KYC du presta.
-        // La commission sera réconciliée manuellement via needs_manual_transfer.
-        intentParams.metadata = { ...intentParams.metadata, needs_manual_transfer: 'true' }
-        log('info', 'connect_skipped_no_account', { providerId: bid.provider_id })
-      }
+      Object.assign(intentParams, await requireConnectSplit(connectStripe, providerStripeAccountId, preauthCents))
 
       try {
         const pi = await stripe.paymentIntents.create(intentParams)

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput,
-  Alert, ActivityIndicator, KeyboardAvoidingView, Platform, RefreshControl,
+  Alert, ActivityIndicator, KeyboardAvoidingView, Platform, RefreshControl, Linking,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -10,6 +10,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS, FONTS, SPACING, RADIUS, SHADOWS, GRADIENT } from '../src/theme';
 import { supabase } from '../src/lib/supabase';
 import { useAuth } from '../src/auth';
+import { captureError } from '../src/sentry';
+import { LEGAL_CONFIG } from '../src/config/legal';
 
 // --- Types ---
 
@@ -18,6 +20,7 @@ interface Reclamation {
   user_id: string;
   type: string;
   mission_id: string | null;
+  emergency_id?: string | null;
   description: string;
   status: string;
   resolution: string | null;
@@ -30,7 +33,7 @@ type ReclamationType = 'quality' | 'payment' | 'commission' | 'account' | 'other
 type ReclamationStatus = 'open' | 'acknowledged' | 'in_progress' | 'resolved' | 'closed';
 
 const RECLAMATION_TYPES: { id: ReclamationType; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
-  { id: 'quality', label: 'Qualite de service', icon: 'star-outline' },
+  { id: 'quality', label: 'Qualité de service', icon: 'star-outline' },
   { id: 'payment', label: 'Paiement', icon: 'card-outline' },
   { id: 'commission', label: 'Commission', icon: 'cash-outline' },
   { id: 'account', label: 'Mon compte', icon: 'person-outline' },
@@ -39,20 +42,40 @@ const RECLAMATION_TYPES: { id: ReclamationType; label: string; icon: keyof typeo
 
 const STATUS_CONFIG: Record<ReclamationStatus, { label: string; bg: string; text: string; icon: keyof typeof Ionicons.glyphMap }> = {
   open: { label: 'Ouverte', bg: '#EFF6FF', text: '#2563EB', icon: 'radio-button-on-outline' },
-  acknowledged: { label: 'Prise en compte', bg: '#FFFBEB', text: '#F59E0B', icon: 'checkmark-circle-outline' },
-  in_progress: { label: 'En traitement', bg: '#FFF7ED', text: '#F97316', icon: 'sync-outline' },
-  resolved: { label: 'Resolue', bg: '#ECFDF5', text: '#10B981', icon: 'checkmark-done-circle-outline' },
-  closed: { label: 'Fermee', bg: '#F1F5F9', text: '#64748B', icon: 'lock-closed-outline' },
+  acknowledged: { label: 'Prise en compte', bg: COLORS.warningSoft, text: '#F59E0B', icon: 'checkmark-circle-outline' },
+  in_progress: { label: 'En traitement', bg: COLORS.coralSoft, text: '#F97316', icon: 'sync-outline' },
+  resolved: { label: 'Résolue', bg: '#ECFDF5', text: '#10B981', icon: 'checkmark-done-circle-outline' },
+  closed: { label: 'Fermée', bg: '#F1F5F9', text: '#64748B', icon: 'lock-closed-outline' },
 };
 
 const MIN_DESCRIPTION_LENGTH = 20;
 
+const getSubmissionErrorMessage = (error: unknown) => {
+  const message = error instanceof Error ? error.message : '';
+
+  if (/network|fetch|connexion|timeout|délai/i.test(message)) {
+    return 'La réclamation n’a pas pu être envoyée. Vérifiez votre connexion puis réessayez.';
+  }
+
+  if (/foreign key|violates|mission_id|emergency_id/i.test(message)) {
+    return 'La mission associée est introuvable. Revenez à la mission puis ouvrez de nouveau la réclamation.';
+  }
+
+  if (/row-level security|permission|policy|unauthorized|jwt/i.test(message)) {
+    return 'Votre session a expiré. Reconnectez-vous avant d’envoyer la réclamation.';
+  }
+
+  return 'La réclamation n’a pas pu être envoyée pour le moment. Réessayez dans quelques instants.';
+};
+
 export default function ReclamationScreen() {
   const router = useRouter();
   const { user } = useAuth();
-  const { missionId: paramMissionId, emergencyId: paramEmergencyId } = useLocalSearchParams<{
+  const { missionId: paramMissionId, emergencyId: paramEmergencyId, reportContext, reason } = useLocalSearchParams<{
     missionId?: string;
     emergencyId?: string;
+    reportContext?: string;
+    reason?: string;
   }>();
 
   // Form state
@@ -79,6 +102,21 @@ export default function ReclamationScreen() {
     }
   }, [paramMissionId, paramEmergencyId]);
 
+  useEffect(() => {
+    if (reason !== 'no_show') return;
+    setSelectedType('quality');
+    setDescription('Le prestataire sélectionné ne s’est pas présenté au rendez-vous et n’a pas signalé son arrivée. Je demande la vérification de la situation et le remboursement des frais de déplacement et de diagnostic.');
+  }, [reason]);
+
+  // A chat can open this screen with an immutable conversation reference. The
+  // user still writes the report themselves; no chat content is copied into a
+  // URL or silently transmitted.
+  useEffect(() => {
+    if (!reportContext) return;
+    setSelectedType('other');
+    setDescription((current) => current || `Signalement de contenu ou de comportement. Référence : ${reportContext}\n\n`);
+  }, [reportContext]);
+
   const fetchReclamations = useCallback(async () => {
     if (!user?.id) return;
     try {
@@ -90,7 +128,7 @@ export default function ReclamationScreen() {
 
       if (error) throw error;
       setReclamations(data || []);
-    } catch (err) {
+    } catch {
       // Silent fail — list is non-critical
     } finally {
       setLoading(false);
@@ -110,19 +148,21 @@ export default function ReclamationScreen() {
   const isFormValid = selectedType !== null && description.trim().length >= MIN_DESCRIPTION_LENGTH;
 
   const handleSubmit = async () => {
+    if (submitting) return;
+
     if (!selectedType) {
-      Alert.alert('Type requis', 'Veuillez selectionner un type de reclamation.');
+      Alert.alert('Type requis', 'Veuillez sélectionner un type de réclamation.');
       return;
     }
     if (description.trim().length < MIN_DESCRIPTION_LENGTH) {
       Alert.alert(
         'Description trop courte',
-        `Veuillez decrire votre reclamation en detail (minimum ${MIN_DESCRIPTION_LENGTH} caracteres).`
+        `Veuillez décrire votre réclamation en détail (minimum ${MIN_DESCRIPTION_LENGTH} caractères).`
       );
       return;
     }
     if (!user?.id) {
-      Alert.alert('Erreur', 'Vous devez etre connecte pour soumettre une reclamation.');
+      Alert.alert('Connexion requise', 'Vous devez être connecté pour soumettre une réclamation.');
       return;
     }
 
@@ -135,7 +175,8 @@ export default function ReclamationScreen() {
         status: 'open',
       };
       if (missionId.trim()) {
-        payload.mission_id = missionId.trim();
+        if (paramEmergencyId) payload.emergency_id = missionId.trim();
+        else payload.mission_id = missionId.trim();
       }
 
       const { error } = await supabase.from('reclamations').insert(payload);
@@ -152,7 +193,8 @@ export default function ReclamationScreen() {
         fetchReclamations();
       }, 3000);
     } catch (err: unknown) {
-      Alert.alert('Erreur', err instanceof Error ? err.message : 'Une erreur est survenue.');
+      captureError(err, { scope: 'submitReclamation' });
+      Alert.alert('Envoi impossible', getSubmissionErrorMessage(err));
     } finally {
       setSubmitting(false);
     }
@@ -164,17 +206,6 @@ export default function ReclamationScreen() {
       day: 'numeric',
       month: 'short',
       year: 'numeric',
-    });
-  };
-
-  const formatDateTime = (dateStr: string) => {
-    const date = new Date(dateStr);
-    return date.toLocaleDateString('fr-FR', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
     });
   };
 
@@ -218,7 +249,7 @@ export default function ReclamationScreen() {
             <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
               <Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Reclamation</Text>
+            <Text style={styles.headerTitle}>Réclamation</Text>
             <View style={{ width: 40 }} />
           </View>
         </LinearGradient>
@@ -234,13 +265,13 @@ export default function ReclamationScreen() {
               <Ionicons name="checkmark" size={40} color={COLORS.textInverse} />
             </LinearGradient>
           </View>
-          <Text style={styles.successTitle}>Reclamation envoyee</Text>
+          <Text style={styles.successTitle}>Réclamation envoyée</Text>
           <Text style={styles.successMessage}>
-            Votre reclamation a ete enregistree avec succes. Nous accusons reception et vous
-            repondrons dans un delai de 48 heures ouvrables.
+            Votre réclamation a été enregistrée avec succès. Elle sera examinée dans les
+            meilleurs délais.
           </Text>
           <Text style={styles.successRef}>
-            Vous pouvez suivre l'avancement dans l'onglet "Historique".
+            Vous pouvez suivre l’avancement dans l’onglet « Historique ».
           </Text>
         </View>
       </SafeAreaView>
@@ -261,7 +292,7 @@ export default function ReclamationScreen() {
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Reclamation</Text>
+          <Text style={styles.headerTitle}>Réclamation</Text>
           <View style={{ width: 40 }} />
         </View>
       </LinearGradient>
@@ -327,15 +358,15 @@ export default function ReclamationScreen() {
                     <Ionicons name="chatbubble-ellipses-outline" size={20} color={COLORS.brandPrimary} />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.sectionTitle}>Soumettre une reclamation</Text>
+                    <Text style={styles.sectionTitle}>Soumettre une réclamation</Text>
                     <Text style={styles.sectionSubtitle}>
-                      Decrivez votre probleme et nous vous repondrons dans les meilleurs delais.
+                      Décrivez votre problème et nous vous répondrons dans les meilleurs délais.
                     </Text>
                   </View>
                 </View>
 
                 {/* Type Picker */}
-                <Text style={styles.fieldLabel}>Type de reclamation *</Text>
+                <Text style={styles.fieldLabel}>Type de réclamation *</Text>
                 <View style={styles.typePicker}>
                   {RECLAMATION_TYPES.map((type) => {
                     const isSelected = selectedType === type.id;
@@ -369,16 +400,18 @@ export default function ReclamationScreen() {
 
                 {/* Mission/Emergency ID reference */}
                 <Text style={styles.fieldLabel}>
-                  Reference mission ou urgence{' '}
-                  <Text style={styles.fieldOptional}>(optionnel)</Text>
+                  Mission ou urgence associée{' '}
+                  {!paramMissionId && !paramEmergencyId && (
+                    <Text style={styles.fieldOptional}>(optionnel)</Text>
+                  )}
                 </Text>
                 <View style={styles.inputRow}>
                   <Ionicons name="briefcase-outline" size={18} color={COLORS.textTertiary} style={styles.inputIcon} />
                   <TextInput
                     style={styles.textInputWithIcon}
-                    value={missionId}
+                    value={(paramMissionId || paramEmergencyId) ? 'Associée automatiquement' : missionId}
                     onChangeText={setMissionId}
-                    placeholder="Ex: abc123-def456..."
+                    placeholder="Saisissez la référence"
                     placeholderTextColor={COLORS.textTertiary}
                     autoCapitalize="none"
                     autoCorrect={false}
@@ -386,7 +419,7 @@ export default function ReclamationScreen() {
                   />
                   {(paramMissionId || paramEmergencyId) && (
                     <View style={styles.autoFilledBadge}>
-                      <Text style={styles.autoFilledText}>Auto</Text>
+                      <Text style={styles.autoFilledText}>Liée</Text>
                     </View>
                   )}
                 </View>
@@ -395,7 +428,9 @@ export default function ReclamationScreen() {
                 <View style={styles.fieldLabelRow}>
                   <Text style={styles.fieldLabel}>Description *</Text>
                   <Text style={[styles.charCount, { color: charCountColor }]}>
-                    {charCount}/{MIN_DESCRIPTION_LENGTH} min
+                    {charCount < MIN_DESCRIPTION_LENGTH
+                      ? `${charCount}/${MIN_DESCRIPTION_LENGTH} caractères minimum`
+                      : `${charCount} caractères`}
                   </Text>
                 </View>
                 <TextInput
@@ -406,7 +441,7 @@ export default function ReclamationScreen() {
                   ]}
                   value={description}
                   onChangeText={setDescription}
-                  placeholder="Decrivez votre reclamation en detail (minimum 20 caracteres)..."
+                  placeholder="Décrivez votre réclamation en détail (minimum 20 caractères)..."
                   placeholderTextColor={COLORS.textTertiary}
                   multiline
                   numberOfLines={5}
@@ -428,7 +463,7 @@ export default function ReclamationScreen() {
                   ) : (
                     <>
                       <Ionicons name="send-outline" size={18} color={COLORS.textInverse} />
-                      <Text style={styles.submitButtonText}>Envoyer la reclamation</Text>
+                      <Text style={styles.submitButtonText}>Envoyer la réclamation</Text>
                     </>
                   )}
                 </TouchableOpacity>
@@ -438,21 +473,27 @@ export default function ReclamationScreen() {
               <View style={styles.mediationCard}>
                 <View style={styles.mediationHeader}>
                   <Ionicons name="shield-checkmark-outline" size={20} color={COLORS.brandPrimary} />
-                  <Text style={styles.mediationTitle}>Mediation</Text>
+                  <Text style={styles.mediationTitle}>Médiation</Text>
                 </View>
                 <Text style={styles.mediationText}>
-                  En cas de litige non resolu, vous pouvez saisir le mediateur de la consommation :
+                  En cas de litige non résolu, vous pouvez saisir le médiateur de la consommation :
                 </Text>
                 <View style={styles.mediationAddress}>
                   <Ionicons name="location-outline" size={16} color={COLORS.textSecondary} />
                   <Text style={styles.mediationAddressText}>
-                    CMAP — 39 avenue Franklin D. Roosevelt, 75008 Paris
+                    {LEGAL_CONFIG.MEDIATOR_NAME}{'\n'}{LEGAL_CONFIG.MEDIATOR_ADDRESS}
                   </Text>
                 </View>
+                <TouchableOpacity
+                  onPress={() => Linking.openURL(LEGAL_CONFIG.MEDIATOR_URL)}
+                  accessibilityRole="link"
+                >
+                  <Text style={styles.mediationLink}>{LEGAL_CONFIG.MEDIATOR_URL}</Text>
+                </TouchableOpacity>
                 <Text style={styles.mediationNote}>
-                  Conformement aux articles L.611-1 et R.612-1 du Code de la consommation,
-                  tout consommateur a le droit de recourir gratuitement a un mediateur de la
-                  consommation en vue de la resolution amiable d'un litige.
+                  Conformément aux articles L.611-1 et R.612-1 du Code de la consommation,
+                  tout consommateur a le droit de recourir gratuitement à un médiateur de la
+                  consommation en vue de la résolution amiable d’un litige.
                 </Text>
               </View>
             </>
@@ -465,9 +506,9 @@ export default function ReclamationScreen() {
                     <Ionicons name="folder-open-outline" size={20} color={COLORS.brandPrimary} />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.sectionTitle}>Mes reclamations</Text>
+                    <Text style={styles.sectionTitle}>Mes réclamations</Text>
                     <Text style={styles.sectionSubtitle}>
-                      Retrouvez l'historique et le statut de vos reclamations.
+                      Retrouvez l’historique et le statut de vos réclamations.
                     </Text>
                   </View>
                 </View>
@@ -487,9 +528,9 @@ export default function ReclamationScreen() {
                         color={COLORS.textTertiary}
                       />
                     </View>
-                    <Text style={styles.emptyTitle}>Aucune reclamation</Text>
+                    <Text style={styles.emptyTitle}>Aucune réclamation</Text>
                     <Text style={styles.emptyText}>
-                      Vous n'avez pas encore soumis de reclamation.
+                      Vous n’avez pas encore soumis de réclamation.
                     </Text>
                     <TouchableOpacity
                       style={styles.emptyAction}
@@ -497,7 +538,7 @@ export default function ReclamationScreen() {
                       activeOpacity={0.7}
                     >
                       <Ionicons name="add-circle-outline" size={18} color={COLORS.brandPrimary} />
-                      <Text style={styles.emptyActionText}>Creer une reclamation</Text>
+                      <Text style={styles.emptyActionText}>Créer une réclamation</Text>
                     </TouchableOpacity>
                   </View>
                 ) : (
@@ -544,7 +585,7 @@ export default function ReclamationScreen() {
                               color={COLORS.success}
                             />
                             <View style={{ flex: 1 }}>
-                              <Text style={styles.resolutionLabel}>Resolution</Text>
+                              <Text style={styles.resolutionLabel}>Résolution</Text>
                               <Text style={styles.resolutionText}>
                                 {truncate(item.resolution, 150)}
                               </Text>
@@ -576,16 +617,16 @@ export default function ReclamationScreen() {
                               <View style={styles.footerDot} />
                               <Ionicons name="checkmark-done-outline" size={14} color={COLORS.success} />
                               <Text style={styles.cardDate}>
-                                Resolue {formatDate(item.resolved_at)}
+                                Résolue {formatDate(item.resolved_at)}
                               </Text>
                             </View>
                           )}
 
-                          {item.mission_id && (
+                          {(item.mission_id || item.emergency_id) && (
                             <View style={styles.footerItem}>
                               <View style={styles.footerDot} />
                               <Ionicons name="briefcase-outline" size={14} color={COLORS.textTertiary} />
-                              <Text style={styles.cardDate}>Mission liee</Text>
+                              <Text style={styles.cardDate}>{item.emergency_id ? 'Urgence liée' : 'Mission liée'}</Text>
                             </View>
                           )}
                         </View>
@@ -600,17 +641,23 @@ export default function ReclamationScreen() {
                 <View style={styles.mediationCard}>
                   <View style={styles.mediationHeader}>
                     <Ionicons name="shield-checkmark-outline" size={20} color={COLORS.brandPrimary} />
-                    <Text style={styles.mediationTitle}>Mediation</Text>
+                    <Text style={styles.mediationTitle}>Médiation</Text>
                   </View>
                   <Text style={styles.mediationText}>
-                    En cas de litige non resolu, vous pouvez saisir le mediateur de la consommation :
+                    En cas de litige non résolu, vous pouvez saisir le médiateur de la consommation :
                   </Text>
                   <View style={styles.mediationAddress}>
                     <Ionicons name="location-outline" size={16} color={COLORS.textSecondary} />
                     <Text style={styles.mediationAddressText}>
-                      CMAP — 39 avenue Franklin D. Roosevelt, 75008 Paris
+                      {LEGAL_CONFIG.MEDIATOR_NAME}{'\n'}{LEGAL_CONFIG.MEDIATOR_ADDRESS}
                     </Text>
                   </View>
+                  <TouchableOpacity
+                    onPress={() => Linking.openURL(LEGAL_CONFIG.MEDIATOR_URL)}
+                    accessibilityRole="link"
+                  >
+                    <Text style={styles.mediationLink}>{LEGAL_CONFIG.MEDIATOR_URL}</Text>
+                  </TouchableOpacity>
                 </View>
               )}
             </>
@@ -1076,5 +1123,12 @@ const styles = StyleSheet.create({
     color: COLORS.textTertiary,
     lineHeight: 18,
     fontSize: 12,
+  },
+  mediationLink: {
+    ...FONTS.bodySmall,
+    color: COLORS.brandPrimary,
+    fontWeight: '600',
+    marginBottom: SPACING.md,
+    textDecorationLine: 'underline',
   },
 });

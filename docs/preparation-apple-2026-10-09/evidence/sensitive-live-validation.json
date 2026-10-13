@@ -1,0 +1,66 @@
+{
+  "checkedAt": "2026-10-11T13:54:24.554Z",
+  "checks": [
+    {
+      "name": "provider login",
+      "pass": true
+    },
+    {
+      "name": "owner login",
+      "pass": true
+    },
+    {
+      "name": "deletion login",
+      "pass": true
+    },
+    {
+      "name": "disposable ready",
+      "pass": true
+    },
+    {
+      "name": "owner with active missions protected",
+      "pass": true
+    },
+    {
+      "name": "receipt list available",
+      "pass": true
+    },
+    {
+      "name": "prepare-account-deletion rejects anonymous",
+      "pass": true
+    },
+    {
+      "name": "submit-withdrawal rejects anonymous",
+      "pass": true
+    },
+    {
+      "name": "delete-account rejects anonymous",
+      "pass": true
+    },
+    {
+      "name": "disposable deletion completed",
+      "pass": true,
+      "status": 200
+    },
+    {
+      "name": "old token cannot read deleted profile",
+      "pass": true
+    },
+    {
+      "name": "old token rejected by server",
+      "pass": true
+    },
+    {
+      "name": "deleted login rejected",
+      "pass": true
+    },
+    {
+      "name": "owner profile unaffected",
+      "pass": true
+    },
+    {
+      "name": "provider profile unaffected",
+      "pass": true
+    }
+  ]
+}

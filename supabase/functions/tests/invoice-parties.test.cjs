@@ -1,0 +1,5 @@
+const {test}=require('node:test'),assert=require('node:assert/strict');const {invoiceDocumentParties}=require('../_shared/invoice-parties.ts');
+const invoice={id:'fixture',invoice_type:'service'},party={name:'Original name',billing_address:'Original address'};
+test('uses stored invoice parties without any profile lookup',async()=>{const calls=[];const result=await invoiceDocumentParties({rpc:async(...args)=>{calls.push(args);return{data:{seller:party,buyer:party},error:null}}},invoice);assert.deepEqual(result,{seller:party,buyer:party});assert.equal(calls[0][0],'get_invoice_document_parties');});
+for(const data of [null,{}, {seller:party,buyer:null},{seller:null,buyer:party},{seller:{},buyer:party}])test('missing original identity cannot produce an invented replacement '+JSON.stringify(data),async()=>{await assert.rejects(invoiceDocumentParties({rpc:async()=>({data,error:null})},invoice),/Aucun avoir/)});
+test('platform invoices allow platform seller but still require original buyer',async()=>{assert.equal((await invoiceDocumentParties({rpc:async()=>({data:{seller:null,buyer:party},error:null})},{...invoice,invoice_type:'commission'})).seller,null)});

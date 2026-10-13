@@ -1,0 +1,36 @@
+{
+  "checkedAt": "2026-10-08",
+  "activeCronJobs": [
+    "altio-completion-steps",
+    "altio-favorites-timeouts",
+    "expire-pending-missions",
+    "sync-ical-hourly"
+  ],
+  "caution": "Une tâche active ne prouve pas la livraison HTTP ni le succès du paiement.",
+  "backupsRestoreDrill": "not verified",
+  "productionAlertDelivery": "not verified",
+  "runs24h": [
+    {
+      "name": "altio-completion-steps",
+      "runs": 1440,
+      "failed": 0
+    },
+    {
+      "name": "altio-favorites-timeouts",
+      "runs": 288,
+      "failed": 0
+    },
+    {
+      "name": "expire-pending-missions",
+      "runs": 24,
+      "failed": 0
+    },
+    {
+      "name": "sync-ical-hourly",
+      "runs": 24,
+      "failed": 24
+    }
+  ],
+  "icalError": "function extensions.http_post(url => text, headers => jsonb, body => jsonb) does not exist",
+  "icalLegacySettingsPresentInDiagnosticSession": false
+}

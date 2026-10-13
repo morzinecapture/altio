@@ -99,7 +99,7 @@ export const getFavoriteProviders = async () => {
 
   const { data, error } = await supabase
     .from('favorite_providers')
-    .select('*, provider:users!favorite_providers_provider_id_fkey(id, name, picture, profile:provider_profiles(specialties, rating, total_reviews))')
+    .select('*, provider:public_profiles!favorite_providers_provider_id_fkey(id, name, picture, profile:public_provider_profiles(specialties, rating, total_reviews))')
     .eq('owner_id', session.user.id);
   checkError(error);
   return data || [];

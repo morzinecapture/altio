@@ -1,0 +1,27 @@
+{
+  "createdAt": "2026-10-11",
+  "accounts": [
+    {
+      "id": "4efd9ee9-967b-40f0-98d4-c6c3ff3a339c",
+      "email": "altio.demo.provider.20261011@example.com",
+      "role": "provider"
+    },
+    {
+      "id": "cbfd8202-99d4-41ca-a080-5de5c5181963",
+      "email": "altio.demo.owner.20261011@example.com",
+      "role": "owner"
+    },
+    {
+      "id": "0ed749f1-1353-44c7-b420-b6fd9e295f52",
+      "email": "altio.demo.deletion.20261011@example.com",
+      "role": "deletion"
+    }
+  ],
+  "credentialsLocation": ".private/apple-review-accounts.json (git ignored, mode 0600)",
+  "ownerCredentialsSavedInAppStoreConnect": true,
+  "scope": "Dedicated fictitious profiles; no admin permission, no insurance verification, no Stripe account, no real payments",
+  "properties": 2,
+  "assignedMissions": 2,
+  "messages": 2,
+  "deviceUserReport": "User reports iPhone trials work; detailed scenarios not individually specified"
+}

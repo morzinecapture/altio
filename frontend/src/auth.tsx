@@ -1,6 +1,8 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { supabase } from './lib/supabase';
 import { Session } from '@supabase/supabase-js';
+import { queryClient } from './query-client';
+import { createSessionScope } from './services/session-scope';
 
 export interface User {
   id: string;
@@ -11,6 +13,7 @@ export interface User {
   onboarding_completed?: boolean;
   owner_type?: string;
   is_admin?: boolean;
+  is_vat_exempt?: boolean;
   marketing_consent_at?: string | null;
 }
 
@@ -33,9 +36,15 @@ export const useAuth = () => useContext(AuthContext);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const sessionScope = useRef(createSessionScope(() => {
+    queryClient.clear();
+    setUser(null);
+    setLoading(true);
+  }));
 
   // Fetch full user profile from the public.users table
-  const fetchUserProfile = async (session: Session | null) => {
+  const fetchUserProfile = async (session: Session | null, isCurrent: () => boolean) => {
+    if (!isCurrent()) return;
     if (!session?.user) {
       setUser(null);
       return;
@@ -55,6 +64,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         timeoutPromise
       ]) as Awaited<typeof fetchPromise>;
 
+      if (!isCurrent()) return;
+      if (error) throw error;
+
       if (profile) {
         setUser({
           id: session.user.id,
@@ -65,6 +77,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           onboarding_completed: profile.onboarding_completed,
           owner_type: profile.owner_type,
           is_admin: profile.is_admin,
+          is_vat_exempt: profile.is_vat_exempt === true,
         });
       } else {
         // New user (no profile yet) — send welcome email (fire-and-forget)
@@ -85,7 +98,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           name: session.user.user_metadata?.full_name || '',
         });
       }
-    } catch (e) {
+    } catch {
+      if (!isCurrent()) return;
       // Ensure we don't get stuck loading if network fails
       setUser({
         id: session.user.id,
@@ -96,15 +110,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   useEffect(() => {
+    const scope = sessionScope.current;
     // onAuthStateChange fires INITIAL_SESSION on mount — no need for a separate getSession() call
     const { data: authListener } = supabase.auth.onAuthStateChange((event: string, session: Session | null) => {
-      if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+      if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
+        const isCurrent = scope.begin(session?.user.id ?? null);
         setTimeout(() => {
-          fetchUserProfile(session).finally(() => {
-            setLoading(false);
+          fetchUserProfile(session, isCurrent).finally(() => {
+            if (isCurrent()) setLoading(false);
           });
         }, 0);
       } else if (event === 'SIGNED_OUT') {
+        scope.begin(null);
         setUser(null);
         setLoading(false);
       } else {
@@ -113,12 +130,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
 
     return () => {
+      scope.dispose();
       authListener.subscription.unsubscribe();
     };
   }, []);
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
+    const { error } = await supabase.auth.signOut();
+    if (error) throw error;
     // setUser(null) is handled by onAuthStateChange SIGNED_OUT event
   };
 
@@ -128,4 +147,3 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     </AuthContext.Provider>
   );
 };
-

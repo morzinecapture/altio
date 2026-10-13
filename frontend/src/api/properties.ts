@@ -4,7 +4,36 @@
  */
 import { supabase, checkError } from './_client';
 import type { CreatePropertyPayload, UpdatePropertyPayload, Reservation, ReservationRow } from './_client';
+import type { Property } from '../types/api';
 import { geocodeAddress } from './profile';
+
+const propertyPhotoPath = (url: string): string | null => {
+  const marker = '/property-photos/';
+  const markerIndex = url.indexOf(marker);
+  if (markerIndex >= 0) return url.slice(markerIndex + marker.length).split('?')[0];
+  return url.startsWith('http') ? null : url;
+};
+
+/**
+ * Property photos remain private in Storage. Turn their stored paths/public URLs
+ * into short-lived URLs that only an authorised owner can request.
+ */
+const signPropertyPhotos = async <T extends { photos?: string[] }>(property: T): Promise<T> => {
+  if (!property.photos?.length) return property;
+
+  const photos = await Promise.all(property.photos.map(async (url) => {
+    const path = propertyPhotoPath(url);
+    if (!path) return url;
+    const { data, error } = await supabase.storage.from('property-photos').createSignedUrl(path, 60 * 60 * 24);
+    if (error || !data?.signedUrl) {
+      console.warn('[Properties] unable to sign property photo:', error?.message);
+      return '';
+    }
+    return data.signedUrl;
+  }));
+
+  return { ...property, photos };
+};
 
 // Properties
 export const getProperties = async () => {
@@ -17,21 +46,16 @@ export const getProperties = async () => {
     .eq('owner_id', session.user.id)
     .order('created_at', { ascending: false });
   checkError(error);
-  return data || [];
+  return Promise.all((data || []).map(property => signPropertyPhotos(property as Property)));
 };
 
 export const createProperty = async (data: CreatePropertyPayload) => {
-  console.error('[createProperty] START — payload:', JSON.stringify(data));
-
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.user) {
-    console.error('[createProperty] NOT AUTHENTICATED — no session');
     throw new Error('Not authenticated');
   }
-  console.error('[createProperty] Authenticated as:', session.user.id);
 
   const insertPayload = { ...data, owner_id: session.user.id };
-  console.error('[createProperty] INSERT payload:', JSON.stringify(insertPayload));
 
   const { data: prop, error } = await supabase
     .from('properties')
@@ -39,12 +63,7 @@ export const createProperty = async (data: CreatePropertyPayload) => {
     .select()
     .single();
 
-  if (error) {
-    console.error('[createProperty] SUPABASE ERROR:', JSON.stringify(error));
-  }
   checkError(error);
-
-  console.error('[createProperty] SUCCESS — property id:', prop?.id);
 
   // Geocode address asynchronously
   if (prop?.address) {
@@ -69,7 +88,7 @@ export const getProperty = async (id: string) => {
     .eq('owner_id', session.user.id)
     .single();
   checkError(error);
-  return data;
+  return signPropertyPhotos(data as Property);
 };
 
 export const updateProperty = async (id: string, data: UpdatePropertyPayload) => {
@@ -84,7 +103,7 @@ export const updateProperty = async (id: string, data: UpdatePropertyPayload) =>
     .select()
     .single();
   checkError(error);
-  return updated;
+  return signPropertyPhotos(updated as Property);
 };
 
 export const deleteProperty = async (id: string) => {
@@ -114,12 +133,15 @@ export const uploadPropertyPhoto = async (propertyId: string, uri: string): Prom
   );
 
   const filename = `${propertyId}/${Date.now()}.jpg`;
-  const response = await fetch(manipResult.uri);
-  const blob = await response.blob();
+  // React Native uploads are unreliable with Blob bodies. Expo's File API gives
+  // Supabase the ArrayBuffer it expects, so the stored object is a valid JPEG.
+  const { File } = await import('expo-file-system');
+  const file = new File(manipResult.uri);
+  const fileBody = await file.arrayBuffer();
 
   const { error } = await supabase.storage
     .from('property-photos')
-    .upload(filename, blob, { contentType: 'image/jpeg' });
+    .upload(filename, fileBody, { contentType: 'image/jpeg' });
   checkError(error);
 
   const { data: { publicUrl } } = supabase.storage
@@ -133,7 +155,7 @@ export const deletePropertyPhoto = async (url: string): Promise<void> => {
   const marker = '/property-photos/';
   const idx = url.indexOf(marker);
   if (idx === -1) return;
-  const path = url.substring(idx + marker.length);
+  const path = decodeURIComponent(url.substring(idx + marker.length).split('?')[0]);
 
   const { error } = await supabase.storage
     .from('property-photos')
@@ -144,7 +166,7 @@ export const deletePropertyPhoto = async (url: string): Promise<void> => {
 export const enableAutoCleaning = async (propertyId: string, enabled: boolean) => {
   const { error } = await supabase
     .from('properties')
-    .update({ auto_cleaning_enabled: enabled })
+    .update({ auto_cleaning: enabled })
     .eq('id', propertyId);
   checkError(error);
 };
@@ -167,6 +189,7 @@ export const getReservations = async (propertyId?: string) => {
   let query = supabase
     .from('reservations')
     .select('*, properties!inner(owner_id)')
+    .is('ical_cancelled_at', null)
     .eq('properties.owner_id', session.user.id)
     .order('check_in', { ascending: false });
   if (propertyId) query = query.eq('property_id', propertyId);
@@ -198,6 +221,7 @@ export const getUpcomingReservations = async (): Promise<UpcomingReservation[]> 
   const { data, error } = await supabase
     .from('reservations')
     .select('id, property_id, guest_name, check_in, check_out, source, properties!inner(name, owner_id), missions(id, status, mission_type)')
+    .is('ical_cancelled_at', null)
     .eq('properties.owner_id', session.user.id)
     .gte('check_in', todayISO)
     .order('check_in', { ascending: true })
@@ -250,7 +274,8 @@ export const getMonthReservations = async (year: number, month: number, property
 
   let query = supabase
     .from('reservations')
-    .select('id, property_id, guest_name, check_in, check_out, source, properties!inner(name, owner_id), missions(id, status, mission_type, assigned_provider_id, provider:users!missions_assigned_provider_id_fkey(name))')
+    .select('id, property_id, guest_name, check_in, check_out, source, properties!inner(name, owner_id), missions(id, status, mission_type, assigned_provider_id, provider:public_profiles!missions_assigned_provider_id_fkey(name))')
+    .is('ical_cancelled_at', null)
     .eq('properties.owner_id', session.user.id)
     .lt('check_in', endDate)
     .gte('check_out', startDate)
@@ -308,6 +333,7 @@ export const getPropertyReservations = async (propertyId: string): Promise<Reser
   const { data, error } = await supabase
     .from('reservations')
     .select('id, property_id, guest_name, check_in, check_out, source, missions(id, status, mission_type, scheduled_date)')
+    .is('ical_cancelled_at', null)
     .eq('property_id', propertyId)
     .order('check_in', { ascending: true });
   checkError(error);
@@ -346,7 +372,8 @@ export const getReservationsWithMissionStatus = async (propertyId: string): Prom
 
   const { data, error } = await supabase
     .from('reservations')
-    .select('id, property_id, guest_name, check_in, check_out, source, missions(id, status, mission_type, assigned_provider_id, provider:users!missions_assigned_provider_id_fkey(name))')
+    .select('id, property_id, guest_name, check_in, check_out, source, missions(id, status, mission_type, assigned_provider_id, provider:public_profiles!missions_assigned_provider_id_fkey(name))')
+    .is('ical_cancelled_at', null)
     .eq('property_id', propertyId)
     .gte('check_out', new Date().toISOString().slice(0, 10))
     .order('check_in', { ascending: true });

@@ -1,9 +1,10 @@
+import { PageHeader } from '../../src/components/alpine/AlpineHeader';
 import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, RefreshControl, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { COLORS, FONTS, SPACING, RADIUS, SHADOWS } from '../../src/theme';
+import { COLORS, FONTS, SPACING, RADIUS, SHADOWS, STATUS_LABELS, STATUS_COLORS } from '../../src/theme';
 import { useProviderSchedule } from '../../src/hooks';
 import type { ScheduleItem } from '../../src/types/api';
 import { useTranslation } from 'react-i18next';
@@ -13,14 +14,14 @@ const MONTH_CELL_SIZE = (SCREEN_WIDTH - SPACING.xl * 2) / 7;
 const WEEK_DAY_HEADERS = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
 
 const PLANNING_STATUS: Record<string, { label: string; color: string; icon: string }> = {
-  displacement_paid: { label: 'En route', color: '#3B82F6', icon: 'car-outline' },
-  on_site: { label: 'Sur place', color: '#8B5CF6', icon: 'location' },
-  in_progress: { label: 'En cours', color: '#F59E0B', icon: 'construct-outline' },
-  quote_submitted: { label: 'Devis envoyé', color: '#6366F1', icon: 'document-text-outline' },
-  quote_sent: { label: 'Devis envoyé', color: '#6366F1', icon: 'document-text-outline' },
-  quote_accepted: { label: 'Travaux', color: '#F59E0B', icon: 'construct-outline' },
-  completed: { label: 'Terminé', color: '#10B981', icon: 'checkmark-circle' },
-  assigned: { label: 'Assigné', color: '#3B82F6', icon: 'person-outline' },
+  displacement_paid: { label: STATUS_LABELS.displacement_paid, color: STATUS_COLORS.displacement_paid.text, icon: 'car-outline' },
+  on_site: { label: STATUS_LABELS.on_site, color: STATUS_COLORS.on_site.text, icon: 'location' },
+  in_progress: { label: STATUS_LABELS.in_progress, color: STATUS_COLORS.in_progress.text, icon: 'construct-outline' },
+  quote_submitted: { label: STATUS_LABELS.quote_submitted, color: STATUS_COLORS.quote_submitted.text, icon: 'document-text-outline' },
+  quote_sent: { label: STATUS_LABELS.quote_sent, color: STATUS_COLORS.quote_sent.text, icon: 'document-text-outline' },
+  quote_accepted: { label: STATUS_LABELS.quote_accepted, color: STATUS_COLORS.quote_accepted.text, icon: 'construct-outline' },
+  completed: { label: STATUS_LABELS.completed, color: STATUS_COLORS.completed.text, icon: 'checkmark-circle' },
+  assigned: { label: STATUS_LABELS.assigned, color: STATUS_COLORS.assigned.text, icon: 'person-outline' },
 };
 
 function formatDate(iso: string) {
@@ -511,12 +512,7 @@ export default function PlanningScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
-        <Text style={styles.title}>{t('provider.planning.title')}</Text>
-        <TouchableOpacity onPress={() => refetch()} style={styles.refreshBtn}>
-          <Ionicons name="refresh-outline" size={22} color="#1E3A5F" />
-        </TouchableOpacity>
-      </View>
+      <PageHeader title={t('provider.planning.title')} subtitle={t('alpine.planningSubtitle')} action={<TouchableOpacity accessibilityLabel={t('alpine.retry')} onPress={() => refetch()} style={styles.refreshBtn}><Ionicons name="refresh-outline" size={21} color={COLORS.textPrimary} /></TouchableOpacity>} />
 
       {renderSegmentedControl()}
 
@@ -528,7 +524,7 @@ export default function PlanningScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FFFFFF' },
+  container: { flex: 1, backgroundColor: COLORS.background },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -538,7 +534,7 @@ const styles = StyleSheet.create({
     paddingBottom: SPACING.lg,
     backgroundColor: '#FFFFFF',
   },
-  title: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 24, color: '#1E3A5F' },
+  title: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 24, color: COLORS.textPrimary },
   refreshBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: SPACING.xl },
   emptyIcon: { width: 80, height: 80, borderRadius: 24, backgroundColor: COLORS.brandPrimary + '15', justifyContent: 'center', alignItems: 'center', marginBottom: SPACING.lg, borderWidth: 1, borderColor: COLORS.brandPrimary + '30' },
@@ -664,7 +660,7 @@ const weekStyles = StyleSheet.create({
     gap: 4,
   },
   itemBlock: {
-    backgroundColor: '#F8FAFC',
+    backgroundColor: COLORS.background,
     borderLeftWidth: 3,
     borderLeftColor: COLORS.brandPrimary,
     borderRadius: 4,

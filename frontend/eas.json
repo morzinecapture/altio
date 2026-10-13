@@ -9,6 +9,9 @@
             "distribution": "internal",
             "ios": {
                 "simulator": true
+            },
+            "env": {
+                "SENTRY_DISABLE_AUTO_UPLOAD": "true"
             }
         },
         "development-device": {
@@ -20,9 +23,15 @@
         },
         "testflight": {
             "distribution": "store",
+            "environment": "preview",
             "autoIncrement": true,
             "env": {
-                "APP_ENV": "production"
+                "EXPO_PUBLIC_APP_ENV": "test",
+                "EXPO_PUBLIC_SUPABASE_URL": "https://vtybccqqbyjbmhkpliyn.supabase.co",
+                "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ0eWJjY3FxYnlqYm1oa3BsaXluIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIzODMyMTQsImV4cCI6MjA4Nzk1OTIxNH0.pfO-UP1Qu81tNEz3-3gREaHvkzc3U9BK33XboYBk-KU",
+                "EXPO_PUBLIC_GOOGLE_CALENDAR_CLIENT_ID": "608594563450-tahcapgirk921450bb411jnbka0sepgc.apps.googleusercontent.com",
+                "EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY": "pk_test_51UNBwxLZp04DQScPton4bb5XJQCrb4yLW2ESRAG3GMIdsDG7xPjUwnwFzY1nHTVFiPEvuEe2BwGfNg0A2h5HKLvQ008Q2pEUZt",
+                "SENTRY_DISABLE_AUTO_UPLOAD": "true"
             },
             "ios": {
                 "resourceClass": "m-medium"
@@ -32,17 +41,27 @@
             "distribution": "store",
             "autoIncrement": true,
             "env": {
-                "APP_ENV": "production"
+                "EXPO_PUBLIC_APP_ENV": "production"
             },
             "ios": {
                 "resourceClass": "m-medium"
             },
             "android": {
                 "buildType": "app-bundle"
-            }
+            },
+            "environment": "production"
         }
     },
     "submit": {
-        "production": {}
+        "testflight": {
+            "ios": {
+                "ascAppId": "6762188482"
+            }
+        },
+        "production": {
+            "ios": {
+                "ascAppId": "6762188482"
+            }
+        }
     }
 }

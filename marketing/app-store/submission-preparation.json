@@ -1,0 +1,130 @@
+{
+  "checkedAt": "2026-10-11",
+  "bundleIdentifier": "com.altio.app",
+  "ascAppId": "6762188482",
+  "version": "1.0.0",
+  "publicSubmissionReady": false,
+  "latestObservedBuild": {
+    "number": "20",
+    "profile": "testflight",
+    "stripeMode": "test",
+    "easStatus": "FINISHED",
+    "id": "f689374f-928a-426e-a157-26231aff16bb",
+    "appleUploadPerformed": true,
+    "appleStatus": "READY_TO_SUBMIT_TESTFLIGHT"
+  },
+  "suggestedCategory": "PRODUCTIVITY",
+  "launchTerritories": [
+    "FR"
+  ],
+  "copyright": "2026 Manon Freuchet (Freuchet Services)",
+  "metadataLocale": "fr-FR",
+  "privacyPolicyURL": null,
+  "supportURL": null,
+  "releaseOption": "MANUAL",
+  "manualDeclarations": {
+    "ageRating": "18+ enregistré dans Apple le 09/10/2026 ; conforme à la restriction 18 ans des CGU.",
+    "appPrivacy": "15 catégories sauvegardées ; 14 configurées. Historique des achats restant à configurer ; publication non effectuée. Configuration de production à relire.",
+    "traderStatus": "Apple : En cours de vérification, constaté dans Safari le 11/10/2026. Extrait RNE du 11/10 vérifié localement ; non téléversé par l’assistant car dossier déjà en cours de vérification.",
+    "exportCompliance": "ITSAppUsesNonExemptEncryption=false dans le code ; confirmer que seul le chiffrement exempté est utilisé.",
+    "reviewCredentials": "Saisir uniquement dans App Store Connect, après validation des comptes de démonstration."
+  },
+  "screenshotPlan": {
+    "targetPixels": [
+      1206,
+      2622
+    ],
+    "deviceClass": "iPhone 6.3 pouces",
+    "finalFiles": [
+      "marketing/app-store/screenshots/2026-10-11/iphone-6.3/01-accueil.png",
+      "marketing/app-store/screenshots/2026-10-11/iphone-6.3/02-planning.png",
+      "marketing/app-store/screenshots/2026-10-11/iphone-6.3/03-mission.png",
+      "marketing/app-store/screenshots/2026-10-11/iphone-6.3/04-logements.png",
+      "marketing/app-store/screenshots/2026-10-11/iphone-6.3/05-prestataire.png"
+    ],
+    "screens": [
+      "Accueil propriétaire",
+      "Planning",
+      "Logements",
+      "Prestataires",
+      "Détail de mission",
+      "Accueil prestataire"
+    ],
+    "uploadedCount": 2,
+    "remainingUploads": [
+      "03-mission.png",
+      "04-logements.png",
+      "05-prestataire.png"
+    ]
+  },
+  "remoteBuildApprovalRequired": false,
+  "localValidation": {
+    "releaseSimulatorBuild": "passed",
+    "xcode": "26.6",
+    "sdk": "iOS Simulator 26.5",
+    "signedArchiveProduced": false,
+    "appleUploadPerformed": false,
+    "testCount": 738,
+    "simulatorLaunch": "passed — isolated local copy; unauthenticated landing screen"
+  },
+  "appStoreDraft": {
+    "updatedAt": "2026-10-09",
+    "browser": "Safari",
+    "name": "Altio : services locatifs",
+    "subtitle": "Ménage et entretien",
+    "category": "PRODUCTIVITY",
+    "releaseOption": "MANUAL",
+    "version": "1.0",
+    "status": "PREPARE_FOR_SUBMISSION",
+    "submitted": false,
+    "published": false,
+    "descriptionEntered": false,
+    "promotionalTextEntered": false,
+    "keywordsEntered": true,
+    "copyrightEntered": true,
+    "remaining": [
+      "Trois captures à importer : sélecteur Safari bloqué",
+      "Description, texte promotionnel et remarques : zone de saisie Safari non pilotable",
+      "Publication finale des pages légales sur domaine public",
+      "Historique des achats dans App Privacy",
+      "Déploiement et recette des parcours sensibles",
+      "Statut commerçant UE"
+    ],
+    "longTextStatus": "Native Safari textarea writes did not persist; local source text retained.",
+    "ageRating": {
+      "saved": true,
+      "rating": "18+",
+      "reason": "CGU : accès réservé aux majeurs ; remplacement volontaire de la classification calculée par Apple.",
+      "parentalControls": false,
+      "ageVerification": false,
+      "unrestrictedWebAccess": false,
+      "userGeneratedContent": true,
+      "socialNetworking": false,
+      "socialNetworkingDisabledUnder13": false,
+      "messagingAndChat": true,
+      "advertising": false,
+      "advertisingEvidence": "Utilisateur : aucun placement payant le 09/10/2026",
+      "matureMedicalSexualViolentGamblingContent": "Aucun contenu de ce type prévu dans le périmètre de service examiné. À revoir si le contenu change.",
+      "submittedForReview": false
+    },
+    "reviewContact": {
+      "saved": true,
+      "name": "Maxime Gakiere",
+      "phone": "+33661510978",
+      "email": "morzinecapture@gmail.com"
+    },
+    "demoOwnerCredentialsSaved": true
+  },
+  "sellerAccount": {
+    "currentAppleHolder": "Maxime Gakiere",
+    "requiredSeller": "Maxime Gakiere",
+    "operator": "Manon Freuchet / Freuchet Services",
+    "decision": "Keep existing Apple account — user confirmation 2026-10-09",
+    "transferRequested": false,
+    "newMembershipRequired": false
+  },
+  "supportEmail": "morzinecapture@gmail.com",
+  "supportEmailSource": "User instruction 2026-10-09",
+  "remoteBuildAuthorization": "Oui, autoriser Expo EAS et TestFlight",
+  "legalPreviewURL": "https://altio-z852sby1j-morzinecaptures-projects.vercel.app"
+}

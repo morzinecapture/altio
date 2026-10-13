@@ -1,213 +1,31 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { corsHeaders, handleCors } from '../_shared/cors.ts'
+import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.98.0';
+import { requireAuth } from '../_shared/auth.ts';
+import { corsHeaders, handleCors } from '../_shared/cors.ts';
 
-/**
- * Annual Report — Art. 242 bis CGI
- *
- * Platforms must send an annual summary of amounts paid to each provider
- * to the tax authorities by January 31st of the following year.
- * 5% penalty on undeclared amounts if not complied with.
- *
- * Exemption: providers with < 20 transactions AND < 3000 EUR total
- * are marked as exempt from individual reporting.
- */
-
-serve(async (req) => {
-  const corsResponse = handleCors(req);
-  if (corsResponse) return corsResponse;
-
-  try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL') as string
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') as string
-    const db = createClient(supabaseUrl, supabaseServiceKey)
-
-    // ── 1. Authenticate caller and verify admin ─────────────────────────────
-    const authHeader = req.headers.get('Authorization')
-    if (!authHeader) throw new Error('Missing Authorization header')
-
-    const token = authHeader.replace('Bearer ', '')
-    const { data: { user }, error: authError } = await db.auth.getUser(token)
-    if (authError || !user) throw new Error('Unauthorized')
-
-    const { data: profile, error: profileError } = await db
-      .from('profiles')
-      .select('is_admin')
-      .eq('id', user.id)
-      .single()
-    if (profileError || !profile?.is_admin) {
-      throw new Error('Forbidden: admin access required')
-    }
-
-    // ── 2. Parse request body ───────────────────────────────────────────────
-    const { year } = await req.json()
-    if (!year || typeof year !== 'number' || year < 2020 || year > 2100) {
-      throw new Error('Invalid year. Expected { year: number } (e.g. 2025)')
-    }
-
-    const yearStart = `${year}-01-01T00:00:00.000Z`
-    const yearEnd = `${year + 1}-01-01T00:00:00.000Z`
-
-    // ── 3. Fetch all paid missions for the year ─────────────────────────────
-    // Query missions with status 'paid', filtered by the payment/completion date
-    const { data: paidMissions, error: missionsError } = await db
-      .from('missions')
-      .select('id, provider_id, fixed_rate, paid_at, completed_at')
-      .eq('status', 'paid')
-      .not('provider_id', 'is', null)
-      .gte('paid_at', yearStart)
-      .lt('paid_at', yearEnd)
-
-    if (missionsError) throw new Error(`Failed to fetch missions: ${missionsError.message}`)
-
-    // Also fetch paid emergency requests for the year
-    const { data: paidEmergencies, error: emergenciesError } = await db
-      .from('emergency_requests')
-      .select('id, accepted_provider_id, displacement_fee, diagnostic_fee, paid_at')
-      .eq('status', 'paid')
-      .not('accepted_provider_id', 'is', null)
-      .gte('paid_at', yearStart)
-      .lt('paid_at', yearEnd)
-
-    // Silently ignore if emergency_requests table doesn't exist or has no paid_at
-    const emergencies = emergenciesError ? [] : (paidEmergencies || [])
-
-    // ── 4. Aggregate per provider ───────────────────────────────────────────
-    const providerMap: Record<string, { transaction_count: number; total_amount_ht: number }> = {}
-
-    for (const m of (paidMissions || [])) {
-      const pid = m.provider_id
-      if (!pid) continue
-      const amount = Number(m.fixed_rate ?? 0)
-      if (!providerMap[pid]) providerMap[pid] = { transaction_count: 0, total_amount_ht: 0 }
-      providerMap[pid].transaction_count += 1
-      providerMap[pid].total_amount_ht += amount
-    }
-
-    for (const e of emergencies) {
-      const pid = e.accepted_provider_id
-      if (!pid) continue
-      const amount = Number(e.displacement_fee ?? 0) + Number(e.diagnostic_fee ?? 0)
-      if (!providerMap[pid]) providerMap[pid] = { transaction_count: 0, total_amount_ht: 0 }
-      providerMap[pid].transaction_count += 1
-      providerMap[pid].total_amount_ht += amount
-    }
-
-    const providerIds = Object.keys(providerMap)
-
-    // ── 5. Fetch provider identity details ──────────────────────────────────
-    interface ProviderProfile {
-      id: string;
-      full_name?: string;
-      name?: string;
-      email?: string;
-      siret?: string;
-      siren?: string;
-      billing_address?: string;
-      company_name?: string;
-    }
-    let providersById: Record<string, ProviderProfile> = {}
-    if (providerIds.length > 0) {
-      const { data: profiles, error: profilesError } = await db
-        .from('profiles')
-        .select('id, full_name, name, email, siret, siren, billing_address, company_name')
-        .in('id', providerIds)
-
-      if (profilesError) throw new Error(`Failed to fetch provider profiles: ${profilesError.message}`)
-
-      for (const p of (profiles || [])) {
-        providersById[p.id] = p
-      }
-    }
-
-    // ── 6. Build report entries ─────────────────────────────────────────────
-    const COMMISSION_RATE = 0.10
-    const TVA_RATE = 0.20
-
-    const providerEntries = providerIds.map((pid) => {
-      const agg = providerMap[pid]
-      const profile = providersById[pid] || {}
-      const totalHt = parseFloat(agg.total_amount_ht.toFixed(2))
-      // Amount the provider actually received (after Altio commission)
-      const netHt = parseFloat((totalHt * (1 - COMMISSION_RATE)).toFixed(2))
-      const totalTtc = parseFloat((totalHt * (1 + TVA_RATE)).toFixed(2))
-
-      // Art. 242 bis exemption: < 20 transactions AND < 3000 EUR
-      const exempt = agg.transaction_count < 20 && totalHt < 3000
-
-      return {
-        provider_id: pid,
-        full_name: profile.full_name || profile.name || profile.company_name || 'N/A',
-        email: profile.email || null,
-        siret: profile.siret || profile.siren || null,
-        address: profile.billing_address || null,
-        transaction_count: agg.transaction_count,
-        total_amount_ht: totalHt,
-        total_amount_ttc: totalTtc,
-        net_received_ht: netHt,
-        exempt_art_242_bis: exempt,
-      }
-    })
-
-    // Sort by total amount descending
-    providerEntries.sort((a, b) => b.total_amount_ht - a.total_amount_ht)
-
-    // ── 7. Build summary ────────────────────────────────────────────────────
-    const totalProviders = providerEntries.length
-    const totalTransactions = providerEntries.reduce((s, e) => s + e.transaction_count, 0)
-    const totalAmountHt = parseFloat(providerEntries.reduce((s, e) => s + e.total_amount_ht, 0).toFixed(2))
-    const totalAmountTtc = parseFloat(providerEntries.reduce((s, e) => s + e.total_amount_ttc, 0).toFixed(2))
-    const exemptCount = providerEntries.filter((e) => e.exempt_art_242_bis).length
-    const reportableCount = totalProviders - exemptCount
-
-    const report = {
-      report_type: 'annual_provider_summary_art_242_bis_cgi',
-      year,
-      generated_at: new Date().toISOString(),
-      generated_by: user.id,
-      deadline: `${year + 1}-01-31`,
-      penalty_rate: '5% on undeclared amounts',
-      summary: {
-        total_providers: totalProviders,
-        reportable_providers: reportableCount,
-        exempt_providers: exemptCount,
-        total_transactions: totalTransactions,
-        total_amount_ht: totalAmountHt,
-        total_amount_ttc: totalAmountTtc,
-      },
-      providers: providerEntries,
-    }
-
-    // ── 8. Store report in Supabase Storage ─────────────────────────────────
-    const fileName = `reports/annual-report-${year}.json`
-    const reportJson = JSON.stringify(report, null, 2)
-
-    const { error: uploadError } = await db.storage
-      .from('invoices')
-      .upload(fileName, new TextEncoder().encode(reportJson), {
-        contentType: 'application/json',
-        upsert: true,
-      })
-
-    if (uploadError) throw new Error(`Storage upload failed: ${uploadError.message}`)
-
-    const { data: signedReport } = await db.storage
-      .from('invoices')
-      .createSignedUrl(fileName, 60 * 60)
-
-    // ── 9. Return response ──────────────────────────────────────────────────
-    return new Response(
-      JSON.stringify({
-        success: true,
-        report_url: signedReport?.signedUrl ?? fileName,
-        report,
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-    )
-  } catch (error) {
-    return new Response(
-      JSON.stringify({ error: error.message }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-    )
+// A financial-document export for reconciliation. This is not a DAC7 filing:
+// the legacy 242 bis format and assumed exemptions must never be advertised.
+serve(async req => {
+ const preflight=handleCors(req);if(preflight)return preflight;
+ const reply=(body:unknown,status=200)=>Response.json(body,{status,headers:{...corsHeaders,'Cache-Control':'no-store'}});
+ if(req.method!=='POST')return reply({error:'Method not allowed'},405);
+ try {
+  const {user}=await requireAuth(req);
+  const userId=user.id;
+  const db=createClient(Deno.env.get('SUPABASE_URL')!,Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+  const {data:profile,error:profileError}=await db.from('users').select('is_admin').eq('id',userId).single();
+  if(profileError||profile?.is_admin!==true)return reply({error:'Forbidden'},403);
+  const {year}=await req.json();if(!Number.isInteger(year)||year<2020||year>2100)return reply({error:'Invalid year'},400);
+  const documents:unknown[]=[];
+  for(let start=0;;start+=500){
+   const {data,error}=await db.from('invoices')
+    .select('id,invoice_number,invoice_type,related_invoice_id,seller_id,buyer_id,amount_ht,amount_ttc,vat_rate,status,stripe_pi_id,created_at')
+    .gte('created_at',`${year}-01-01T00:00:00.000Z`).lt('created_at',`${year+1}-01-01T00:00:00.000Z`)
+    .order('id').range(start,start+499);
+   if(error||!Array.isArray(data))return reply({error:'Report temporarily unavailable'},503);
+   documents.push(...data);if(data.length<500)break;
   }
-})
+  return reply({success:true,report:{report_type:'financial_documents_for_reconciliation',year,generated_at:new Date().toISOString(),generated_by:userId,
+   tax_filing_ready:false,scope:'Documents émis sur l’année, avoirs et factures annulées inclus. Les encaissements, reversements et obligations DAC7 doivent être rapprochés séparément.',documents}});
+ }catch{return reply({error:'Report unavailable; verify your session and request'},400);}
+});

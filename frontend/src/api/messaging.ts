@@ -7,7 +7,7 @@ export const getMessages = async (missionId?: string, emergencyId?: string) => {
 
   let query = supabase
     .from('messages')
-    .select('*, sender:users!messages_sender_id_fkey(name, picture), receiver:users!messages_receiver_id_fkey(name, picture)')
+    .select('*, sender:public_profiles!messages_sender_id_fkey(name, picture), receiver:public_profiles!messages_receiver_id_fkey(name, picture)')
     .order('created_at', { ascending: true });
 
   if (missionId) query = query.eq('mission_id', missionId);

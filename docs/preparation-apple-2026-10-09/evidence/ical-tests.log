@@ -1,0 +1,41 @@
+✔ iCal endpoint denies untrusted callers before reading data {} (74.566958ms)
+✔ iCal endpoint denies untrusted callers before reading data {"authorization":"Bearer forged"} (10.56375ms)
+✔ iCal endpoint denies untrusted callers before reading data {"x-service-key":"wrong"} (9.737459ms)
+✔ iCal user request checks ownership and refuses a different owner (6.706292ms)
+✔ worker health check is authenticated and has no data side effects (5.363167ms)
+✔ failed or partial imports do not mark the property synchronized {"fetchError":true} (6.914458ms)
+✔ failed or partial imports do not mark the property synchronized {"rpcError":{"message":"failure"}} (5.660666ms)
+✔ failed or partial imports do not mark the property synchronized {"twoSources":true} (5.028ms)
+✔ successful import records synchronization after the database confirms it (8.687417ms)
+✔ calendar parser handles folded lines and does not duplicate UIDs (5.095208ms)
+✔ invalid/unsupported calendar does not report success <html>login</html> (0.219583ms)
+✔ invalid/unsupported calendar does not report success BEGIN:VCALENDAR
+BEGIN (0.109875ms)
+✔ invalid/unsupported calendar does not report success BEGIN:VCALENDAR
+BEGIN (0.087125ms)
+✔ invalid/unsupported calendar does not report success BEGIN:VCALENDAR
+BEGIN (0.092416ms)
+✔ invalid/unsupported calendar does not report success BEGIN:VCALENDAR
+BEGIN (0.076625ms)
+✔ blocked dates remain unavailable (0.132958ms)
+✔ rejects unsafe calendar destination http://www.airbnb.fr/calendar/ical/x (0.908166ms)
+✔ rejects unsafe calendar destination https://127.0.0.1/x (0.099417ms)
+✔ rejects unsafe calendar destination https://169.254.169.254/x (0.554542ms)
+✔ rejects unsafe calendar destination https://airbnb.com.evil.example/x (0.162917ms)
+✔ rejects unsafe calendar destination https://user:pass@www.airbnb.com/x (0.188833ms)
+✔ rejects unsafe calendar destination https://ical.booking.com:444/x (0.162084ms)
+✔ rejects unsafe calendar destination file:///etc/passwd (0.083875ms)
+✔ fetch refuses a redirect to a private network before requesting it (19.019041ms)
+✔ fetch reads a real calendar response (4.790042ms)
+✔ fetch rejects oversized response without reading it (0.930542ms)
+✔ atomic iCal import is scoped to property and source; retries do not recreate reservations (1198.544916ms)
+✔ legacy imports are adopted without deleting or duplicating their existing row (578.192208ms)
+✔ cron uses Vault and net.http_post, and supports a non-mutating health check (545.913708ms)
+ℹ tests 29
+ℹ suites 0
+ℹ pass 29
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2446.3535

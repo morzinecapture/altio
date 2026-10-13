@@ -1,0 +1,9 @@
+Altio connects vacation rental owners with cleaning and maintenance professionals. Payments are for physical services performed outside the app. No digital goods or subscriptions are sold.
+
+Use the owner demo credentials supplied in App Store Connect. This account contains two fictional properties and two assigned cleaning missions. Review route: Accueil > Logements > select a property; Planning > Missions > select a mission to view its details and messages; Compte > legal information.
+
+Account deletion is available in Compte > Supprimer mon compte. The populated demonstration account has ongoing missions, which prevent deletion; a newly registered account without ongoing work can be used to inspect deletion.
+
+Camera and photo library access support property and intervention photographs. Location helps find nearby services. Notifications support mission follow-up.
+
+Please contact morzinecapture@gmail.com for assistance.

@@ -1,0 +1,12 @@
+Préparation App Store — 1 octobre 2026
+
+Les textes fr-FR sont des propositions fondées sur les fonctionnalités présentes dans le code. Leur publication attend la levée des blocages de l’audit et la validation des parcours sur le binaire de production.
+Catégorie proposée : Productivité ; secondaire éventuelle : Économie et entreprise. Choix final dans App Store Connect.
+Classification d’âge : remplir le questionnaire Apple selon messagerie, contenus utilisateurs et fonctions réellement accessibles ; aucun âge n’a été inventé.
+Copyright : compléter avec le titulaire légal exact.
+
+URLs testées : https://altio.app/confidentialite et https://altio.app/contact — HTTP 404 le 01/10/2026. Ne pas les soumettre en l’état. La page confidentialité du site dans le dépôt ne couvre actuellement que le site vitrine.
+
+Ne pas promettre « fonctionne entièrement hors ligne », « prestataire garanti », « intervention immédiate », « facturation légalement certifiée » ou « paiements testés de bout en bout » : ces promesses ne sont pas établies par cet audit.
+
+Captures : montrer l’application réelle avec des données de démonstration, jamais les coordonnées de clients ou des codes d’accès aux logements. Textes proposés dans fr-FR/screenshot-copy.json. Les images sans parcours connecté validé ne constituent pas encore la série finale.

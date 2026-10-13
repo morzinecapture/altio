@@ -1,0 +1,11 @@
+Captures et habillages — 01/10/2026
+
+raw/ contient de vraies captures du simulateur iPhone 17 (1206 × 2622) : accueil, connexion email, inscription. Aucune donnée de compte n’a été fabriquée ni aucun écran métier validé sans connexion.
+
+brouillons/ contient des essais d’habillage générés à partir des captures, avec titres. Ce sont des maquettes de direction artistique, PAS des captures prêtes à téléverser. La génération peut réinterpréter des pixels du screenshot ; elle ne garantit pas une copie fidèle. Le premier export mesure 851 × 1849, hors formats Apple. Conserver les originaux pour réaliser l’assemblage final sans altérer l’interface.
+
+Série finale prévue : six vues réelles (accueil propriétaire, planning, logements, prestataires, mission, accueil prestataire), avec les textes de ../fr-FR/screenshot-copy.json. Capturer en 6,9 pouces et exporter dans un format accepté, par exemple 1320 × 2868, sans transparence. Source : https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications/
+
+Avant publication : obtenir des comptes de démonstration alimentés, corriger/justifier les promesses visibles (assurance, délai de 2h, disponibilité 24/7, note 5.0), corriger la barre d’état claire sur fond clair, confirmer le rendu sur le binaire de production.
+
+Les captures d’authentification ne suffisent pas à présenter les fonctions métier. Elles servent à cette première revue et à préparer le style de la série finale.

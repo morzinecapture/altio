@@ -1,0 +1,19 @@
+{
+  "date": "2026-10-11",
+  "publicCopyCompleted": true,
+  "regionVerified": "eu-west-1",
+  "sources": [
+    "https://www.cnil.fr/fr/passer-laction/les-durees-de-conservation-des-donnees",
+    "https://vercel.com/legal/privacy-notice",
+    "https://vercel.com/legal/dmca-policy",
+    "https://supabase.com/legal/customer-resources/data-processing-addendum"
+  ],
+  "operationalValidationStillRequired": [
+    "Withdrawal endpoint and durable acknowledgement deployment",
+    "Retention execution and backup purge configuration",
+    "Supplier contractual account review and transfer safeguards",
+    "DAC7 operational declarations",
+    "Physical Apple revocation test"
+  ],
+  "warning": "Completing the text does not certify implementation of these obligations."
+}

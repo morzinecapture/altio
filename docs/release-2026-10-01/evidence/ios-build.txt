@@ -1,0 +1,5 @@
+01/10/2026 : xcodebuild -workspace frontend/ios/Altio.xcworkspace -scheme Altio -configuration Debug -sdk iphonesimulator -derivedDataPath /tmp/altio-release-derived CODE_SIGNING_ALLOWED=NO build
+Résultat : BUILD SUCCEEDED
+SDK : iOS simulator 26.5
+Installation : iPhone 17 booted
+Binaire de développement non signé ; ce n’est pas une validation de l’archive App Store.

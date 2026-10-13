@@ -44,8 +44,8 @@ describe('Machine a etats des missions', () => {
       expect(isValidMissionTransition('in_progress', 'assigned')).toBe(false);
     });
 
-    it('validated ne peut aller que vers paid', () => {
-      const invalidTargets = ALL_MISSION_STATUSES.filter(s => s !== 'paid');
+    it('validated ne peut aller que vers paid ou dispute (paiement abandonné)', () => {
+      const invalidTargets = ALL_MISSION_STATUSES.filter(s => s !== 'paid' && s !== 'dispute');
       for (const target of invalidTargets) {
         expect(isValidMissionTransition('validated', target)).toBe(false);
       }

@@ -54,7 +54,7 @@ export default function AdminOverview() {
   const KPI_CONFIG = [
     { key: 'active_missions_count',      label: t('admin.overview.active_missions'),      icon: 'briefcase-outline',  color: COLORS.info,         bg: COLORS.infoSoft },
     { key: 'commissions_this_month',     label: t('admin.overview.commissions_month'),   icon: 'trending-up-outline', color: COLORS.success,      bg: COLORS.successSoft, isMoney: true },
-    { key: 'new_users_30d',              label: t('admin.overview.new_users_30d'),   icon: 'people-outline',     color: COLORS.brandPrimary, bg: '#EEF2FF' },
+    { key: 'new_users_30d',              label: t('admin.overview.new_users_30d'),   icon: 'people-outline',     color: COLORS.brandPrimary, bg: COLORS.infoSoft },
     { key: 'active_emergencies',         label: t('admin.overview.active_emergencies'),      icon: 'warning-outline',    color: COLORS.urgency,      bg: COLORS.urgencySoft },
   ];
 
@@ -119,7 +119,7 @@ export default function AdminOverview() {
           refreshControl={<RefreshControl refreshing={false} onRefresh={() => refetchAll()} />}
         >
           {/* Header */}
-          <LinearGradient colors={['#F3EEFF', '#EEF2FF', '#F0F4FF']} style={styles.header}>
+          <LinearGradient colors={['#F3EEFF', COLORS.infoSoft, '#F0F4FF']} style={styles.header}>
             <View>
               <View style={styles.adminBadge}>
                 <Ionicons name="shield-checkmark" size={12} color={COLORS.purple} />
@@ -206,7 +206,7 @@ export default function AdminOverview() {
           </View>
           <View style={styles.shortcuts}>
             {[
-              { label: t('admin.overview.manage_users'),      icon: 'people-outline',      route: '/(admin)/users',       color: COLORS.brandPrimary, bg: '#EEF2FF' },
+              { label: t('admin.overview.manage_users'),      icon: 'people-outline',      route: '/(admin)/users',       color: COLORS.brandPrimary, bg: COLORS.infoSoft },
               { label: t('admin.overview.emergencies'),             icon: 'warning-outline',     route: '/(admin)/emergencies', color: COLORS.urgency,      bg: COLORS.urgencySoft },
               { label: t('admin.overview.finances'),             icon: 'bar-chart-outline',   route: '/(admin)/finances',    color: COLORS.success,      bg: COLORS.successSoft },
               { label: t('admin.overview.partners'),          icon: 'storefront-outline',  route: '/(admin)/partners',    color: COLORS.purple,       bg: COLORS.purpleSoft },
@@ -239,11 +239,11 @@ export default function AdminOverview() {
                           <Ionicons name="warning" size={16} color="#D97706" />
                         </View>
                         <View>
-                          <Text style={{ fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 14, color: '#1E3A5F' }}>{d.mission_type ? getMissionTypeLabel(d.mission_type) : 'Mission'}</Text>
+                          <Text style={{ fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 14, color: COLORS.textPrimary }}>{d.mission_type ? getMissionTypeLabel(d.mission_type) : 'Mission'}</Text>
                           {propName ? <Text style={{ fontFamily: 'PlusJakartaSans_400Regular', fontSize: 11, color: COLORS.textTertiary }}>{propName}</Text> : null}
                         </View>
                       </View>
-                      <Text style={{ fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 15, color: '#1E3A5F' }}>{d.fixed_rate || 0}€</Text>
+                      <Text style={{ fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 15, color: COLORS.textPrimary }}>{d.fixed_rate || 0}€</Text>
                     </View>
 
                     <View style={{ flexDirection: 'row', gap: SPACING.lg, marginBottom: SPACING.sm }}>
@@ -319,13 +319,13 @@ const styles = StyleSheet.create({
   header: { padding: SPACING.xl, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   adminBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: COLORS.purpleSoft, paddingHorizontal: SPACING.sm, paddingVertical: 3, borderRadius: RADIUS.full, alignSelf: 'flex-start', marginBottom: SPACING.sm },
   adminBadgeText: { ...FONTS.caption, color: COLORS.purple, fontSize: 10 },
-  title: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 24, color: '#1E3A5F' },
+  title: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 24, color: COLORS.textPrimary },
   subtitle: { ...FONTS.bodySmall, color: COLORS.textSecondary, marginTop: 2 },
   avatarBtn: { marginTop: SPACING.sm },
   alertBanner: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, backgroundColor: COLORS.urgencySoft, marginHorizontal: SPACING.xl, marginTop: SPACING.md, padding: SPACING.md, borderRadius: RADIUS.md },
   alertText: { ...FONTS.bodySmall, color: COLORS.urgency, flex: 1 },
   sectionHeader: { paddingHorizontal: SPACING.xl, paddingTop: SPACING.xl, paddingBottom: SPACING.sm },
-  sectionTitle: { ...FONTS.h3, color: '#1E3A5F', fontSize: 15 },
+  sectionTitle: { ...FONTS.h3, color: COLORS.textPrimary, fontSize: 15 },
   kpiGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: SPACING.lg, gap: SPACING.md },
   kpiCard: { flex: 1, minWidth: '44%', backgroundColor: '#FFFFFF', borderRadius: RADIUS.md, padding: SPACING.md, ...SHADOWS.card, borderLeftWidth: 3 },
   kpiIcon: { width: 36, height: 36, borderRadius: RADIUS.sm, justifyContent: 'center', alignItems: 'center', marginBottom: SPACING.sm },
@@ -333,18 +333,18 @@ const styles = StyleSheet.create({
   kpiLabel: { ...FONTS.bodySmall, color: COLORS.textSecondary, marginTop: 2 },
   statsRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.subtle, marginHorizontal: SPACING.xl, borderRadius: RADIUS.md, padding: SPACING.md, marginTop: SPACING.md },
   statItem: { flex: 1, alignItems: 'center' },
-  statValue: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 17, color: '#1E3A5F' },
+  statValue: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 17, color: COLORS.textPrimary },
   statLabel: { ...FONTS.bodySmall, color: COLORS.textSecondary, marginTop: 2, textAlign: 'center' },
   statDivider: { width: 1, height: 30, backgroundColor: COLORS.border },
   shortcuts: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: SPACING.lg, gap: SPACING.md },
   shortcutBtn: { flex: 1, minWidth: '44%', alignItems: 'center', backgroundColor: '#FFFFFF', borderRadius: RADIUS.md, padding: SPACING.lg, ...SHADOWS.card, gap: SPACING.sm },
   shortcutIcon: { width: 44, height: 44, borderRadius: RADIUS.sm, justifyContent: 'center', alignItems: 'center' },
-  shortcutLabel: { ...FONTS.bodySmall, color: '#1E3A5F', textAlign: 'center' },
+  shortcutLabel: { ...FONTS.bodySmall, color: COLORS.textPrimary, textAlign: 'center' },
   auditList: { marginHorizontal: SPACING.xl, gap: SPACING.sm },
   auditRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, paddingVertical: SPACING.sm, borderBottomWidth: 1, borderBottomColor: COLORS.border },
   auditDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: COLORS.purple },
   auditBody: { flex: 1 },
-  auditAction: { ...FONTS.bodySmall, color: '#1E3A5F' },
+  auditAction: { ...FONTS.bodySmall, color: COLORS.textPrimary },
   auditTime: { ...FONTS.bodySmall, color: COLORS.textTertiary, marginTop: 2 },
-  disputeCard: { marginHorizontal: SPACING.xl, marginBottom: SPACING.md, backgroundColor: '#FFFFFF', borderRadius: RADIUS.md, padding: SPACING.lg, borderWidth: 1, borderColor: '#FDE68A', ...SHADOWS.card },
+  disputeCard: { marginHorizontal: SPACING.xl, marginBottom: SPACING.md, backgroundColor: '#FFFFFF', borderRadius: RADIUS.md, padding: SPACING.lg, borderWidth: 1, borderColor: COLORS.warningSoft, ...SHADOWS.card },
 });

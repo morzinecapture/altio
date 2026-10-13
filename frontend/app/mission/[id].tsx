@@ -14,20 +14,26 @@ import * as ImagePicker from 'expo-image-picker';
 import { useStripe } from '@stripe/stripe-react-native';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { ownerMultiplier, providerMultiplier } from '../../src/config/billing';
+import { priceFromTtc, providerVatRate } from '../../src/utils/commission';
 import { supabase } from '../../src/lib/supabase';
 import type { MergedMission, MissionApplicationEnriched, MissionPhoto, Review, ProviderProfile } from '../../src/types/api';
 import ProviderMissionReview from '../../src/components/missions/ProviderMissionReview';
+import { MARKETPLACE, MissionContact, marketStyles } from '../../src/components/alpine/MarketplaceKit';
 import { missionKeys } from '../../src/hooks/useMissions';
 
 export default function MissionDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
+  // Owner price for the assigned provider: TTC rate + 10 % of its HT (server-checked).
+  const ownerPrice = (rate?: number | null) => priceFromTtc(Number(rate) || 0, providerVatRate(mission?.assigned_provider_is_vat_exempt));
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [mission, setMission] = useState<MergedMission | null>(null);
+  const [showOtherActions, setShowOtherActions] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [proposedRate, setProposedRate] = useState('');
+  const [applying, setApplying] = useState(false);
   const [uploadingPhotos, setUploadingPhotos] = useState(false);
   const [existingReview, setExistingReview] = useState<Review | null>(null);
   const [reviewRating, setReviewRating] = useState(5);
@@ -92,12 +98,6 @@ export default function MissionDetailScreen() {
         .maybeSingle();
       setQuoteId(quoteRow?.id || null);
 
-      // Auto-trigger rating modal if mission paid but no review yet (owner only)
-      if (data && data.status === 'paid' && !review && user?.role === 'owner') {
-        setModalRating(0);
-        setModalComment('');
-        setShowRatingModal(true);
-      }
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
   };
@@ -110,15 +110,13 @@ export default function MissionDetailScreen() {
     } catch (e) { Alert.alert(t('common.error'), e instanceof Error ? e.message : String(e)); }
   };
 
-  const handleAcceptApp = (appId: string, proposedRate: number | null | undefined) => {
+  const handleAcceptApp = (appId: string, proposedRate: number | null | undefined, providerIsVatExempt?: boolean) => {
     const base = Number(proposedRate) || 0;
     if (base <= 0) {
-      // Fallback : pas de tarif disponible, accepter directement
-      confirmAcceptApp(appId);
+      Alert.alert('Tarif manquant', 'Le prestataire doit proposer un tarif pour l’ensemble des prestations avant confirmation.');
       return;
     }
-    const fee = Math.round(base * 0.10 * 100) / 100;
-    const total = Math.round(base * ownerMultiplier * 100) / 100;
+    const { fee, total } = priceFromTtc(base, providerVatRate(providerIsVatExempt));
     Alert.alert(
       'Assigner ce prestataire',
       `Tarif de la mission : ${base.toFixed(2)}€\nFrais de service Altio : ${fee.toFixed(2)}€\n\nTotal (paiement après validation) : ${total.toFixed(2)}€ TTC`,
@@ -137,8 +135,12 @@ export default function MissionDetailScreen() {
   };
 
   const handleApply = async () => {
+    if (applying) return;
+    const rate = mission?.fixed_rate || Number(proposedRate.replace(',', '.'));
+    if (!Number.isFinite(rate) || rate <= 0) { Alert.alert(t('common.error'), 'Indiquez un tarif total pour toutes les prestations.'); return; }
+    setApplying(true);
     try {
-      await applyToMission(id!, { proposed_rate: mission?.fixed_rate, message: 'Disponible' });
+      await applyToMission(id!, { proposed_rate: rate, message: 'Disponible pour l’ensemble des prestations demandées' });
       const isBroadcast = !mission?.assigned_provider_id;
       Alert.alert(
         isBroadcast ? 'Votre disponibilité a été enregistrée' : 'Candidature envoyée !',
@@ -147,7 +149,7 @@ export default function MissionDetailScreen() {
       fetchData();
     } catch (e) {
       Alert.alert(t('common.error'), e instanceof Error ? e.message : String(e));
-    }
+    } finally { setApplying(false); }
   };
 
   const handleDeclineBroadcast = async () => {
@@ -201,20 +203,18 @@ export default function MissionDetailScreen() {
 
   const handleValidateAndPay = async () => {
     const rate = mission?.fixed_rate || 0;
-    const ownerTotal = Math.round(rate * ownerMultiplier);
-    const totalTTC = Math.round(ownerTotal * 1.20 * 100) / 100;
+    const { fee, total: ownerTotal } = ownerPrice(rate);
 
     Alert.alert(
       'Valider et payer',
-      `Total : ${ownerTotal.toFixed(2)} € HT (${totalTTC.toFixed(2)} € TTC)\n` +
-      `Frais de service inclus.\n\n` +
-      `En validant, vous confirmez la bonne exécution de la prestation. ` +
-      `Conformément à l'art. L221-28 du Code de la consommation, ` +
-      `vous renoncez à votre droit de rétractation pour cette prestation pleinement exécutée.`,
+      `Prestation : ${rate.toFixed(2)} € TTC\n` +
+      `Frais Altio : ${fee.toFixed(2)} € TTC\n` +
+      `Total à payer : ${ownerTotal.toFixed(2)} € TTC\n\n` +
+      `En validant, vous confirmez la bonne exécution de la prestation. Vos droits légaux et vos recours restent applicables.`,
       [
         { text: t('common.cancel'), style: 'cancel' },
         {
-          text: `Payer ${ownerTotal}€`,
+          text: `Payer ${ownerTotal.toFixed(2)}€`,
           onPress: async () => {
             try {
               setLoading(true);
@@ -231,8 +231,15 @@ export default function MissionDetailScreen() {
               const { error: presentError } = await presentPaymentSheet();
               if (presentError) throw new Error(presentError.message);
               // Step 3: Complete payment + generate invoices (pass PI ID for invoice linking)
-              await completeMissionPayment(id as string, paymentIntentId);
+              const invoiceGeneration = await completeMissionPayment(id as string, paymentIntentId);
               await fetchData();
+
+              if (invoiceGeneration.failedTypes.length > 0) {
+                Alert.alert(
+                  'Paiement confirmé',
+                  'Votre paiement a bien été enregistré, mais la facture est temporairement indisponible. Notre équipe a été alertée.'
+                );
+              }
 
               // Step 4: If first validated cleaning, propose auto-cleaning
               if (mission?.mission_type === 'cleaning' && mission?.property_id) {
@@ -442,7 +449,7 @@ export default function MissionDetailScreen() {
       <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-            <Ionicons name="arrow-back" size={24} color="#1E3A5F" />
+            <Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Proposition de mission</Text>
           <View style={{ width: 44 }} />
@@ -479,34 +486,40 @@ export default function MissionDetailScreen() {
   const statusColor = STATUS_COLORS[mission.status] || STATUS_COLORS.pending;
 
   return (
-    <SafeAreaView style={styles.container} testID="mission-detail-screen" edges={['top']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: MARKETPLACE.cobalt }]} testID="mission-detail-screen" edges={['top']}>
       <View style={styles.header}>
         <TouchableOpacity testID="back-btn" onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="arrow-back" size={24} color="#1E3A5F" />
+          <Ionicons name="arrow-back" size={24} color={COLORS.paper} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{t('mission.title')}</Text>
         <View style={{ width: 44 }} />
       </View>
 
-      {/* Mission Progress Timeline */}
-      {!['cancelled', 'rejected', 'refunded', 'expired', 'dispute'].includes(mission.status) && (
-        <StatusTimeline status={mission.status} />
-      )}
-
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
-        {/* Status */}
+      <ScrollView style={{ backgroundColor: MARKETPLACE.canvas }} showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
+        <View style={marketStyles.hero}>
         <View style={styles.statusRow}>
           <View style={[styles.pillStrict, { backgroundColor: statusColor.bg }]}>
-            <Text style={[styles.pillStrictText, { color: statusColor.text }]}>{STATUS_LABELS[mission.status] || mission.status}</Text>
+            <Text style={[styles.pillStrictText, { color: statusColor.text }]}>{isProvider && mission.status === 'awaiting_payment' ? t('alpine.clientPayment') : STATUS_LABELS[mission.status] || mission.status}</Text>
           </View>
-          <Text style={styles.cardStrictCategory}>{getMissionTypeLabel(mission.mission_type).toUpperCase()}</Text>
+          <Text style={[styles.cardStrictCategory, { color: MARKETPLACE.heroMuted }]}>{getMissionTypeLabel(mission.mission_type, mission.services).toUpperCase()}</Text>
+          {mission.priority === 'urgent' && <Text style={{ ...FONTS.bodySmall, color: COLORS.urgency }}>Urgente · délai à confirmer avec le prestataire</Text>}
+          {!!mission.linen_service && <Text style={{ ...FONTS.bodySmall, color: MARKETPLACE.heroMuted }}>Linge : {mission.linen_service}</Text>}
         </View>
+
+        <Text style={marketStyles.heroTitle}>{mission.property_name || getMissionTypeLabel(mission.mission_type, mission.services)}</Text>
+        <Text style={marketStyles.heroSubtitle}>{getMissionTypeLabel(mission.mission_type, mission.services)}</Text>
+        <View style={{ marginTop: 22 }}><StatusTimeline status={mission.status} /></View>
+        </View>
+        {['pending', 'pending_provider_approval', 'assigned', 'in_progress', 'awaiting_payment', 'validated', 'paid', 'completed'].includes(mission.status) && <View style={[styles.nextStep, mission.status === 'awaiting_payment' && marketStyles.waiting]}>
+          <Text style={styles.nextStepEyebrow}>{t('alpine.nextStep')}</Text>
+          <Text style={styles.nextStepText}>{t(mission.status === 'assigned' ? isOwner ? 'alpine.ownerAssigned' : 'alpine.providerAssigned' : mission.status === 'in_progress' ? 'alpine.inProgress' : mission.status === 'awaiting_payment' ? isOwner ? 'alpine.ownerPayment' : 'alpine.providerPayment' : ['pending', 'pending_provider_approval'].includes(mission.status) ? isOwner ? 'alpine.ownerPending' : 'alpine.providerPending' : 'alpine.done')}</Text>
+        </View>}
 
         {/* Info Card */}
         <View style={styles.cardStrict}>
           <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: SPACING.md }}>
             <Image
-              source={{ uri: `https://ui-avatars.com/api/?name=${mission.property_name?.replace(/\s/g, '+') || 'Prop'}&background=1E3A5F&color=fff&size=200&font-size=0.4` }}
+              source={require('../../assets/images/icon.png')}
               style={{ width: 40, height: 40, borderRadius: 20, marginRight: SPACING.md }}
             />
             <View>
@@ -520,9 +533,6 @@ export default function MissionDetailScreen() {
           </View>
           {mission.description && <Text style={[styles.providerTextStrict, { marginBottom: SPACING.lg }]}>{mission.description}</Text>}
 
-          {mission.property_address && isOwner && (
-            <Text style={{ color: '#64748B', fontSize: 13, marginTop: 4, marginBottom: 4 }}>{mission.property_address}</Text>
-          )}
 
           <View style={styles.metaGrid}>
             <MetaItem icon="calendar-outline" label={t('mission.date_time')} value={mission.scheduled_date ? `${new Date(mission.scheduled_date).toLocaleDateString('fr-FR')} à ${new Date(mission.scheduled_date).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}` : t('mission.not_planned')} />
@@ -621,7 +631,7 @@ export default function MissionDetailScreen() {
         {/* View quote — both roles */}
         {quoteId && (
           <TouchableOpacity
-            style={[styles.applyBtnStrict, { backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0', marginBottom: SPACING.lg, marginTop: 0 }]}
+            style={[styles.applyBtnStrict, { backgroundColor: COLORS.background, borderWidth: 1, borderColor: '#E2E8F0', marginBottom: SPACING.lg, marginTop: 0 }]}
             onPress={() => router.push(`/quote/${quoteId}`)}
           >
             <Ionicons name="document-text-outline" size={20} color={COLORS.brandPrimary} />
@@ -633,20 +643,21 @@ export default function MissionDetailScreen() {
 
         {/* Chat (Owner view) — only after assignment */}
         {isOwner && mission.assigned_provider_id && !['pending', 'pending_provider_approval', 'cancelled', 'expired'].includes(mission.status) && (
-          <TouchableOpacity testID="chat-btn-owner" style={[styles.applyBtnStrict, { backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0', marginBottom: SPACING.lg, marginTop: 0 }]} onPress={() => router.push(`/chat/${id}?type=mission&receiverId=${mission.assigned_provider_id}&title=Discussion+Prestataire`)}>
-            <Ionicons name="chatbubbles-outline" size={20} color="#3B82F6" />
-            <Text style={[styles.applyTextStrict, { color: '#3B82F6' }]}>{t('mission.discuss_provider')}</Text>
-          </TouchableOpacity>
+          <MissionContact testID="chat-btn-owner" title={mission.assigned_provider_name || t('alpine.yourProvider')} subtitle={mission.property_name} onPress={() => router.push(`/chat/${id}?type=mission&receiverId=${mission.assigned_provider_id}&title=Discussion+Prestataire`)} />
+        )}
+
+        {isProvider && ['assigned', 'in_progress', 'awaiting_payment', 'completed', 'paid'].includes(mission.status) && mission.assigned_provider_id === user?.id && (
+          <MissionContact testID="chat-btn-provider" title={t('alpine.yourOwner')} subtitle={mission.property_name} onPress={() => router.push(`/chat/${id}?type=mission&receiverId=${mission.owner_id}&title=Discussion+Propriétaire`)} />
         )}
 
         {/* Access info for assigned provider */}
-        {isProvider && mission.assigned_provider_id === user?.id && mission.access_code && (
+        {isProvider && mission.assigned_provider_id === user?.id && !['pending', 'pending_provider_approval'].includes(mission.status) && (mission.access_code || mission.instructions || mission.deposit_location) && (
           <View style={[styles.cardStrict, { borderLeftWidth: 3, borderLeftColor: '#3B82F6' }]}>
-            <Text style={styles.sectionTitle}>{t('mission.access_info')}</Text>
-            <View style={styles.accessRow}>
+            <Text style={styles.sectionTitle}>{t('alpine.beforeLeaving')}</Text>
+            {!!mission.access_code && <View style={styles.accessRow}>
               <Ionicons name="key-outline" size={18} color="#3B82F6" />
-              <Text style={styles.providerTextStrict}>{t('mission.access_code')} <Text style={{ fontFamily: 'PlusJakartaSans_600SemiBold', color: '#1E3A5F' }}>{mission.access_code}</Text></Text>
-            </View>
+              <Text style={styles.providerTextStrict}>{t('mission.access_code')} <Text style={{ fontFamily: 'PlusJakartaSans_600SemiBold', color: COLORS.textPrimary }}>{mission.access_code}</Text></Text>
+            </View>}
             {mission.instructions && (
               <View style={styles.accessRow}>
                 <Ionicons name="document-text-outline" size={18} color="#3B82F6" />
@@ -722,33 +733,33 @@ export default function MissionDetailScreen() {
 
         {/* Mission paid — owner */}
         {isOwner && mission.status === 'paid' && (
-          <View style={[styles.cardStrict, { borderLeftWidth: 3, borderLeftColor: COLORS.success, backgroundColor: '#F0FDF4' }]}>
+          <View style={[styles.cardStrict, { borderLeftWidth: 3, borderLeftColor: COLORS.success, backgroundColor: COLORS.successSoft }]}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginBottom: SPACING.sm }}>
               <Ionicons name="checkmark-circle" size={24} color={COLORS.success} />
               <Text style={{ fontFamily: 'PlusJakartaSans_700Bold', fontSize: 18, color: COLORS.success }}>Mission terminée</Text>
             </View>
             <Text style={{ fontFamily: 'PlusJakartaSans_400Regular', fontSize: 14, color: '#64748B' }}>
-              {mission.fixed_rate ? `Paiement de ${Math.round(mission.fixed_rate * ownerMultiplier)}€ confirmé.` : 'Paiement confirmé.'} Le prestataire a été payé.
+              {mission.fixed_rate ? `Paiement de ${ownerPrice(mission.fixed_rate).total.toFixed(2)}€ confirmé.` : 'Paiement confirmé.'} Le prestataire a été payé.
             </Text>
           </View>
         )}
 
         {/* Mission paid — provider */}
         {isProvider && mission.status === 'paid' && (
-          <View style={[styles.cardStrict, { borderLeftWidth: 3, borderLeftColor: COLORS.success, backgroundColor: '#F0FDF4' }]}>
+          <View style={[styles.cardStrict, { borderLeftWidth: 3, borderLeftColor: COLORS.success, backgroundColor: COLORS.successSoft }]}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginBottom: SPACING.sm }}>
               <Ionicons name="checkmark-circle" size={24} color={COLORS.success} />
               <Text style={{ fontFamily: 'PlusJakartaSans_700Bold', fontSize: 18, color: COLORS.success }}>Mission terminée</Text>
             </View>
             <Text style={{ fontFamily: 'PlusJakartaSans_400Regular', fontSize: 14, color: '#64748B' }}>
-              {mission.fixed_rate ? `Votre paiement de ${Math.round(mission.fixed_rate * providerMultiplier)}€ net est en cours de traitement.` : 'Votre paiement est en cours de traitement.'} Il sera viré sur votre compte sous 2-3 jours ouvrés.
+              {mission.fixed_rate ? `Votre paiement de ${priceFromTtc(mission.fixed_rate, providerVatRate(user?.is_vat_exempt)).payout.toFixed(2)}€ net est en cours de traitement.` : 'Votre paiement est en cours de traitement.'} Il sera viré sur votre compte sous 2-3 jours ouvrés.
             </Text>
           </View>
         )}
 
         {/* Dispute banner */}
         {mission.status === 'dispute' && (
-          <View style={[styles.cardStrict, { borderLeftWidth: 3, borderLeftColor: COLORS.urgency, backgroundColor: '#FEF2F2' }]}>
+          <View style={[styles.cardStrict, { borderLeftWidth: 3, borderLeftColor: COLORS.urgency, backgroundColor: COLORS.urgencySoft }]}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginBottom: SPACING.sm }}>
               <Ionicons name="warning" size={24} color={COLORS.urgency} />
               <Text style={{ fontFamily: 'PlusJakartaSans_700Bold', fontSize: 18, color: COLORS.urgency }}>Litige en cours</Text>
@@ -766,7 +777,7 @@ export default function MissionDetailScreen() {
 
         {/* Dispute resolved banner */}
         {mission.dispute_resolved_at && mission.status !== 'dispute' && (
-          <View style={[styles.cardStrict, { borderLeftWidth: 3, borderLeftColor: COLORS.success, backgroundColor: '#F0FDF4' }]}>
+          <View style={[styles.cardStrict, { borderLeftWidth: 3, borderLeftColor: COLORS.success, backgroundColor: COLORS.successSoft }]}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginBottom: SPACING.sm }}>
               <Ionicons name="checkmark-circle" size={24} color={COLORS.success} />
               <Text style={{ fontFamily: 'PlusJakartaSans_700Bold', fontSize: 18, color: COLORS.success }}>Litige résolu</Text>
@@ -781,7 +792,7 @@ export default function MissionDetailScreen() {
 
         {/* Expired banner + republish */}
         {isOwner && mission.status === 'expired' && (
-          <View style={[styles.cardStrict, { borderLeftWidth: 3, borderLeftColor: COLORS.warning, backgroundColor: '#FFFBEB' }]}>
+          <View style={[styles.cardStrict, { borderLeftWidth: 3, borderLeftColor: COLORS.warning, backgroundColor: COLORS.warningSoft }]}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginBottom: SPACING.sm }}>
               <Ionicons name="time-outline" size={24} color={COLORS.warning} />
               <Text style={{ fontFamily: 'PlusJakartaSans_700Bold', fontSize: 18, color: COLORS.warning }}>Mission expirée</Text>
@@ -824,7 +835,7 @@ export default function MissionDetailScreen() {
         {/* Applications (Owner view) */}
         {isOwner && mission.applications && mission.applications.length > 0 && (
           <View style={styles.cardStrict}>
-            <Text style={styles.sectionTitle}>{t('mission.applications')} ({mission.applications.length})</Text>
+            <Text style={styles.sectionTitle}>{t('alpine.compare')} ({mission.applications.length})</Text>
             {mission.applications.map((app: MissionApplicationEnriched) => (
               <View key={app.id} style={styles.appItem}>
                 <View style={styles.appTop}>
@@ -833,10 +844,10 @@ export default function MissionDetailScreen() {
                     onPress={() => router.push(`/provider/${app.provider_id}`)}
                   >
                     <View style={styles.appAvatar}>
-                      <Text style={styles.appAvatarText}>{app.provider_name?.[0] || 'P'}</Text>
+                      {app.provider_picture ? <Image source={{ uri: app.provider_picture }} style={styles.appPhoto} /> : <Text style={styles.appAvatarText}>{app.provider_name?.[0] || 'P'}</Text>}
                     </View>
-                    <View>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACING.xs }}>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <View style={{ flexWrap: 'wrap', flexDirection: 'row', alignItems: 'center', gap: SPACING.xs }}>
                         <Text style={styles.appName}>{app.provider_name || t('mission.provider_label')}</Text>
                         {app.is_verified && (
                           <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.infoSoft, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
@@ -847,18 +858,18 @@ export default function MissionDetailScreen() {
                       </View>
                       <View style={styles.appRating}>
                         <Ionicons name="star" size={12} color={COLORS.warning} />
-                        <Text style={styles.appRatingText}>{app.provider_rating || 0}/5 ({app.provider_reviews || 0} {t('mission.reviews')})</Text>
+                        <Text style={styles.appRatingText}>{app.provider_reviews ? `${app.provider_rating || 0}/5 (${app.provider_reviews} ${t('mission.reviews')})` : t('alpine.providersNew')}</Text>
                       </View>
                     </View>
                   </TouchableOpacity>
-                  <Text style={styles.appRate}>{`${(Number(app.proposed_rate || 0) * ownerMultiplier).toFixed(2)}€ TTC`}</Text>
+                  <Text style={styles.appRate}>{`${priceFromTtc(Number(app.proposed_rate || 0), providerVatRate(app.provider_is_vat_exempt)).total.toFixed(2)}€ TTC`}</Text>
                 </View>
                 {app.message && <Text style={styles.appMessage}>{app.message}</Text>}
                 {app.status === 'pending' && (
                   <View style={styles.appActions}>
-                    <TouchableOpacity testID={`accept-app-${app.id}`} style={styles.acceptBtn} onPress={() => handleAcceptApp(app.id, app.proposed_rate)}>
+                    <TouchableOpacity testID={`accept-app-${app.id}`} style={styles.acceptBtn} onPress={() => handleAcceptApp(app.id, app.proposed_rate, app.provider_is_vat_exempt)}>
                       <Ionicons name="checkmark" size={18} color={COLORS.textInverse} />
-                      <Text style={styles.actionBtnText}>Assigner ce prestataire</Text>
+                      <Text style={styles.actionBtnText}>{t('alpine.chooseThisProvider')}</Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={styles.rejectBtn} onPress={() => handleRejectApp(app.id)}>
                       <Ionicons name="close" size={18} color={COLORS.urgency} />
@@ -914,18 +925,18 @@ export default function MissionDetailScreen() {
           </View>
         )}
 
-        {/* Owner Actions — awaiting_payment: Validate & Pay OR Dispute */}
+        {/* Owner Actions — awaiting_payment / validated (unpaid): Pay OR Dispute */}
         {isOwner && (mission.status === 'awaiting_payment' || mission.status === 'validated') && (
           <View>
-            {/* Price recap — all-inclusive, no fee breakdown (opacity rule) */}
+            {/* Price recap — owner sees its own Altio fee, never the provider's commission */}
             <View style={[styles.cardStrict, { borderLeftWidth: 3, borderLeftColor: COLORS.info, marginBottom: SPACING.md }]}>
               <Text style={styles.sectionTitle}>Récapitulatif</Text>
               <View style={{ gap: SPACING.xs }}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Text style={{ fontFamily: 'PlusJakartaSans_700Bold', fontSize: 15, color: '#1E3A5F' }}>Total</Text>
-                  <Text style={{ fontFamily: 'PlusJakartaSans_700Bold', fontSize: 18, color: COLORS.success }}>{Math.round((mission.fixed_rate || 0) * ownerMultiplier)}€ HT</Text>
+                  <Text style={{ fontFamily: 'PlusJakartaSans_700Bold', fontSize: 15, color: COLORS.textPrimary }}>Total</Text>
+                  <Text style={{ fontFamily: 'PlusJakartaSans_700Bold', fontSize: 18, color: COLORS.success }}>{ownerPrice(mission.fixed_rate).total.toFixed(2)}€ TTC</Text>
                 </View>
-                <Text style={{ fontFamily: 'PlusJakartaSans_400Regular', fontSize: 12, color: '#94A3B8' }}>Frais de service inclus</Text>
+                <Text style={{ fontFamily: 'PlusJakartaSans_400Regular', fontSize: 12, color: '#94A3B8' }}>Prestation : {(mission.fixed_rate || 0).toFixed(2)} € TTC · Frais Altio : {ownerPrice(mission.fixed_rate).fee.toFixed(2)} € TTC</Text>
               </View>
             </View>
 
@@ -936,7 +947,7 @@ export default function MissionDetailScreen() {
                 onPress={handleValidateAndPay}
               >
                 <Ionicons name="card-outline" size={20} color={COLORS.textInverse} />
-                <Text style={styles.mainActionText}>Valider et payer {Math.round((mission.fixed_rate || 0) * ownerMultiplier)}€</Text>
+                <Text style={styles.mainActionText}>Valider et payer {ownerPrice(mission.fixed_rate).total.toFixed(2)}€</Text>
               </TouchableOpacity>
             ) : (
               <TouchableOpacity
@@ -945,7 +956,7 @@ export default function MissionDetailScreen() {
                 onPress={async () => {
                   try {
                     setLoading(true);
-                    const ownerTotal = Math.round((mission.fixed_rate || 0) * ownerMultiplier);
+                    const ownerTotal = ownerPrice(mission.fixed_rate).total;
                     const { clientSecret, paymentIntentId } = await createPaymentIntent(ownerTotal, { missionId: id }, 'automatic');
                     const { error: initError } = await initPaymentSheet({
                       merchantDisplayName: 'Altio',
@@ -955,8 +966,14 @@ export default function MissionDetailScreen() {
                     if (initError) throw new Error(initError.message);
                     const { error: presentError } = await presentPaymentSheet();
                     if (presentError) throw new Error(presentError.message);
-                    await completeMissionPayment(id as string, paymentIntentId);
+                    const invoiceGeneration = await completeMissionPayment(id as string, paymentIntentId);
                     await fetchData();
+                    if (invoiceGeneration.failedTypes.length > 0) {
+                      Alert.alert(
+                        'Paiement confirmé',
+                        'Votre paiement a bien été enregistré, mais la facture est temporairement indisponible. Notre équipe a été alertée.'
+                      );
+                    }
                     setModalRating(0);
                     setModalComment('');
                     setShowRatingModal(true);
@@ -971,11 +988,12 @@ export default function MissionDetailScreen() {
                 }}
               >
                 <Ionicons name="card-outline" size={20} color={COLORS.textInverse} />
-                <Text style={styles.mainActionText}>Payer {Math.round((mission.fixed_rate || 0) * ownerMultiplier)}€</Text>
+                <Text style={styles.mainActionText}>Payer {ownerPrice(mission.fixed_rate).total.toFixed(2)}€</Text>
               </TouchableOpacity>
             )}
 
-            {mission.status === 'awaiting_payment' && (
+            {/* A validated mission stays disputable until its payment is confirmed. */}
+            {(mission.status === 'awaiting_payment' || (mission.status === 'validated' && !mission.paid_at)) && (
               <TouchableOpacity
                 testID="dispute-btn"
                 style={[styles.mainAction, { backgroundColor: COLORS.urgency }]}
@@ -988,20 +1006,20 @@ export default function MissionDetailScreen() {
           </View>
         )}
 
-        {/* Owner: Cancel button — all cancellable statuses per state machine */}
         {isOwner && ['pending', 'pending_provider_approval', 'assigned'].includes(mission.status) && (
-          <TouchableOpacity
-            testID="cancel-btn"
-            style={[styles.mainAction, { backgroundColor: COLORS.urgency }]}
-            onPress={handleCancel}
-          >
-            <Ionicons name="close-circle" size={20} color={COLORS.textInverse} />
-            <Text style={styles.mainActionText}>Annuler la mission</Text>
-          </TouchableOpacity>
+          <View style={{ marginBottom: SPACING.lg }}>
+            <TouchableOpacity accessibilityRole="button" accessibilityState={{ expanded: showOtherActions }} style={styles.otherActions} onPress={() => setShowOtherActions(!showOtherActions)}><Text style={styles.otherActionsText}>{t('alpine.otherActions')}</Text><Ionicons name={showOtherActions ? 'chevron-up' : 'chevron-down'} size={18} color={COLORS.textSecondary} /></TouchableOpacity>
+            {showOtherActions && <TouchableOpacity testID="cancel-btn" style={styles.otherActions} onPress={handleCancel}><Ionicons name="close-circle-outline" size={20} color={COLORS.urgency} /><Text style={[styles.otherActionsText, { color: COLORS.urgency }]}>{t('alpine.cancelMission')}</Text></TouchableOpacity>}
+          </View>
         )}
 
         {/* Provider Actions */}
-        {isProvider && mission.status === 'pending_provider_approval' && (() => {
+        {isProvider && ['pending', 'pending_provider_approval'].includes(mission.status) && !mission.fixed_rate && !mission.applications?.some(app => app.provider_id === user?.id) && <View style={styles.cardStrict}>
+          <Text style={{ ...FONTS.h3, color: COLORS.textPrimary }}>Votre proposition pour l’ensemble</Text>
+          <Text style={{ ...FONTS.bodySmall, color: COLORS.textSecondary }}>Un tarif total pour {getMissionTypeLabel(mission.mission_type, mission.services).toLocaleLowerCase('fr-FR')}. Les frais Altio seront détaillés au propriétaire.</Text>
+          <TextInput accessibilityLabel="Tarif total proposé en euros" testID="application-total-rate" value={proposedRate} onChangeText={setProposedRate} keyboardType="decimal-pad" placeholder="Montant en euros" placeholderTextColor={COLORS.textTertiary} style={{ ...FONTS.body, color: COLORS.textPrimary, borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.md, padding: SPACING.md, marginTop: SPACING.sm }} />
+        </View>}
+        {isProvider && ['pending', 'pending_provider_approval'].includes(mission.status) && (() => {
           // Direct assignment — owner chose this provider directly (no application)
           if (mission.assigned_provider_id === user?.id && (!mission.applications || mission.applications.length === 0)) {
             return (
@@ -1111,7 +1129,7 @@ export default function MissionDetailScreen() {
               <View style={{ flexDirection: 'row', gap: SPACING.sm }}>
                 <TouchableOpacity
                   testID="apply-btn"
-                  onPress={handleApply}
+                  disabled={applying} onPress={handleApply}
                   style={[styles.applyBtnStrict, { flex: 1 }]}
                 >
                   <Text style={styles.applyTextStrict}>{t('mission.apply_btn')}</Text>
@@ -1119,7 +1137,7 @@ export default function MissionDetailScreen() {
                 <TouchableOpacity
                   testID="decline-broadcast-btn"
                   onPress={handleDeclineBroadcast}
-                  style={[styles.applyBtnStrict, { flex: 1, backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0' }]}
+                  style={[styles.applyBtnStrict, { flex: 1, backgroundColor: COLORS.background, borderWidth: 1, borderColor: '#E2E8F0' }]}
                 >
                   <Text style={[styles.applyTextStrict, { color: COLORS.textSecondary }]}>Non disponible</Text>
                 </TouchableOpacity>
@@ -1128,7 +1146,7 @@ export default function MissionDetailScreen() {
           }
 
           return (
-            <TouchableOpacity testID="apply-btn" onPress={handleApply} style={styles.applyBtnStrict}>
+            <TouchableOpacity testID="apply-btn" disabled={applying} onPress={handleApply} style={styles.applyBtnStrict}>
               <Text style={styles.applyTextStrict}>{t('mission.apply_btn')}</Text>
             </TouchableOpacity>
           );
@@ -1167,13 +1185,6 @@ export default function MissionDetailScreen() {
               <Text style={styles.mainActionText}>{t('mission.overtime_btn')}</Text>
             </TouchableOpacity>
           </View>
-        )}
-
-        {isProvider && (mission.status === 'assigned' || mission.status === 'in_progress') && mission.assigned_provider_id === user?.id && (
-          <TouchableOpacity testID="chat-btn-provider" style={[styles.mainAction, { backgroundColor: COLORS.info }]} onPress={() => router.push(`/chat/${id}?type=mission&receiverId=${mission.owner_id}&title=Discussion+Propriétaire`)}>
-            <Ionicons name="chatbubbles-outline" size={20} color={COLORS.textInverse} />
-            <Text style={styles.mainActionText}>{t('mission.discuss_owner')}</Text>
-          </TouchableOpacity>
         )}
 
         {/* ── Add to favorites (owner, mission paid) ── */}
@@ -1217,20 +1228,23 @@ export default function MissionDetailScreen() {
         )}
       </ScrollView>
 
-      {/* Mandatory rating modal — appears after payment or on completed mission without review */}
-      <Modal visible={showRatingModal} transparent animationType="fade" onRequestClose={() => {}}>
+      {/* Optional review after a confirmed payment */}
+      <Modal visible={showRatingModal} transparent animationType="fade" onRequestClose={() => setShowRatingModal(false)}>
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', paddingHorizontal: SPACING.xl }}>
           <View style={{ backgroundColor: '#fff', borderRadius: 20, padding: SPACING.xl, alignItems: 'center' }}>
-            <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: COLORS.warningSoft || '#FFF7ED', justifyContent: 'center', alignItems: 'center', marginBottom: SPACING.lg }}>
+            <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: COLORS.warningSoft || COLORS.coralSoft, justifyContent: 'center', alignItems: 'center', marginBottom: SPACING.lg }}>
               <Ionicons name="star" size={28} color={COLORS.warning} />
             </View>
-            <Text style={{ fontFamily: 'PlusJakartaSans_700Bold', fontSize: 18, color: '#1E3A5F', marginBottom: SPACING.xs, textAlign: 'center' }}>
+            <Text style={{ fontFamily: 'PlusJakartaSans_700Bold', fontSize: 18, color: COLORS.textPrimary, marginBottom: SPACING.xs, textAlign: 'center' }}>
               {t('mission.rating_modal_title')}
             </Text>
             <Text style={{ fontFamily: 'PlusJakartaSans_400Regular', fontSize: 14, color: '#64748B', marginBottom: SPACING.xl, textAlign: 'center' }}>
               {t('mission.rating_modal_subtitle')}
             </Text>
 
+            <TouchableOpacity accessibilityRole="button" onPress={() => setShowRatingModal(false)} style={{ alignSelf: 'flex-end', padding: SPACING.md }}>
+              <Text style={{ color: COLORS.textSecondary }}>{t('common.later', { defaultValue: 'Plus tard' })}</Text>
+            </TouchableOpacity>
             {/* Stars */}
             <View style={{ flexDirection: 'row', gap: 12, marginBottom: SPACING.xl }}>
               {[1,2,3,4,5].map(s => (
@@ -1253,7 +1267,7 @@ export default function MissionDetailScreen() {
                 marginBottom: SPACING.lg,
                 fontFamily: 'PlusJakartaSans_400Regular',
                 fontSize: 14,
-                color: '#1E3A5F',
+                color: COLORS.textPrimary,
               }}
               placeholder={t('mission.review_placeholder')}
               placeholderTextColor="#94A3B8"
@@ -1270,7 +1284,7 @@ export default function MissionDetailScreen() {
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: SPACING.sm,
-                backgroundColor: modalRating > 0 ? '#1E3A5F' : '#CBD5E1',
+                backgroundColor: modalRating > 0 ? COLORS.brandPrimary : COLORS.border,
                 paddingVertical: 14,
                 borderRadius: 12,
                 opacity: submittingReview ? 0.6 : 1,
@@ -1320,14 +1334,14 @@ export default function MissionDetailScreen() {
       <Modal visible={extraHoursModal} transparent animationType="fade">
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', paddingHorizontal: SPACING.xl }}>
           <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: SPACING.xl }}>
-            <Text style={{ fontFamily: 'PlusJakartaSans_700Bold', fontSize: 16, color: '#1E3A5F', marginBottom: SPACING.md }}>
+            <Text style={{ fontFamily: 'PlusJakartaSans_700Bold', fontSize: 16, color: COLORS.textPrimary, marginBottom: SPACING.md }}>
               {t('mission.overtime_title')}
             </Text>
             <Text style={{ fontFamily: 'PlusJakartaSans_400Regular', fontSize: 14, color: '#64748B', marginBottom: SPACING.md }}>
               {t('mission.overtime_msg')}
             </Text>
             <TextInput
-              style={{ borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 8, padding: SPACING.md, fontSize: 16, marginBottom: SPACING.lg, color: '#1E3A5F' }}
+              style={{ borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 8, padding: SPACING.md, fontSize: 16, marginBottom: SPACING.lg, color: COLORS.textPrimary }}
               keyboardType="numeric"
               value={extraHoursInput}
               onChangeText={setExtraHoursInput}
@@ -1343,7 +1357,7 @@ export default function MissionDetailScreen() {
                 <Text style={{ fontFamily: 'PlusJakartaSans_600SemiBold', color: '#64748B' }}>{t('common.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={{ flex: 1, paddingVertical: 12, borderRadius: 8, backgroundColor: '#1E3A5F', alignItems: 'center' }}
+                style={{ flex: 1, paddingVertical: 12, borderRadius: 8, backgroundColor: COLORS.brandPrimary, alignItems: 'center' }}
                 onPress={async () => {
                   const hours = extraHoursInput;
                   if (!hours || isNaN(Number(hours))) return;
@@ -1367,16 +1381,16 @@ export default function MissionDetailScreen() {
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', paddingHorizontal: SPACING.xl }}>
           <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: SPACING.xl }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginBottom: SPACING.lg }}>
-              <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: '#FEF2F2', justifyContent: 'center', alignItems: 'center' }}>
+              <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: COLORS.urgencySoft, justifyContent: 'center', alignItems: 'center' }}>
                 <Ionicons name="warning" size={22} color={COLORS.urgency} />
               </View>
               <View>
-                <Text style={{ fontFamily: 'PlusJakartaSans_700Bold', fontSize: 16, color: '#1E3A5F' }}>Signaler un problème</Text>
+                <Text style={{ fontFamily: 'PlusJakartaSans_700Bold', fontSize: 16, color: COLORS.textPrimary }}>Signaler un problème</Text>
                 <Text style={{ fontFamily: 'PlusJakartaSans_400Regular', fontSize: 12, color: '#64748B' }}>Décrivez le problème rencontré</Text>
               </View>
             </View>
             <TextInput
-              style={{ borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, padding: SPACING.md, minHeight: 100, textAlignVertical: 'top', marginBottom: SPACING.lg, fontFamily: 'PlusJakartaSans_400Regular', fontSize: 14, color: '#1E3A5F' }}
+              style={{ borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, padding: SPACING.md, minHeight: 100, textAlignVertical: 'top', marginBottom: SPACING.lg, fontFamily: 'PlusJakartaSans_400Regular', fontSize: 14, color: COLORS.textPrimary }}
               placeholder="Ex : Le travail n'a pas été réalisé correctement, pièce endommagée..."
               placeholderTextColor="#94A3B8"
               value={disputeReason}
@@ -1420,80 +1434,19 @@ function MetaItem({ icon, label, value }: { icon: ComponentProps<typeof Ionicons
   );
 }
 
-const MISSION_STEP_KEYS = [
-  { key: 'pending', label: 'Publiée' },
-  { key: 'assigned', label: 'Confirmé' },
-  { key: 'in_progress', label: 'En cours' },
-  { key: 'awaiting_payment', label: 'Terminée' },
-  { key: 'validated', label: 'Validée' },
-  { key: 'paid', label: 'Payée' },
-];
-
 function StatusTimeline({ status }: { status: string }) {
-  const steps = MISSION_STEP_KEYS;
-  const currentIdx = steps.findIndex(s => s.key === status);
-  const effectiveIdx = currentIdx === -1 ? 0 : currentIdx;
-
-  return (
-    <View style={tlStyles.container}>
-      {steps.map((step, i) => {
-        const isDone = i <= effectiveIdx;
-        const isLast = i === steps.length - 1;
-        return (
-          <React.Fragment key={step.key}>
-            <View style={tlStyles.stepCol}>
-              <View style={[tlStyles.dot, isDone && tlStyles.dotDone]}>
-                {isDone
-                  ? <Ionicons name="checkmark" size={14} color="#fff" />
-                  : <View style={tlStyles.dotInner} />
-                }
-              </View>
-              <Text style={[tlStyles.label, isDone && tlStyles.labelDone]}>{step.label}</Text>
-            </View>
-            {!isLast && (
-              <View style={[tlStyles.line, i < effectiveIdx && tlStyles.lineDone]} />
-            )}
-          </React.Fragment>
-        );
-      })}
-    </View>
-  );
+  const { t } = useTranslation();
+  const index = ['pending', 'pending_provider_approval'].includes(status) ? 0 : status === 'assigned' ? 1 : status === 'in_progress' ? 2 : 3;
+  if (!['pending', 'pending_provider_approval', 'assigned', 'in_progress', 'awaiting_payment', 'validated', 'paid', 'completed'].includes(status)) return null;
+  return <View style={tlStyles.container}>{['requestStep', 'confirmedStep', 'serviceStep', 'finalStep'].map((key, i) => <View key={key} style={tlStyles.step}><View style={[tlStyles.line, i <= index && tlStyles.lineActive]} /><Text style={[tlStyles.label, i === index && tlStyles.activeLabel]}>{t(`alpine.${key}`)}</Text></View>)}</View>;
 }
-
 const tlStyles = StyleSheet.create({
-  container: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    paddingHorizontal: SPACING.xl,
-    paddingVertical: SPACING.lg,
-    backgroundColor: COLORS.paper,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-    marginBottom: SPACING.lg,
-  },
-  stepCol: { alignItems: 'center', minWidth: 52 },
-  dot: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: COLORS.border,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  dotDone: { backgroundColor: COLORS.brandPrimary },
-  dotInner: { width: 8, height: 8, borderRadius: 4, backgroundColor: COLORS.textTertiary },
-  label: {
-    fontFamily: 'PlusJakartaSans_600SemiBold',
-    fontSize: 9,
-    color: COLORS.textTertiary,
-    marginTop: SPACING.xs,
-    textAlign: 'center',
-    letterSpacing: 0.3,
-    textTransform: 'uppercase',
-  },
-  labelDone: { color: COLORS.brandPrimary },
-  line: { flex: 1, height: 2, backgroundColor: COLORS.border, marginBottom: 18 },
-  lineDone: { backgroundColor: COLORS.brandPrimary },
+  container: { flexDirection: 'row', gap: SPACING.sm },
+  step: { flex: 1 },
+  line: { height: 3, borderRadius: RADIUS.full, backgroundColor: '#7395E6', marginBottom: SPACING.sm },
+  lineActive: { backgroundColor: COLORS.paper },
+  label: { ...FONTS.bodySmall, fontSize: 11, color: MARKETPLACE.heroMuted },
+  activeLabel: { color: COLORS.paper, fontFamily: FONTS.h2.fontFamily },
 });
 
 const miStyles = StyleSheet.create({
@@ -1503,7 +1456,13 @@ const miStyles = StyleSheet.create({
 });
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FFFFFF' },
+  nextStep: { backgroundColor: COLORS.paper, borderRadius: RADIUS.lg, padding: SPACING.lg, marginBottom: SPACING.lg },
+  nextStepEyebrow: { ...FONTS.caption, fontSize: 10, color: COLORS.brandPrimary, marginBottom: SPACING.sm },
+  nextStepText: { ...FONTS.bodySmall, color: COLORS.textPrimary },
+  otherActions: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.sm },
+  otherActionsText: { ...FONTS.bodySmall, color: COLORS.textSecondary },
+  appPhoto: { width: 44, height: 44, borderRadius: RADIUS.full },
+  container: { flex: 1, backgroundColor: MARKETPLACE.canvas },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFFFFF' },
 
   header: {
@@ -1513,54 +1472,52 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.xl,
     paddingTop: SPACING.xl,
     paddingBottom: SPACING.md,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
+    backgroundColor: MARKETPLACE.cobalt,
   },
-  backBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#F8FAFC', justifyContent: 'center', alignItems: 'center' },
-  headerTitle: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 18, color: '#1E3A5F' },
+  backBtn: { width: 44, height: 44, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.15)', justifyContent: 'center', alignItems: 'center' },
+  headerTitle: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 18, color: COLORS.paper },
 
-  content: { paddingHorizontal: SPACING.xl, paddingBottom: SPACING.xxxl, paddingTop: SPACING.lg },
+  content: { paddingHorizontal: SPACING.xl, paddingBottom: SPACING.xxxl, paddingTop: 0 },
 
-  statusRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.lg, paddingHorizontal: 4 },
+  statusRow: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm, justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.lg, paddingHorizontal: 4 },
 
-  sectionTitle: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 16, color: '#1E3A5F', marginBottom: SPACING.md },
+  sectionTitle: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 16, color: COLORS.textPrimary, marginBottom: SPACING.md },
 
-  cardStrict: { backgroundColor: '#FFFFFF', padding: SPACING.xl, borderRadius: 16, marginBottom: SPACING.lg, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 8, elevation: 1, borderWidth: 1, borderColor: '#F1F5F9' },
+  cardStrict: { backgroundColor: '#FFFFFF', padding: SPACING.xl, borderRadius: RADIUS.xl, marginBottom: SPACING.lg, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 8, elevation: 1, borderWidth: 1, borderColor: COLORS.border },
   pillStrict: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 99 },
   pillStrictText: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 12 },
   cardStrictCategory: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 12, color: '#94A3B8', letterSpacing: 0.5 },
-  cardStrictTitle: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 20, color: '#1E3A5F', marginBottom: 4 },
+  cardStrictTitle: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 20, color: COLORS.textPrimary, marginBottom: 4 },
   providerTextStrict: { fontFamily: 'PlusJakartaSans_400Regular', fontSize: 14, color: '#64748B', lineHeight: 22 },
 
-  metaGrid: { flexDirection: 'row', flexWrap: 'wrap', marginTop: SPACING.md, borderTopWidth: 1, borderTopColor: '#F1F5F9', paddingTop: SPACING.md },
+  metaGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm, marginTop: SPACING.md, borderRadius: 16, backgroundColor: MARKETPLACE.ice, padding: SPACING.md },
 
   accessRow: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACING.sm, marginBottom: SPACING.sm },
 
-  appItem: { paddingVertical: SPACING.md, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
-  appTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  appInfo: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md },
+  appItem: { padding: SPACING.lg, borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.lg, marginBottom: SPACING.md, backgroundColor: COLORS.background },
+  appTop: { gap: SPACING.md },
+  appInfo: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, minHeight: 48 },
   appAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#EFF6FF', justifyContent: 'center', alignItems: 'center' },
   appAvatarText: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 16, color: '#3B82F6' },
-  appName: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 15, color: '#1E3A5F' },
+  appName: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 15, color: COLORS.textPrimary },
   appRating: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
   appRatingText: { fontFamily: 'PlusJakartaSans_400Regular', fontSize: 12, color: '#64748B' },
-  appRate: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 18, color: '#16A34A' },
+  appRate: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 18, color: COLORS.success },
   appMessage: { fontFamily: 'PlusJakartaSans_400Regular', fontSize: 13, color: '#64748B', marginTop: SPACING.sm, fontStyle: 'italic' },
 
-  appActions: { flexDirection: 'row', gap: SPACING.sm, marginTop: SPACING.md },
-  acceptBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.xs, backgroundColor: '#10B981', paddingVertical: 12, borderRadius: 12 },
+  appActions: { flexDirection: 'column', gap: SPACING.sm, marginTop: SPACING.md },
+  acceptBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.xs, minHeight: 48, backgroundColor: COLORS.brandPrimary, paddingVertical: SPACING.md, borderRadius: 12 },
   rejectBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.xs, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#EF4444', paddingVertical: 12, borderRadius: 12 },
   actionBtnText: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 13, color: '#FFFFFF' },
 
   appStatusChip: { alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 99, marginTop: SPACING.sm },
   appStatusText: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 11 },
 
-  applyBtnStrict: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.sm, backgroundColor: '#3B82F6', paddingVertical: 14, borderRadius: 12, marginTop: SPACING.md },
+  applyBtnStrict: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.sm, backgroundColor: '#3B82F6', minHeight: 52, paddingVertical: 14, paddingHorizontal: 12, borderRadius: 14, marginTop: SPACING.md },
   applyTextStrict: { fontFamily: 'PlusJakartaSans_600SemiBold', color: '#FFFFFF', fontSize: 15 },
 
-  mainAction: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.sm, backgroundColor: '#1E3A5F', paddingVertical: 14, borderRadius: 12, marginTop: SPACING.md },
+  mainAction: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.sm, backgroundColor: COLORS.brandPrimary, minHeight: 52, paddingVertical: 14, paddingHorizontal: 12, borderRadius: 14, marginTop: SPACING.md },
   mainActionText: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 15, color: '#FFFFFF' },
 
-  proofImage: { width: 120, height: 120, borderRadius: 12, backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0' },
+  proofImage: { width: 120, height: 120, borderRadius: 12, backgroundColor: COLORS.background, borderWidth: 1, borderColor: '#E2E8F0' },
 });

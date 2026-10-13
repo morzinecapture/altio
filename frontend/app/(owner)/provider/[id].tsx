@@ -19,8 +19,8 @@ export default function ProviderProfileScreen() {
         queryKey: ['owner-provider-profile', providerId],
         queryFn: async () => {
             const { data, error } = await supabase
-                .from('provider_profiles')
-                .select('*, user:users(*)')
+                .from('public_provider_profiles')
+                .select('*, user:public_profiles(*)')
                 .eq('provider_id', providerId)
                 .single();
             if (error || !data) return null;
@@ -59,17 +59,17 @@ export default function ProviderProfileScreen() {
                 <View style={styles.coverWrapper}>
                     <View style={styles.navHeader}>
                         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-                            <Ionicons name="arrow-back" size={24} color="#1E3A5F" />
+                            <Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} />
                         </TouchableOpacity>
                         <TouchableOpacity style={styles.favoriteBtn}>
-                            <Ionicons name="bookmark-outline" size={24} color="#1E3A5F" />
+                            <Ionicons name="bookmark-outline" size={24} color={COLORS.textPrimary} />
                         </TouchableOpacity>
                     </View>
 
                     {avatarUrl ? (
                         <Image source={{ uri: avatarUrl }} style={styles.avatarLarge} />
                     ) : (
-                        <View style={[styles.avatarLarge, { backgroundColor: '#1E3A5F', justifyContent: 'center', alignItems: 'center' }]}>
+                        <View style={[styles.avatarLarge, { backgroundColor: COLORS.brandPrimary, justifyContent: 'center', alignItems: 'center' }]}>
                             <Text style={{ fontSize: 48, color: '#FFFFFF', fontWeight: '700' }}>
                                 {(provider.user?.name || 'P').charAt(0).toUpperCase()}
                             </Text>
@@ -85,7 +85,7 @@ export default function ProviderProfileScreen() {
                             <Text style={styles.badgeText}>{mainSpecialty}</Text>
                         </View>
                         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                            <Ionicons name="star" size={16} color="#FBBF24" />
+                            <Ionicons name="star" size={16} color={COLORS.warning} />
                             <Text style={styles.ratingText}>{rating} ({t('provider_detail.reviews_count', { count: totalReviews })})</Text>
                         </View>
                     </View>
@@ -148,7 +148,7 @@ export default function ProviderProfileScreen() {
                                                     key={s}
                                                     name={s <= r.rating ? 'star' : 'star-outline'}
                                                     size={12}
-                                                    color="#FBBF24"
+                                                    color={COLORS.warning}
                                                 />
                                             ))}
                                         </View>
@@ -187,10 +187,10 @@ export default function ProviderProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#F8FAFC' },
+    container: { flex: 1, backgroundColor: COLORS.background },
     center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
-    coverWrapper: { alignItems: 'center', paddingTop: 60, paddingBottom: 20, backgroundColor: '#E0F2FE', borderBottomLeftRadius: 32, borderBottomRightRadius: 32 },
+    coverWrapper: { alignItems: 'center', paddingTop: 60, paddingBottom: 20, backgroundColor: COLORS.infoSoft, borderBottomLeftRadius: 32, borderBottomRightRadius: 32 },
     navHeader: { position: 'absolute', top: 50, left: 20, right: 20, flexDirection: 'row', justifyContent: 'space-between', zIndex: 10 },
     backBtn: { width: 44, height: 44, backgroundColor: '#FFFFFF', borderRadius: 22, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 2 },
     favoriteBtn: { width: 44, height: 44, backgroundColor: '#FFFFFF', borderRadius: 22, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 2 },
@@ -198,29 +198,29 @@ const styles = StyleSheet.create({
     avatarLarge: { width: 140, height: 140, borderRadius: 70, borderWidth: 4, borderColor: '#FFFFFF' },
 
     infoWrapper: { paddingHorizontal: SPACING.xl, paddingTop: SPACING.xl, alignItems: 'flex-start' },
-    nameText: { fontFamily: 'Inter_700Bold', fontSize: 24, color: '#1E3A5F', marginBottom: SPACING.sm },
+    nameText: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 24, color: COLORS.textPrimary, marginBottom: SPACING.sm },
 
     badgeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', marginBottom: SPACING.sm },
-    badgeWrapper: { backgroundColor: '#FEF2F2', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
-    badgeText: { fontFamily: 'Inter_600SemiBold', fontSize: 12, color: '#EF4444' },
-    ratingText: { fontFamily: 'Inter_500Medium', fontSize: 14, color: '#64748B', marginLeft: 6 },
+    badgeWrapper: { backgroundColor: COLORS.urgencySoft, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
+    badgeText: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 12, color: '#EF4444' },
+    ratingText: { fontFamily: 'PlusJakartaSans_500Medium', fontSize: 14, color: '#64748B', marginLeft: 6 },
 
     locationRow: { flexDirection: 'row', alignItems: 'center', marginBottom: SPACING.lg },
-    locationText: { fontFamily: 'Inter_400Regular', fontSize: 14, color: '#64748B', marginLeft: 6 },
+    locationText: { fontFamily: 'PlusJakartaSans_400Regular', fontSize: 14, color: '#64748B', marginLeft: 6 },
 
     priceContainer: { flexDirection: 'row', backgroundColor: '#FFFFFF', padding: SPACING.md, borderRadius: 12, borderWidth: 1, borderColor: '#F1F5F9', width: '100%', marginBottom: SPACING.sm },
     priceBlock: { flex: 1 },
-    priceLabel: { fontFamily: 'Inter_500Medium', fontSize: 12, color: '#64748B', marginBottom: 4 },
-    priceValue: { fontFamily: 'Inter_700Bold', fontSize: 20, color: '#1E3A5F' },
-    priceUnit: { fontFamily: 'Inter_400Regular', fontSize: 14, color: '#64748B' },
+    priceLabel: { fontFamily: 'PlusJakartaSans_500Medium', fontSize: 12, color: '#64748B', marginBottom: 4 },
+    priceValue: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 20, color: COLORS.textPrimary },
+    priceUnit: { fontFamily: 'PlusJakartaSans_400Regular', fontSize: 14, color: '#64748B' },
     priceDivider: { width: 1, backgroundColor: '#F1F5F9', marginHorizontal: SPACING.md },
 
     availabilityGrid: { flexDirection: 'row', justifyContent: 'space-between', marginTop: SPACING.md },
     dayChip: { flex: 1, alignItems: 'center', paddingVertical: SPACING.md, borderRadius: 12, marginHorizontal: 2, borderWidth: 1 },
     dayAvailable: { backgroundColor: '#FFFFFF', borderColor: '#F1F5F9', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 1 },
-    dayUnavailable: { backgroundColor: '#F8FAFC', borderColor: '#E2E8F0', opacity: 0.6 },
-    dayText: { fontFamily: 'Inter_600SemiBold', fontSize: 13, marginBottom: SPACING.sm },
-    dayTextAvailable: { color: '#1E3A5F' },
+    dayUnavailable: { backgroundColor: COLORS.background, borderColor: '#E2E8F0', opacity: 0.6 },
+    dayText: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 13, marginBottom: SPACING.sm },
+    dayTextAvailable: { color: COLORS.textPrimary },
     dayTextUnavailable: { color: '#94A3B8' },
     statusDot: { width: 6, height: 6, borderRadius: 3 },
 
@@ -228,17 +228,17 @@ const styles = StyleSheet.create({
 
     section: { paddingHorizontal: SPACING.xl, marginBottom: SPACING.xl },
     sectionHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.md },
-    sectionTitle: { fontFamily: 'Inter_700Bold', fontSize: 18, color: '#1E3A5F', marginBottom: SPACING.sm },
-    aboutText: { fontFamily: 'Inter_400Regular', fontSize: 15, color: '#64748B', lineHeight: 24 },
-    seeAllText: { fontFamily: 'Inter_500Medium', fontSize: 14, color: '#64748B' },
+    sectionTitle: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 18, color: COLORS.textPrimary, marginBottom: SPACING.sm },
+    aboutText: { fontFamily: 'PlusJakartaSans_400Regular', fontSize: 15, color: '#64748B', lineHeight: 24 },
+    seeAllText: { fontFamily: 'PlusJakartaSans_500Medium', fontSize: 14, color: '#64748B' },
 
     bottomBar: { backgroundColor: '#FFFFFF', paddingHorizontal: SPACING.xl, paddingTop: SPACING.md, paddingBottom: SPACING.xl, flexDirection: 'row', borderTopWidth: 1, borderTopColor: '#F1F5F9' },
     bookBtn: { flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', backgroundColor: '#3B82F6', paddingVertical: SPACING.md, borderRadius: RADIUS.full, gap: SPACING.sm },
-    bookBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 16, color: '#FFFFFF' },
+    bookBtnText: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 16, color: '#FFFFFF' },
 
     reviewCard: { backgroundColor: '#FFFFFF', borderRadius: 12, padding: SPACING.md, marginBottom: SPACING.md, borderWidth: 1, borderColor: '#F1F5F9' },
     reviewHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
-    reviewAuthor: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 13, color: '#1E3A5F' },
+    reviewAuthor: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 13, color: COLORS.textPrimary },
     reviewComment: { fontSize: 13, color: '#64748B', lineHeight: 20, marginBottom: 4 },
     reviewDate: { fontSize: 11, color: '#94A3B8' },
 });

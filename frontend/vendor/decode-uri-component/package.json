@@ -1,0 +1,7 @@
+{
+  "name": "decode-uri-component",
+  "version": "0.5.0-altio.1",
+  "main": "index.js",
+  "license": "MIT",
+  "description": "Upstream 0.5.0 with only its export changed to CommonJS for Expo SDK 54"
+}

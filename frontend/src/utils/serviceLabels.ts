@@ -12,6 +12,7 @@ const MISSION_TYPE_MAP: Record<string, string> = {
   general: 'Général',
   emergency: 'Urgence',
   concierge: 'Conciergerie',
+  service: 'Service',
 };
 
 const SERVICE_TYPE_MAP: Record<string, string> = {
@@ -28,9 +29,11 @@ const SERVICE_TYPE_MAP: Record<string, string> = {
   general: 'Général',
   emergency: 'Urgence',
   concierge: 'Conciergerie',
+  service: 'Service',
 };
 
-export const getMissionTypeLabel = (type: string): string => {
+export const getMissionTypeLabel = (type: string, services?: string[] | null): string => {
+  if (Array.isArray(services) && services.length) return [...new Set(services)].map(service => getMissionTypeLabel(service)).join(' + ');
   const label = MISSION_TYPE_MAP[type];
   if (!label) {
     console.warn(`[getMissionTypeLabel] Type inconnu : "${type}"`);

@@ -1,6 +1,14 @@
+import { completionInvoiceAmounts } from '../_shared/completion-invoices.ts'
+import { assertConnectIntent } from '../_shared/connect-split.ts'
+import { missionInvoiceAmounts } from '../_shared/mission-invoice-amounts.ts'
+import { HT_PRICING_VERSION, htPricing } from '../_shared/billing.ts'
+import { requireLegalEntity } from '../_shared/legal-entity.ts'
+import { escapeDocumentText, escapePartyFields } from '../_shared/document-text.ts'
+import Stripe from 'npm:stripe@^14.0.0'
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { corsHeaders, handleCors } from '../_shared/cors.ts'
+import { getFrenchServiceLabel } from '../_shared/serviceLabels.ts'
 import { assertUUID, assertOneOf, assertOptionalString, ValidationError } from '../_shared/validate.ts'
 import { requireAuthOrServiceKey } from '../_shared/auth.ts'
 
@@ -9,7 +17,7 @@ serve(async (req) => {
   if (corsResponse) return corsResponse;
 
   try {
-    const { isServiceCall } = await requireAuthOrServiceKey(req)
+    const { user, isServiceCall } = await requireAuthOrServiceKey(req)
 
     const supabaseUrl     = Deno.env.get('SUPABASE_URL') as string
     const supabaseService = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') as string
@@ -21,19 +29,79 @@ serve(async (req) => {
     const missionId = reqBody.missionId ? assertUUID(reqBody.missionId, 'missionId') : undefined
     const emergencyId = reqBody.emergencyId ? assertUUID(reqBody.emergencyId, 'emergencyId') : undefined
     const interventionId = reqBody.interventionId ? assertUUID(reqBody.interventionId, 'interventionId') : undefined
-    if (!missionId && !emergencyId && !interventionId) {
+    if ([missionId, emergencyId, interventionId].filter(Boolean).length !== 1) {
       throw new ValidationError('missionId, emergencyId or interventionId is required')
     }
     const invoiceType = assertOneOf(reqBody.invoiceType, 'invoiceType', ['service', 'displacement', 'service_fee', 'commission'] as const)
     const isMandateInvoice = invoiceType === 'service' || invoiceType === 'displacement'
-    const stripePaymentIntentId = assertOptionalString(reqBody.stripePaymentIntentId, 'stripePaymentIntentId')
+    let stripePaymentIntentId = assertOptionalString(reqBody.stripePaymentIntentId, 'stripePaymentIntentId')
+
+    // Check source ownership before using the privileged database client for documents.
+    const sourceTable = missionId ? 'missions' : emergencyId ? 'emergency_requests' : 'interventions'
+    const sourceRef = missionId || emergencyId || interventionId
+    const { data: authorizedSource, error: sourceError } = await db.from(sourceTable).select('*').eq('id', sourceRef).single()
+    if (sourceError || !authorizedSource) throw new ValidationError('Source de facture introuvable')
+    if (!isServiceCall && user?.id !== authorizedSource.owner_id && user?.id !== (authorizedSource.assigned_provider_id || authorizedSource.accepted_provider_id)) {
+      return new Response(JSON.stringify({ error: 'Accès interdit' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }
+    const completionStepId = reqBody.completionStepId ? assertUUID(reqBody.completionStepId, 'completionStepId') : undefined
+    let completionStep: any = null
+    let completionPayment: any = null
+    let completionSource: any = null
+    let verifiedPayment: any = null
+    if (completionStepId) {
+      if (!emergencyId) throw new ValidationError('Une étape nécessite une intervention')
+      const { data: step, error } = await db.from('emergency_completion_steps').select('*').eq('id', completionStepId).single()
+      if (error || !step || step.emergency_id !== emergencyId || !step.paid_at ||
+          step.owner_id !== authorizedSource.owner_id || step.provider_id !== authorizedSource.accepted_provider_id ||
+          (stripePaymentIntentId && stripePaymentIntentId !== step.payment_intent_id)) throw new ValidationError('Étape payée introuvable')
+      completionStep = step
+      stripePaymentIntentId = step.payment_intent_id
+      const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY')!, { apiVersion: '2022-11-15', httpClient: Stripe.createFetchHttpClient() })
+      completionPayment = await stripe.paymentIntents.retrieve(step.payment_intent_id)
+      const { data: payee, error: payeeError } = await db.from('provider_profiles').select('stripe_account_id').eq('provider_id', step.provider_id).single()
+      if (payeeError) throw payeeError
+      assertConnectIntent(completionPayment, payee?.stripe_account_id)
+      const { data: source, error: orderError } = await db.from(step.phase === 'visit' ? 'emergency_bids' : 'mission_quotes')
+        .select('*').eq('id', step.phase === 'visit' ? completionPayment.metadata.bidId : completionPayment.metadata.quoteId).single()
+      if (orderError || !source) throw new ValidationError('Prestation facturable introuvable')
+      completionSource = source
+    } else {
+      if (emergencyId) {
+        const { data: steps, error } = await db.from('emergency_completion_steps').select('id').eq('emergency_id', emergencyId).limit(1)
+        if (error) throw error
+        if (steps?.length) throw new ValidationError('Facturation par étape requise pour cette intervention')
+      }
+      // Neither a service call nor a client may issue an unpaid invoice.
+      if (!['paid', 'completed'].includes(authorizedSource.status) && invoiceType !== 'displacement') throw new ValidationError('Paiement non confirmé pour cette facture')
+      let recordedPayment = missionId
+        ? authorizedSource.stripe_payment_intent_id || authorizedSource.payment_intent_id
+        : invoiceType === 'displacement'
+          ? authorizedSource.displacement_payment_id || authorizedSource.phase1_payment_id
+          : authorizedSource.quote_payment_id || authorizedSource.stripe_payment_intent_id
+      if (!recordedPayment && emergencyId && invoiceType !== 'displacement' && authorizedSource.status === 'completed') {
+        const { data: quotes, error } = await db.from('mission_quotes').select('id').eq('emergency_request_id', emergencyId).eq('status', 'accepted').limit(1)
+        if (error || !quotes) throw new ValidationError('Vérification du devis indisponible')
+        if (quotes.length === 0) recordedPayment = authorizedSource.displacement_payment_id
+      }
+      if (!recordedPayment || (stripePaymentIntentId && stripePaymentIntentId !== recordedPayment)) throw new ValidationError('Référence de paiement non confirmée')
+      stripePaymentIntentId = recordedPayment
+      const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY')!, { apiVersion: '2022-11-15', httpClient: Stripe.createFetchHttpClient() })
+      const payment = await stripe.paymentIntents.retrieve(recordedPayment)
+      verifiedPayment = payment
+      const metadataKey = missionId ? 'missionId' : emergencyId ? 'emergencyId' : 'interventionId'
+      if (payment.status !== 'succeeded' || payment.metadata[metadataKey] !== sourceRef || payment.currency !== 'eur') throw new ValidationError('Encaissement non confirmé')
+    }
 
     // ── 0. Dedup: skip if invoice already exists for this source + type ────────
     const dedupQuery = db.from('invoices').select('id').eq('invoice_type', invoiceType)
+    if (completionStepId) dedupQuery.eq('completion_step_id', completionStepId)
+    else dedupQuery.is('completion_step_id', null)
     if (missionId)   dedupQuery.eq('mission_id', missionId)
     if (emergencyId) dedupQuery.eq('emergency_id', emergencyId)
     if (interventionId) dedupQuery.eq('intervention_id', interventionId)
-    const { data: existing } = await dedupQuery.limit(1)
+    const { data: existing, error: dedupError } = await dedupQuery.limit(1)
+    if (dedupError) throw dedupError
     if (existing && existing.length > 0) {
       return new Response(JSON.stringify({ ok: true, skipped: true, message: 'Invoice already exists' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200,
@@ -52,6 +120,7 @@ serve(async (req) => {
       billing_address?: string;
       address?: string;
       is_vat_exempt?: boolean;
+      mandate_accepted_at?: string;
       is_auto_entrepreneur?: boolean;
       insurance_name?: string;
       insurance_policy?: string;
@@ -72,7 +141,7 @@ serve(async (req) => {
       amount   = Number(mission.fixed_rate ?? 0)
       propertyName    = mission.property?.name || '\u2014'
       propertyAddress = mission.property?.address || ''
-      serviceType     = mission.mission_type || 'service'
+      serviceType     = getFrenchServiceLabel(mission.mission_type, mission.services)
       serviceDate     = mission.completed_at ? new Date(mission.completed_at).toLocaleDateString('fr-FR') : new Date().toLocaleDateString('fr-FR')
       sourceId        = missionId
       sourceKind      = 'mission'
@@ -99,7 +168,7 @@ serve(async (req) => {
         : displacementAmount + (Number(quote?.repair_cost ?? 0))
       propertyName    = emergency.property?.name || '\u2014'
       propertyAddress = emergency.property?.address || ''
-      serviceType     = emergency.service_type || 'urgence'
+      serviceType     = getFrenchServiceLabel(emergency.service_type || 'emergency')
       serviceDate     = emergency.completed_at ? new Date(emergency.completed_at).toLocaleDateString('fr-FR') : new Date().toLocaleDateString('fr-FR')
       sourceId        = emergencyId
       sourceKind      = 'emergency'
@@ -140,7 +209,7 @@ serve(async (req) => {
       amount = invoiceType === 'displacement' ? visitAmount : serviceAmount
       propertyName    = property?.name || '\u2014'
       propertyAddress = property?.address || ''
-      serviceType     = intervention.service_type || intervention.mission_type || 'intervention'
+      serviceType     = getFrenchServiceLabel(intervention.service_type || intervention.mission_type || 'intervention')
       serviceDate     = (intervention.paid_at || intervention.validated_at || intervention.completed_at || intervention.on_site_at)
         ? new Date(intervention.paid_at || intervention.validated_at || intervention.completed_at || intervention.on_site_at).toLocaleDateString('fr-FR')
         : new Date().toLocaleDateString('fr-FR')
@@ -148,9 +217,19 @@ serve(async (req) => {
       sourceKind      = 'intervention'
     }
 
+    const originalOwner = owner
+    const originalProvider = provider
+    owner = escapePartyFields(owner)
+    provider = escapePartyFields(provider)
+    propertyName = escapeDocumentText(propertyName)
+    propertyAddress = escapeDocumentText(propertyAddress)
+    serviceType = escapeDocumentText(serviceType)
+
     if (!owner?.id && invoiceType !== 'commission') throw new Error('Owner not found')
     if (!provider?.id && invoiceType !== 'service_fee') throw new Error('Provider not found')
+    if (isMandateInvoice && !provider?.mandate_accepted_at) throw new Error('Mandat de facturation non accepté par le prestataire')
 
+    const legalEntity = requireLegalEntity((key) => Deno.env.get(key), { requireMediator: false })
     // ── 2. Determine seller / buyer / amounts ──────────────────────────────────
     const COMMISSION_RATE = 0.10
     let sellerId: string, buyerId: string
@@ -176,83 +255,84 @@ serve(async (req) => {
       // service invoice: provider → owner (via mandat)
       sellerId  = provider?.id
       buyerId   = owner?.id
-      vatExempt = (provider?.is_vat_exempt ?? false) || (provider?.is_auto_entrepreneur ?? false)
+      vatExempt = provider?.is_vat_exempt === true
       amountHt  = amount
       vatRate   = vatExempt ? 0 : 20
       amountTtc = vatExempt ? amountHt : parseFloat((amountHt * 1.20).toFixed(2))
+    }
+
+    if (sourceKind === 'mission') {
+      let invoiceVatExempt = provider?.is_vat_exempt === true
+      let invoiceVatRate = 20
+      let quoteHtCents: number | undefined
+      if (verifiedPayment?.metadata?.quoteId) {
+        const { data: quote, error: quoteError } = await db.from('mission_quotes').select('*, line_items:quote_line_items(*)').eq('id', verifiedPayment.metadata.quoteId).single()
+        if (quoteError || !quote || quote.mission_id !== missionId || quote.provider_id !== provider?.id || quote.status !== 'accepted') throw new Error('Devis facturé introuvable')
+        const subtotal = quote.line_items?.length ? quote.line_items.reduce((sum: number, line: any) => sum + Number(line.quantity ?? 1) * Number(line.unit_price_ht ?? line.unit_price), 0) : Number(quote.repair_cost)
+        const vat = quote.is_vat_exempt === true ? 0 : Number(quote.tva_rate ?? 0.20)
+        if (!Number.isFinite(subtotal) || subtotal < 0 || !Number.isFinite(vat) || vat < 0 || vat > 1) throw new Error('Montants du devis invalides')
+        quoteHtCents = Math.round(subtotal * 100)
+        const serviceCents = quoteHtCents + Math.round(subtotal * vat * 100)
+        const charged = verifiedPayment.metadata?.pricingVersion === HT_PRICING_VERSION ? htPricing(serviceCents, quoteHtCents).amount : serviceCents + Math.round(serviceCents * 0.10)
+        if (charged !== verifiedPayment.amount_received) throw new Error('Devis et encaissement incohérents')
+        amount = serviceCents / 100
+        invoiceVatExempt = vat === 0
+        invoiceVatRate = vat * 100
+      }
+      const amounts = missionInvoiceAmounts(amount, invoiceType,
+        invoiceVatExempt, verifiedPayment?.amount_received, verifiedPayment?.application_fee_amount, invoiceVatRate, quoteHtCents)
+      amountHt = amounts.amountHt
+      amountTtc = amounts.amountTtc
+      vatRate = amounts.vatRate
+      vatExempt = amounts.vatExempt
+    }
+
+    if (completionStep) {
+      const amounts = completionInvoiceAmounts(completionStep, completionPayment, completionSource, invoiceType, provider?.is_vat_exempt === true)
+      ;({ amountHt, amountTtc, vatRate, vatExempt } = amounts)
+      serviceDate = new Date(completionStep.declared_at).toLocaleDateString('fr-FR')
+    }
+
+    // Altio's own VAT regime is independent from the provider's legal form.
+    if (invoiceType === 'commission' || invoiceType === 'service_fee') {
+      vatExempt = legalEntity.vatExempt
+      vatRate = vatExempt ? 0 : 20
+      amountHt = vatExempt ? amountTtc : Math.round(amountTtc * 100 / 1.2) / 100
     }
 
     // ── 3. Invoice numbering — 3 separate sequences ───────────────────────────
     const year = new Date().getFullYear()
     let invoiceNumber: string
 
-    if (isMandateInvoice) {
-      // F1 — Mandat: per-provider sequence MAN-[SIRET_SHORT]-YYYY-XXXX
-      const providerSiret = provider?.siren || provider?.siret || provider?.id?.substring(0, 8) || 'UNKNOWN'
-      const siretShort = providerSiret.replace(/\s/g, '').slice(0, 9)
-
-      // Try the atomic RPC first, fallback to old sequence
-      const { data: mandateSeq, error: mandateErr } = await db
-        .rpc('next_mandate_invoice_number', { p_provider_id: provider.id, p_year: year })
-        .single()
-
-      if (mandateErr) {
-        // Fallback: use the old global sequence
-        const { data: seqData } = await db.rpc('nextval', { seq: 'invoice_seq' }).single()
-        const seq = seqData ?? Date.now()
-        invoiceNumber = `MAN-${siretShort}-${year}-${String(seq).padStart(4, '0')}`
-      } else {
-        invoiceNumber = `MAN-${siretShort}-${year}-${String(mandateSeq).padStart(4, '0')}`
-      }
-    } else if (invoiceType === 'service_fee') {
-      // F2 — Altio → proprio: ALTIO-PROP-YYYY-XXXX
-      let seq: number
-      try {
-        const { data: seqData } = await db.rpc('nextval', { seq: 'invoice_seq_prop' }).single()
-        seq = seqData ?? Date.now()
-      } catch {
-        // Fallback if sequence doesn't exist yet
-        const { data: seqData } = await db.rpc('nextval', { seq: 'invoice_seq' }).single()
-        seq = seqData ?? Date.now()
-      }
-      invoiceNumber = `ALTIO-PROP-${year}-${String(seq).padStart(4, '0')}`
-    } else {
-      // F3 — commission: ALTIO-PREST-YYYY-XXXX
-      let seq: number
-      try {
-        const { data: seqData } = await db.rpc('nextval', { seq: 'invoice_seq_prest' }).single()
-        seq = seqData ?? Date.now()
-      } catch {
-        const { data: seqData } = await db.rpc('nextval', { seq: 'invoice_seq' }).single()
-        seq = seqData ?? Date.now()
-      }
-      invoiceNumber = `ALTIO-PREST-${year}-${String(seq).padStart(4, '0')}`
-    }
+    const sequence = isMandateInvoice
+      ? await db.rpc('next_mandate_invoice_number', { p_provider_id: provider.id, p_year: year }).single()
+      : await db.rpc('nextval', { seq: invoiceType === 'service_fee' ? 'invoice_seq_prop' : 'invoice_seq_prest' }).single()
+    const sequenceValue = Number(sequence.data)
+    if (sequence.error || !Number.isSafeInteger(sequenceValue) || sequenceValue < 1) throw new Error('Numérotation des factures indisponible')
+    const prefix = isMandateInvoice
+      ? `MAN-${(provider?.siren || provider?.siret || provider.id.substring(0, 8)).replace(/\s/g, '').slice(0, 9)}`
+      : invoiceType === 'service_fee' ? 'ALTIO-PROP' : 'ALTIO-PREST'
+    invoiceNumber = `${prefix}-${year}-${String(sequenceValue).padStart(4, '0')}`
 
     // ── 4. Generate HTML invoice ─────────────────────────────────────────────
     const emissionDate = new Date().toLocaleDateString('fr-FR')
     const dueDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString('fr-FR')
 
-    const altioSiren = Deno.env.get('ALTIO_SIREN') || '000000000'
-    const altioSiret = Deno.env.get('ALTIO_SIRET') || '00000000000000'
-    const altioVat = Deno.env.get('ALTIO_TVA_NUMBER') || 'FR00000000000'
-    const altioRcs = Deno.env.get('ALTIO_RCS') || 'RCS Thonon-les-Bains'
-    const altioAddress = Deno.env.get('ALTIO_ADDRESS') || 'Morzine, 74110 Haute-Savoie, France'
-    const altioCapital = Deno.env.get('ALTIO_CAPITAL') || '1 000'
-
-    if (!Deno.env.get('ALTIO_SIREN') || altioSiren === '000000000')
-      console.warn('[generate-invoice] ATTENTION: ALTIO_SIREN non configuré, valeur par défaut utilisée')
-    if (!Deno.env.get('ALTIO_SIRET') || altioSiret === '00000000000000')
-      console.warn('[generate-invoice] ATTENTION: ALTIO_SIRET non configuré, valeur par défaut utilisée')
-    if (!Deno.env.get('ALTIO_TVA_NUMBER') || altioVat === 'FR00000000000')
-      console.warn('[generate-invoice] ATTENTION: ALTIO_TVA_NUMBER non configuré, valeur par défaut utilisée')
+    const altioName = escapeDocumentText(legalEntity.name)
+    const altioForm = escapeDocumentText(legalEntity.form)
+    const altioSiren = legalEntity.siren
+    const altioSiret = legalEntity.siret
+    const altioVat = escapeDocumentText(legalEntity.vat)
+    const altioRcs = escapeDocumentText(legalEntity.rcs)
+    const altioAddress = escapeDocumentText(legalEntity.address)
+    const altioCapital = escapeDocumentText(legalEntity.capital)
     const altioInfo = {
-      name: 'Altio SAS',
+      name: altioName,
       siren: altioSiren,
       siret: altioSiret,
       vat_number: altioVat,
       billing_address: altioAddress,
-      company_name: 'Altio SAS',
+      company_name: altioName,
       rcs: altioRcs,
       capital: altioCapital,
     }
@@ -306,13 +386,13 @@ serve(async (req) => {
       }
       // F2/F3: Altio is seller
       return `
-        <div class="party-name">Altio SAS</div>
+        <div class="party-name">${altioName}</div>
         <div class="party-detail">
-          SAS au capital de ${altioCapital} \u20AC<br>
+          ${altioForm}${altioCapital ? ` — capital : ${altioCapital} €` : ''}<br>
           SIREN : ${altioSiren}<br>
           SIRET : ${altioSiret}<br>
           ${altioRcs}<br>
-          N\u00B0 TVA : ${altioVat}<br>
+          ${altioVat ? `N° TVA : ${altioVat}<br>` : ''}
           ${altioAddress}
         </div>`
     })()
@@ -331,7 +411,7 @@ serve(async (req) => {
 
     // Legal footer — mandate mention only on F1
     const mandateMention = isMandateInvoice
-      ? `<br><em>Facture \u00E9mise par Altio SAS (SIREN : ${altioSiren}) au nom et pour le compte de ${providerName} (SIREN : ${providerSiren}) en vertu d'un mandat de facturation (art. 289-I-2 du CGI).</em><br>`
+      ? `<br><em>Facture émise par ${altioName} (SIREN : ${altioSiren}) au nom et pour le compte de ${providerName} (SIREN : ${providerSiren}) en vertu d'un mandat de facturation (art. 289-I-2 du CGI).</em><br>`
       : ''
 
     const html = `<!DOCTYPE html>
@@ -369,7 +449,7 @@ serve(async (req) => {
   <div class="header">
     <div>
       <div class="brand">\u2B1B Altio</div>
-      <div class="brand-sub">Plateforme de gestion de locations saisonni\u00E8res<br>contact@altio.fr</div>
+      <div class="brand-sub">Plateforme de gestion de locations saisonni\u00E8res<br>${escapeDocumentText(legalEntity.email)}</div>
     </div>
     <div class="invoice-meta">
       <div class="invoice-num">FACTURE ${invoiceNumber}</div>
@@ -432,14 +512,13 @@ serve(async (req) => {
   <div class="legal">
     <strong>Conditions de r\u00E8glement :</strong> Paiement \u00E0 30 jours \u00E0 compter de la date d'\u00E9mission.<br>
     Pas d'escompte pour paiement anticip\u00E9.<br>
-    En cas de retard de paiement, des p\u00E9nalit\u00E9s de retard seront appliqu\u00E9es au taux de 3 fois le taux d'int\u00E9r\u00EAt l\u00E9gal en vigueur (art. L441-10 du Code de commerce).<br>
-    Indemnit\u00E9 forfaitaire pour frais de recouvrement en cas de retard : 40 \u20AC.<br>
+    Clients professionnels uniquement : pénalités de retard au taux de 3 fois le taux d'intérêt légal et indemnité forfaitaire de recouvrement de 40 € (art. L441-10 et D441-5 du Code de commerce). Non applicables aux consommateurs.<br>
     ${vatExempt ? '<br><em>TVA non applicable, art. 293 B du CGI.</em><br>' : ''}
     ${mandateMention}
     <br><strong>Cat\u00E9gorie de l'op\u00E9ration :</strong> Prestation de services<br>
     <strong>Option TVA sur les d\u00E9bits :</strong> Non applicable (TVA sur encaissements)<br>
-    Altio SAS \u2014 ${altioAddress} \u2014 SIREN : ${altioSiren} \u2014 ${altioRcs} \u2014 TVA : ${altioVat} \u2014 contact@altio.app<br>
-    M\u00E9diateur : CMAP, 39 av. Franklin D. Roosevelt, 75008 Paris \u2014 www.cmap.fr
+    ${altioName} — ${altioAddress} — SIREN : ${altioSiren} — ${altioRcs} ${altioVat ? `— TVA : ${altioVat}` : ''} — ${escapeDocumentText(legalEntity.email)}<br>
+    ${legalEntity.mediatorName && legalEntity.mediatorAddress && legalEntity.mediatorUrl ? `Médiateur Altio : ${escapeDocumentText(legalEntity.mediatorName)} — ${escapeDocumentText(legalEntity.mediatorAddress)} — ${escapeDocumentText(legalEntity.mediatorUrl)}` : ''}
   </div>
 </body>
 </html>`
@@ -578,6 +657,7 @@ serve(async (req) => {
 
     // ── 6. Insert invoice record ─────────────────────────────────────────────
     let invoiceInsertPayload: Record<string, unknown> = {
+      completion_step_id: completionStepId ?? null,
       invoice_number:  invoiceNumber,
       mission_id:      missionId ?? null,
       emergency_id:    emergencyId ?? null,
@@ -594,35 +674,21 @@ serve(async (req) => {
       facturx_url:     xmlFileName,
     }
 
-    let invoice: Record<string, unknown> | null = null
-    let insertErr: { message: string } | null = null
-
-    const firstTry = await db.from('invoices').insert(invoiceInsertPayload).select().single()
-    if (firstTry.error) {
-      const errMsg = firstTry.error.message || ''
-      const fieldsToRetry = ['facturx_url', 'emergency_id', 'intervention_id']
-      let retryPayload = { ...invoiceInsertPayload }
-      let needsRetry = false
-      for (const field of fieldsToRetry) {
-        if (errMsg.includes(field)) {
-          delete retryPayload[field]
-          needsRetry = true
-        }
-      }
-      if (needsRetry) {
-        const secondTry = await db.from('invoices').insert(retryPayload).select().single()
-        invoice   = secondTry.data
-        insertErr = secondTry.error
-      } else {
-        invoice   = firstTry.data
-        insertErr = firstTry.error
-      }
-    } else {
-      invoice   = firstTry.data
-      insertErr = firstTry.error
+    const { data: invoice, error: insertErr } = await db.rpc('insert_invoice_with_parties', {
+      p_invoice: invoiceInsertPayload,
+      p_seller: sellerId ? originalProvider : null,
+      p_buyer: invoiceType === 'commission' ? originalProvider : originalOwner,
+    })
+    if (insertErr?.code === '23505') {
+      // A concurrent webhook/worker may have won. Never drop source columns to retry.
+      const duplicate = db.from('invoices').select('id').eq('invoice_type', invoiceType)
+      if (completionStepId) duplicate.eq('completion_step_id', completionStepId)
+      else { duplicate.is('completion_step_id', null); duplicate.eq(missionId ? 'mission_id' : emergencyId ? 'emergency_id' : 'intervention_id', sourceRef) }
+      const { data: winner, error } = await duplicate.maybeSingle()
+      if (!error && winner) return new Response(JSON.stringify({ ok: true, skipped: true, invoice: winner }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
-
     if (insertErr) throw new Error(`Invoice insert failed: ${insertErr.message}`)
+    if (!invoice?.id) throw new Error('Invoice insert returned no document')
 
     return new Response(
       JSON.stringify({ success: true, invoice, facturx_url: xmlFileName }),

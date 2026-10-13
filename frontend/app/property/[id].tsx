@@ -62,6 +62,7 @@ export default function PropertyDetailScreen() {
   const [existingPhotos, setExistingPhotos] = useState<string[]>([]);
   const [newPhotoAssets, setNewPhotoAssets] = useState<ImagePicker.ImagePickerAsset[]>([]);
   const [deletedPhotoUrls, setDeletedPhotoUrls] = useState<string[]>([]);
+  const [coverPhotoFailed, setCoverPhotoFailed] = useState(false);
 
   // Form state — mirrors add.tsx fields
   const [name, setName] = useState('');
@@ -92,6 +93,7 @@ export default function PropertyDetailScreen() {
       setExistingPhotos(property.photos || []);
       setNewPhotoAssets([]);
       setDeletedPhotoUrls([]);
+      setCoverPhotoFailed(false);
 
       // Try to parse "street, postalCode city" format
       const addr = property.address || '';
@@ -255,14 +257,18 @@ export default function PropertyDetailScreen() {
     const fullAddress = `${street.trim()}, ${postalCode.trim()} ${city.trim()}`;
     try {
       // Upload new photos
-      const uploadedUrls: string[] = [];
-      for (const asset of newPhotoAssets) {
-        try {
-          const url = await uploadPropertyPhoto(id!, asset.uri);
-          uploadedUrls.push(url);
-        } catch (e) {
-          console.error('[PropertyDetail] photo upload error:', e);
-        }
+      let uploadedUrls: string[] = [];
+      try {
+        uploadedUrls = await Promise.all(
+          newPhotoAssets.map(asset => uploadPropertyPhoto(id!, asset.uri)),
+        );
+      } catch (e) {
+        console.error('[PropertyDetail] photo upload error:', e);
+        Alert.alert(
+          t('owner.properties.photo_upload_failed_title'),
+          t('owner.properties.photo_upload_failed'),
+        );
+        return;
       }
 
       // Delete removed photos from storage
@@ -453,13 +459,22 @@ export default function PropertyDetailScreen() {
           {!editing && (
             <View style={styles.card}>
               <View style={styles.cardHeader}>
-                <View style={styles.cardIcon}>
-                  <Ionicons
-                    name={propertyType === 'chalet' ? 'home' : propertyType === 'studio' ? 'bed' : 'business'}
-                    size={28}
-                    color={COLORS.brandPrimary}
+                {property.photos?.[0] && !coverPhotoFailed ? (
+                  <Image
+                    source={{ uri: property.photos[0] }}
+                    style={styles.cardPhoto}
+                    resizeMode="cover"
+                    onError={() => setCoverPhotoFailed(true)}
                   />
-                </View>
+                ) : (
+                  <View style={styles.cardIcon}>
+                    <Ionicons
+                      name={propertyType === 'chalet' ? 'home' : propertyType === 'studio' ? 'bed' : 'business'}
+                      size={28}
+                      color={COLORS.brandPrimary}
+                    />
+                  </View>
+                )}
                 <View style={styles.cardHeaderText}>
                   <Text style={styles.propName}>{property.name}</Text>
                   <Text style={styles.propType}>
@@ -931,6 +946,7 @@ const styles = StyleSheet.create({
   card: { backgroundColor: COLORS.paper, padding: SPACING.xl, borderRadius: RADIUS.xl, marginTop: SPACING.lg, ...SHADOWS.card },
   cardHeader: { flexDirection: 'row', alignItems: 'center', gap: SPACING.lg, marginBottom: SPACING.md },
   cardIcon: { width: 50, height: 50, borderRadius: 15, backgroundColor: COLORS.subtle, justifyContent: 'center', alignItems: 'center' },
+  cardPhoto: { width: 50, height: 50, borderRadius: 15, backgroundColor: COLORS.subtle },
   cardHeaderText: { flex: 1 },
   propName: { ...FONTS.h2, color: COLORS.textPrimary },
   propType: { ...FONTS.bodySmall, color: COLORS.textSecondary, marginTop: 2 },

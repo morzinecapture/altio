@@ -1,3 +1,4 @@
+import { confirmEarlyExecution } from '../../src/services/early-execution-consent';
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ScrollView,
@@ -16,7 +17,7 @@ import { missionKeys } from '../../src/hooks/useMissions';
 import { emergencyKeys } from '../../src/hooks/useEmergencies';
 import type { QuoteDetailEnriched, QuoteLineItem, PaymentMetadata } from '../../src/types/api';
 import { viewOrShareDocument, isPrintAvailable } from '../../src/utils/pdf-helper';
-import { COMMISSION_RATE } from '../../src/utils/commission';
+import { quotePrice } from '../../src/utils/quotePrice';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -49,7 +50,6 @@ const SPECIALTY_LABELS: Record<string, string> = {
   maintenance: 'Maintenance',
 };
 
-const ALTIO_SERVICE_FEE_RATE = COMMISSION_RATE; // 10% frais de service (cf. src/utils/commission.ts)
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
@@ -94,22 +94,9 @@ export default function QuoteDetailScreen() {
   const lineItems: QuoteLineItem[] = quote?.line_items || [];
   const hasLineItems = lineItems.length > 0;
 
-  // Compute sub-total from line items, or fallback to repair_cost
-  const subTotalHT = hasLineItems
-    ? lineItems.reduce((sum: number, item: QuoteLineItem) => sum + ((item.quantity || 1) * (Number(item.unit_price_ht) || item.unit_price || 0)), 0)
-    : repairCostHT;
-
-  // TVA computation — lire les valeurs sauvegardées en base
   const isExemptTVA = quote?.is_vat_exempt === true;
   const tvaRate = isExemptTVA ? 0 : Number(quote?.tva_rate ?? 0.20);
-  const tvaAmount = Math.round(subTotalHT * tvaRate * 100) / 100;
-  const totalTTC = Math.round((subTotalHT + tvaAmount) * 100) / 100;
-
-  // Frais de service Altio = 10% du TTC de la prestation
-  const fraisServiceTTC = Math.round(totalTTC * ALTIO_SERVICE_FEE_RATE * 100) / 100;
-
-  // Total à payer par le propriétaire
-  const totalAPayer = Math.round((totalTTC + fraisServiceTTC) * 100) / 100;
+  const { subtotal: subTotalHT, vat: tvaAmount, service: totalTTC, fee: fraisServiceTTC, total: totalAPayer } = quotePrice(quote || {});
 
   // Validity
   const validUntil = quote?.valid_until || quote?.expires_at;
@@ -146,7 +133,7 @@ export default function QuoteDetailScreen() {
       const { clientSecret, paymentIntentId } = await createPaymentIntent(
         totalAPayer,
         metadata,
-        'manual' // manual capture for quotes
+        'manual', undefined, undefined, await confirmEarlyExecution()
       );
 
       // Init Stripe payment sheet
@@ -672,11 +659,10 @@ const resolveInvoiceBucketUrl = async (value: string) => {
 
             {/* Legal text — electronic signature */}
             <Text style={styles.legalText}>
-              En acceptant ce devis, vous signez electroniquement ce document
-              (horodatage et consentement enregistres conformement au reglement eIDAS).
+              En acceptant ce devis, vous confirmez votre accord sur la prestation et son prix.
               Vous autorisez le prelevement de {formatCurrency(totalAPayer)} via Stripe.
-              Conformement a l'art. L221-28 du Code de la consommation, vous renoncez a votre droit
-              de retractation pour cette prestation une fois l'intervention commencee.
+              Le commencement de l’intervention ne supprime pas à lui seul votre droit de rétractation.
+              Les conditions et exceptions légales sont précisées dans les CGV.
             </Text>
 
             {/* Buttons */}

@@ -1,0 +1,24 @@
+[
+  {
+    "id": "695b073a-1d3b-40f7-9cd1-73932512b7e6",
+    "status": "FINISHED",
+    "appVersion": "1.0.0",
+    "appBuildVersion": "19",
+    "buildProfile": "testflight",
+    "createdAt": "2026-10-08T12:59:02.557Z",
+    "updatedAt": "2026-10-08T13:11:33.403Z",
+    "sdkVersion": "54.0.0",
+    "distribution": "STORE"
+  },
+  {
+    "id": "592cf1bf-8f25-4288-90b7-038a7c6ae032",
+    "status": "FINISHED",
+    "appVersion": "1.0.0",
+    "appBuildVersion": "18",
+    "buildProfile": "testflight",
+    "createdAt": "2026-10-08T12:58:19.597Z",
+    "updatedAt": "2026-10-08T13:04:36.950Z",
+    "sdkVersion": "54.0.0",
+    "distribution": "STORE"
+  }
+]

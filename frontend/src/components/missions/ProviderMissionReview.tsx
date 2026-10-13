@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONTS, SPACING, RADIUS, SHADOWS, STATUS_COLORS } from '../../theme';
 import { getMissionTypeLabel } from '../../utils/serviceLabels';
 import { useAuth } from '../../auth';
+import { priceFromTtc, providerVatRate } from '../../utils/commission';
 import { useProviderDaySchedule } from '../../hooks/useMissions';
 import MissionDayMap from './MissionDayMap';
 import type { MergedMission, DayMission } from '../../types/api';
@@ -86,7 +87,7 @@ export default function ProviderMissionReview({ mission, onAccept, onDecline }: 
     .sort((a, b) => new Date(a.scheduled_date).getTime() - new Date(b.scheduled_date).getTime());
 
   const providerAmount = mission.fixed_rate
-    ? Math.round(mission.fixed_rate * 0.9 * 100) / 100
+    ? priceFromTtc(mission.fixed_rate, providerVatRate(user?.is_vat_exempt)).payout
     : null;
 
   return (
@@ -102,7 +103,7 @@ export default function ProviderMissionReview({ mission, onAccept, onDecline }: 
         )}
         <View style={styles.typeBadge}>
           <Ionicons name="briefcase-outline" size={14} color={COLORS.brandPrimary} />
-          <Text style={styles.typeBadgeText}>{getMissionTypeLabel(mission.mission_type)}</Text>
+          <Text style={styles.typeBadgeText}>{getMissionTypeLabel(mission.mission_type, mission.services)}</Text>
         </View>
 
         {/* B) Mission details */}

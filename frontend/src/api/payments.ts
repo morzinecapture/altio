@@ -1,7 +1,39 @@
-import { supabase, checkError, checkFunctionError, assertMissionTransition } from './_client';
+import type { EarlyExecutionConsent } from '../services/early-execution-consent';
+import { supabase, checkError, checkFunctionError, assertMissionTransition, captureError } from './_client';
 import type { MissionStatus, PaymentMetadata } from './_client';
 
-export const createPaymentIntent = async (amount: number, metadata?: PaymentMetadata, captureMethod: 'automatic' | 'manual' = 'automatic', destination?: string, applicationFeeAmount?: number) => {
+type InvoiceSource = {
+  missionId?: string;
+  emergencyId?: string;
+  interventionId?: string;
+  stripePaymentIntentId?: string;
+};
+
+export type InvoiceGenerationResult = {
+  failedTypes: string[];
+};
+
+/** Edge Function invocations resolve even when the function responds 4xx. */
+export const generateInvoiceDocuments = async (source: InvoiceSource): Promise<InvoiceGenerationResult> => {
+  const invoiceTypes = ['service', 'service_fee', 'commission'] as const;
+  const results = await Promise.allSettled(invoiceTypes.map(async (invoiceType) => {
+    const { data, error } = await supabase.functions.invoke('generate-invoice', {
+      body: { ...source, invoiceType },
+    });
+    await checkFunctionError(error);
+    if (data?.error) throw new Error(String(data.error));
+  }));
+
+  const failedTypes = results.flatMap((result, index) => {
+    if (result.status === 'fulfilled') return [];
+    captureError(result.reason, { scope: 'generateInvoiceDocuments', invoiceType: invoiceTypes[index] });
+    return [invoiceTypes[index]];
+  });
+
+  return { failedTypes };
+};
+
+export const createPaymentIntent = async (amount: number, metadata?: PaymentMetadata, captureMethod: 'automatic' | 'manual' = 'automatic', destination?: string, applicationFeeAmount?: number, executionConsent?: EarlyExecutionConsent) => {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.user) throw new Error('Not authenticated');
 
@@ -9,6 +41,7 @@ export const createPaymentIntent = async (amount: number, metadata?: PaymentMeta
     body: {
       amount: Math.round(amount * 100),
       captureMethod,
+      executionConsent,
       metadata,
       destination,
       application_fee_amount: applicationFeeAmount ? Math.round(applicationFeeAmount * 100) : undefined
@@ -46,44 +79,30 @@ export const completeMissionPayment = async (missionId: string, stripePaymentInt
 
   const { data: mission, error: fetchErr } = await supabase
     .from('missions')
-    .select('payment_intent_id, status, owner_id')
+    .select('payment_intent_id, stripe_payment_intent_id, status, owner_id')
     .eq('id', missionId)
     .eq('owner_id', session.user.id)
     .single();
 
   if (fetchErr || !mission) throw new Error('Mission introuvable');
-  assertMissionTransition(mission.status as MissionStatus, 'paid');
+  if (mission.status !== 'paid') assertMissionTransition(mission.status as MissionStatus, 'paid');
 
-  const piId = mission.payment_intent_id || stripePaymentIntentId;
+  const piId = mission.payment_intent_id || mission.stripe_payment_intent_id || stripePaymentIntentId;
 
-  if (piId && !stripePaymentIntentId) {
+  if (piId && !stripePaymentIntentId && mission.status !== 'paid') {
     await capturePayment(piId, undefined, missionId);
   }
 
-  const { error } = await supabase
-    .from('missions')
-    .update({ status: 'paid', paid_at: new Date().toISOString() })
-    .eq('id', missionId)
-    .eq('status', 'validated')
-    .eq('owner_id', session.user.id);
-  checkError(error);
+  if (!piId) throw new Error('Référence de paiement manquante');
+  const { data: confirmed, error } = await supabase.functions.invoke('confirm-mission-payment', {
+    body: { missionId, paymentIntentId: piId },
+  });
+  await checkFunctionError(error);
+  if (!confirmed?.ok) throw new Error(confirmed?.error || 'Le paiement n’est pas encore confirmé.');
 
-  // Generate invoices after successful payment
-  const session2 = (await supabase.auth.getSession()).data.session;
-  if (session2?.access_token) {
-    const invoiceBody = { missionId, stripePaymentIntentId: stripePaymentIntentId || piId };
-    Promise.all([
-      supabase.functions.invoke('generate-invoice', {
-        body: { ...invoiceBody, invoiceType: 'service' },
-      }),
-      supabase.functions.invoke('generate-invoice', {
-        body: { ...invoiceBody, invoiceType: 'service_fee' },
-      }),
-      supabase.functions.invoke('generate-invoice', {
-        body: { ...invoiceBody, invoiceType: 'commission' },
-      }),
-    ]).catch((err) => console.error('[completeMissionPayment] Invoice generation error:', err));
-  }
+  // A document failure must not be presented as a failed card payment. Return
+  // the result so the screen can explain the situation to the user.
+  return generateInvoiceDocuments({ missionId, stripePaymentIntentId: stripePaymentIntentId || piId });
 };
 
 export const createStripeConnectAccount = async () => {
@@ -101,7 +120,13 @@ export const createStripeConnectAccount = async () => {
   return data;
 };
 
-export const checkPaymentStatus = async (_sessionId: string) => ({ status: 'paid' as const });
+// Payment status must come from a server-verified mission; no optimistic paid stub.
+export const checkPaymentStatus = async (missionId: string) => {
+  const { data, error } = await supabase.from('missions').select('status').eq('id', missionId).single();
+  checkError(error);
+  if (!data) throw new Error('Mission introuvable');
+  return { status: data.status as MissionStatus };
+};
 
 type InvoiceDocumentFields = {
   pdf_url?: string | null;
@@ -133,7 +158,17 @@ const resolveInvoiceDocumentUrl = async (value?: string | null) => {
   const { data, error } = await supabase.storage
     .from('invoices')
     .createSignedUrl(objectPath, signedInvoiceUrlTtlSeconds);
-  if (error || !data?.signedUrl) return value ?? undefined;
+
+  // Le bucket `invoices` est privé : sans URL signée le document est inaccessible.
+  // Ne pas retomber sur la valeur brute — ce serait une URL publique morte (HTTP 400).
+  // On remonte l'échec pour qu'il soit visible au lieu de produire un lien cassé.
+  if (error || !data?.signedUrl) {
+    captureError(error ?? new Error('Signature du document impossible'), {
+      scope: 'resolveInvoiceDocumentUrl',
+      objectPath,
+    });
+    return undefined;
+  }
   return data.signedUrl;
 };
 
@@ -143,15 +178,21 @@ const withSignedInvoiceDocuments = async <T extends InvoiceDocumentFields>(invoi
   facturx_url: await resolveInvoiceDocumentUrl(invoice.facturx_url),
 }) as T;
 
-const withSignedInvoiceListDocuments = async <T extends InvoiceDocumentFields>(invoices: T[]): Promise<T[]> =>
-  Promise.all(invoices.map(withSignedInvoiceDocuments));
+const withSignedInvoiceListDocuments = async <T extends InvoiceDocumentFields>(invoices: T[]): Promise<T[]> => {
+  // A full history must not open one Storage connection per invoice at once.
+  const signed: T[] = [];
+  for (let offset = 0; offset < invoices.length; offset += 4) {
+    signed.push(...await Promise.all(invoices.slice(offset, offset + 4).map(withSignedInvoiceDocuments)));
+  }
+  return signed;
+};
 
 export const getMyInvoices = async () => {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.user) throw new Error('Not authenticated');
   const { data, error } = await supabase
     .from('invoices')
-    .select('*, mission:missions(mission_type, description), emergency:emergency_requests(service_type, description), seller:users!invoices_seller_id_fkey(name, company_name), buyer:users!invoices_buyer_id_fkey(name, company_name)')
+    .select('*, mission:missions(mission_type, description), emergency:emergency_requests(service_type, description), seller:public_profiles!invoices_seller_id_fkey(name, company_name), buyer:public_profiles!invoices_buyer_id_fkey(name, company_name)')
     .or(`seller_id.eq.${session.user.id},buyer_id.eq.${session.user.id}`)
     .order('created_at', { ascending: false });
   checkError(error);
@@ -162,8 +203,8 @@ const INVOICE_SELECT = `
   *,
   mission:missions(mission_type, description, property:properties(name, address)),
   emergency:emergency_requests(service_type, description),
-  seller:users!invoices_seller_id_fkey(name, company_name, siren, vat_number, billing_address, is_vat_exempt),
-  buyer:users!invoices_buyer_id_fkey(name, company_name, siren, vat_number, billing_address, is_vat_exempt)
+  seller:public_profiles!invoices_seller_id_fkey(name, company_name, siren, vat_number, billing_address, is_vat_exempt),
+  buyer:public_profiles!invoices_buyer_id_fkey(name, company_name, siren, vat_number, billing_address, is_vat_exempt)
 `;
 
 export const getInvoices = async (role: 'buyer' | 'seller') => {

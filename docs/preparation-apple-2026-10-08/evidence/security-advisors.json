@@ -1,0 +1,318 @@
+{
+  "result": {
+    "lints": [
+      {
+        "name": "rls_enabled_no_policy",
+        "title": "RLS Enabled No Policy",
+        "level": "INFO",
+        "facing": "EXTERNAL",
+        "categories": [
+          "SECURITY"
+        ],
+        "description": "Detects cases where row level security (RLS) has been enabled on a table but no RLS policies have been created.",
+        "remediation": "https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy",
+        "count": 4,
+        "findings": [
+          {
+            "detail": "Table \\`public.invoice_mandate_counters\\` has RLS enabled, but no policies exist",
+            "metadata": {
+              "name": "invoice_mandate_counters",
+              "type": "table",
+              "schema": "public"
+            },
+            "observed_at": "2026-10-08T14:19:53.796Z"
+          },
+          {
+            "detail": "Table \\`public.legacy_document_path_backup\\` has RLS enabled, but no policies exist",
+            "metadata": {
+              "name": "legacy_document_path_backup",
+              "type": "table",
+              "schema": "public"
+            },
+            "observed_at": "2026-10-08T14:19:53.796Z"
+          },
+          {
+            "detail": "Table \\`public.payments\\` has RLS enabled, but no policies exist",
+            "metadata": {
+              "name": "payments",
+              "type": "table",
+              "schema": "public"
+            },
+            "observed_at": "2026-10-08T14:19:53.796Z"
+          },
+          {
+            "detail": "Table \\`public.quotes\\` has RLS enabled, but no policies exist",
+            "metadata": {
+              "name": "quotes",
+              "type": "table",
+              "schema": "public"
+            },
+            "observed_at": "2026-10-08T14:19:53.796Z"
+          }
+        ]
+      },
+      {
+        "name": "security_definer_view",
+        "title": "Security Definer View",
+        "level": "ERROR",
+        "facing": "EXTERNAL",
+        "categories": [
+          "SECURITY"
+        ],
+        "description": "Detects views defined with the SECURITY DEFINER property. These views enforce Postgres permissions and row level security policies (RLS) of the view creator, rather than that of the querying user",
+        "remediation": "https://supabase.com/docs/guides/database/database-linter?lint=0010_security_definer_view",
+        "count": 3,
+        "findings": [
+          {
+            "detail": "View \\`public.admin_dashboard_stats\\` is defined with the SECURITY DEFINER property",
+            "metadata": {
+              "name": "admin_dashboard_stats",
+              "type": "view",
+              "schema": "public"
+            },
+            "observed_at": "2026-10-08T14:19:53.796Z"
+          },
+          {
+            "detail": "View \\`public.public_provider_profiles\\` is defined with the SECURITY DEFINER property",
+            "metadata": {
+              "name": "public_provider_profiles",
+              "type": "view",
+              "schema": "public"
+            },
+            "observed_at": "2026-10-08T14:19:53.796Z"
+          },
+          {
+            "detail": "View \\`public.public_profiles\\` is defined with the SECURITY DEFINER property",
+            "metadata": {
+              "name": "public_profiles",
+              "type": "view",
+              "schema": "public"
+            },
+            "observed_at": "2026-10-08T14:19:53.796Z"
+          }
+        ]
+      },
+      {
+        "name": "authenticated_security_definer_function_executable",
+        "title": "Signed-In Users Can Execute SECURITY DEFINER Function",
+        "level": "WARN",
+        "facing": "EXTERNAL",
+        "categories": [
+          "SECURITY"
+        ],
+        "description": "Detects `SECURITY DEFINER` functions that are callable by signed-in users. Revoke `EXECUTE`, switch the function to `SECURITY INVOKER`, or move it out of your exposed API schema if signed-in users should not call it.",
+        "remediation": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+        "count": 15,
+        "findings": [
+          {
+            "detail": "Function `public._intervention_has_capacity_for_bids(p_intervention_id uuid)` can be executed by the `authenticated` role as a `SECURITY DEFINER` function via `/rest/v1/rpc/_intervention_has_capacity_for_bids`. Revoke `EXECUTE` or switch it to `SECURITY INVOKER` if that is not intentional.",
+            "metadata": {
+              "name": "_intervention_has_capacity_for_bids",
+              "schema": "public",
+              "language": "sql",
+              "arguments": "p_intervention_id uuid",
+              "security_definer": true
+            },
+            "observed_at": "2026-10-08T14:19:53.796Z"
+          },
+          {
+            "detail": "Function `public._provider_eligible_for_intervention_broadcast(p_property_id uuid, p_service_type text, p_mission_type text)` can be executed by the `authenticated` role as a `SECURITY DEFINER` function via `/rest/v1/rpc/_provider_eligible_for_intervention_broadcast`. Revoke `EXECUTE` or switch it to `SECURITY INVOKER` if that is not intentional.",
+            "metadata": {
+              "name": "_provider_eligible_for_intervention_broadcast",
+              "schema": "public",
+              "language": "sql",
+              "arguments": "p_property_id uuid, p_service_type text, p_mission_type text",
+              "security_definer": true
+            },
+            "observed_at": "2026-10-08T14:19:53.796Z"
+          },
+          {
+            "detail": "Function `public._provider_has_bid_on_emergency(request_id uuid)` can be executed by the `authenticated` role as a `SECURITY DEFINER` function via `/rest/v1/rpc/_provider_has_bid_on_emergency`. Revoke `EXECUTE` or switch it to `SECURITY INVOKER` if that is not intentional.",
+            "metadata": {
+              "name": "_provider_has_bid_on_emergency",
+              "schema": "public",
+              "language": "sql",
+              "arguments": "request_id uuid",
+              "security_definer": true
+            },
+            "observed_at": "2026-10-08T14:19:53.796Z"
+          },
+          {
+            "detail": "Function `public._provider_has_bid_on_intervention(p_intervention_id uuid)` can be executed by the `authenticated` role as a `SECURITY DEFINER` function via `/rest/v1/rpc/_provider_has_bid_on_intervention`. Revoke `EXECUTE` or switch it to `SECURITY INVOKER` if that is not intentional.",
+            "metadata": {
+              "name": "_provider_has_bid_on_intervention",
+              "schema": "public",
+              "language": "sql",
+              "arguments": "p_intervention_id uuid",
+              "security_definer": true
+            },
+            "observed_at": "2026-10-08T14:19:53.796Z"
+          },
+          {
+            "detail": "Function `public.can_send_notification(p_recipient uuid, p_reference uuid)` can be executed by the `authenticated` role as a `SECURITY DEFINER` function via `/rest/v1/rpc/can_send_notification`. Revoke `EXECUTE` or switch it to `SECURITY INVOKER` if that is not intentional.",
+            "metadata": {
+              "name": "can_send_notification",
+              "schema": "public",
+              "language": "sql",
+              "arguments": "p_recipient uuid, p_reference uuid",
+              "security_definer": true
+            },
+            "observed_at": "2026-10-08T14:19:53.796Z"
+          },
+          {
+            "detail": "Function `public.create_rotation_missions_from_ical()` can be executed by the `authenticated` role as a `SECURITY DEFINER` function via `/rest/v1/rpc/create_rotation_missions_from_ical`. Revoke `EXECUTE` or switch it to `SECURITY INVOKER` if that is not intentional.",
+            "metadata": {
+              "name": "create_rotation_missions_from_ical",
+              "schema": "public",
+              "language": "plpgsql",
+              "arguments": "",
+              "security_definer": true
+            },
+            "observed_at": "2026-10-08T14:19:53.796Z"
+          },
+          {
+            "detail": "Function `public.get_intervention_property_preview(p_intervention_id uuid)` can be executed by the `authenticated` role as a `SECURITY DEFINER` function via `/rest/v1/rpc/get_intervention_property_preview`. Revoke `EXECUTE` or switch it to `SECURITY INVOKER` if that is not intentional.",
+            "metadata": {
+              "name": "get_intervention_property_preview",
+              "schema": "public",
+              "language": "plpgsql",
+              "arguments": "p_intervention_id uuid",
+              "security_definer": true
+            },
+            "observed_at": "2026-10-08T14:19:53.796Z"
+          },
+          {
+            "detail": "Function `public.insert_notification_for_user(p_user_id uuid, p_type text, p_title text, p_body text, p_reference_id text)` can be executed by the `authenticated` role as a `SECURITY DEFINER` function via `/rest/v1/rpc/insert_notification_for_user`. Revoke `EXECUTE` or switch it to `SECURITY INVOKER` if that is not intentional.",
+            "metadata": {
+              "name": "insert_notification_for_user",
+              "schema": "public",
+              "language": "plpgsql",
+              "arguments": "p_user_id uuid, p_type text, p_title text, p_body text, p_reference_id text",
+              "security_definer": true
+            },
+            "observed_at": "2026-10-08T14:19:53.796Z"
+          },
+          {
+            "detail": "Function `public.is_admin()` can be executed by the `authenticated` role as a `SECURITY DEFINER` function via `/rest/v1/rpc/is_admin`. Revoke `EXECUTE` or switch it to `SECURITY INVOKER` if that is not intentional.",
+            "metadata": {
+              "name": "is_admin",
+              "schema": "public",
+              "language": "sql",
+              "arguments": "",
+              "security_definer": true
+            },
+            "observed_at": "2026-10-08T14:19:53.796Z"
+          },
+          {
+            "detail": "Function `public.is_mission_owner(p_mission_id uuid)` can be executed by the `authenticated` role as a `SECURITY DEFINER` function via `/rest/v1/rpc/is_mission_owner`. Revoke `EXECUTE` or switch it to `SECURITY INVOKER` if that is not intentional.",
+            "metadata": {
+              "name": "is_mission_owner",
+              "schema": "public",
+              "language": "sql",
+              "arguments": "p_mission_id uuid",
+              "security_definer": true
+            },
+            "observed_at": "2026-10-08T14:19:53.796Z"
+          },
+          {
+            "detail": "Function `public.notify_intervention_broadcast_on_insert()` can be executed by the `authenticated` role as a `SECURITY DEFINER` function via `/rest/v1/rpc/notify_intervention_broadcast_on_insert`. Revoke `EXECUTE` or switch it to `SECURITY INVOKER` if that is not intentional.",
+            "metadata": {
+              "name": "notify_intervention_broadcast_on_insert",
+              "schema": "public",
+              "language": "plpgsql",
+              "arguments": "",
+              "security_definer": true
+            },
+            "observed_at": "2026-10-08T14:19:53.796Z"
+          },
+          {
+            "detail": "Function `public.notify_intervention_status_change()` can be executed by the `authenticated` role as a `SECURITY DEFINER` function via `/rest/v1/rpc/notify_intervention_status_change`. Revoke `EXECUTE` or switch it to `SECURITY INVOKER` if that is not intentional.",
+            "metadata": {
+              "name": "notify_intervention_status_change",
+              "schema": "public",
+              "language": "plpgsql",
+              "arguments": "",
+              "security_definer": true
+            },
+            "observed_at": "2026-10-08T14:19:53.796Z"
+          },
+          {
+            "detail": "Function `public.notify_owner_on_intervention_bid()` can be executed by the `authenticated` role as a `SECURITY DEFINER` function via `/rest/v1/rpc/notify_owner_on_intervention_bid`. Revoke `EXECUTE` or switch it to `SECURITY INVOKER` if that is not intentional.",
+            "metadata": {
+              "name": "notify_owner_on_intervention_bid",
+              "schema": "public",
+              "language": "plpgsql",
+              "arguments": "",
+              "security_definer": true
+            },
+            "observed_at": "2026-10-08T14:19:53.796Z"
+          },
+          {
+            "detail": "Function `public.sync_auto_entrepreneur_vat()` can be executed by the `authenticated` role as a `SECURITY DEFINER` function via `/rest/v1/rpc/sync_auto_entrepreneur_vat`. Revoke `EXECUTE` or switch it to `SECURITY INVOKER` if that is not intentional.",
+            "metadata": {
+              "name": "sync_auto_entrepreneur_vat",
+              "schema": "public",
+              "language": "plpgsql",
+              "arguments": "",
+              "security_definer": true
+            },
+            "observed_at": "2026-10-08T14:19:53.796Z"
+          },
+          {
+            "detail": "Function `public.update_provider_rating()` can be executed by the `authenticated` role as a `SECURITY DEFINER` function via `/rest/v1/rpc/update_provider_rating`. Revoke `EXECUTE` or switch it to `SECURITY INVOKER` if that is not intentional.",
+            "metadata": {
+              "name": "update_provider_rating",
+              "schema": "public",
+              "language": "plpgsql",
+              "arguments": "",
+              "security_definer": true
+            },
+            "observed_at": "2026-10-08T14:19:53.796Z"
+          }
+        ]
+      },
+      {
+        "name": "auth_leaked_password_protection",
+        "title": "Leaked Password Protection Disabled",
+        "level": "WARN",
+        "facing": "EXTERNAL",
+        "categories": [
+          "SECURITY"
+        ],
+        "description": "Leaked password protection is currently disabled.",
+        "remediation": "https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection",
+        "count": 1,
+        "findings": [
+          {
+            "detail": "Supabase Auth prevents the use of compromised passwords by checking against HaveIBeenPwned.org. Enable this feature to enhance security.",
+            "metadata": {
+              "type": "auth",
+              "entity": "Auth"
+            }
+          }
+        ]
+      },
+      {
+        "name": "auth_insufficient_mfa_options",
+        "title": "Insufficient MFA Options",
+        "level": "WARN",
+        "facing": "EXTERNAL",
+        "categories": [
+          "SECURITY"
+        ],
+        "description": "This project has too few multi-factor authentication (MFA) options enabled.",
+        "remediation": "https://supabase.com/docs/guides/auth/auth-mfa",
+        "count": 1,
+        "findings": [
+          {
+            "detail": "Your project has too few MFA options enabled, which may weaken account security. Enable more MFA methods to enhance security.",
+            "metadata": {
+              "type": "auth",
+              "entity": "Auth"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

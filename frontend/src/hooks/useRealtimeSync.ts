@@ -75,6 +75,7 @@ export function useRealtimeSync() {
           },
           () => {
             queryClient.invalidateQueries({ queryKey: emergencyKeys.all });
+            queryClient.invalidateQueries({ queryKey: missionKeys.all });
             queryClient.invalidateQueries({ queryKey: profileKeys.providerStats });
           },
         )
@@ -90,6 +91,7 @@ export function useRealtimeSync() {
             const emergencyId = (payload.new as { id?: string }).id;
 
             queryClient.invalidateQueries({ queryKey: emergencyKeys.all });
+            queryClient.invalidateQueries({ queryKey: missionKeys.all });
 
             if (emergencyId) {
               queryClient.invalidateQueries({
@@ -123,6 +125,7 @@ export function useRealtimeSync() {
           },
           () => {
             queryClient.invalidateQueries({ queryKey: emergencyKeys.all });
+            queryClient.invalidateQueries({ queryKey: missionKeys.all });
           },
         )
         // ── Reviews: INSERT events ──
@@ -174,9 +177,18 @@ export function useRealtimeSync() {
             if (quoteRow.emergency_request_id) {
               queryClient.invalidateQueries({ queryKey: emergencyKeys.detail(quoteRow.emergency_request_id) });
               queryClient.invalidateQueries({ queryKey: emergencyKeys.all });
+            queryClient.invalidateQueries({ queryKey: missionKeys.all });
             }
           },
         )
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'emergency_completion_steps' }, () => {
+          queryClient.invalidateQueries({ queryKey: missionKeys.all });
+          queryClient.invalidateQueries({ queryKey: emergencyKeys.all });
+          queryClient.invalidateQueries({ queryKey: ['invoices'] });
+        })
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'invoices' }, () => {
+          queryClient.invalidateQueries({ queryKey: ['invoices'] });
+        })
         // ── Notifications: INSERT events ──
         .on(
           'postgres_changes',

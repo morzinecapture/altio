@@ -1,3 +1,4 @@
+import { requireActiveSession } from './active-session.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import type { User } from 'https://esm.sh/@supabase/supabase-js@2'
 
@@ -33,7 +34,7 @@ export async function requireAuth(req: Request): Promise<{ user: User; token: st
     throw new Error('Invalid or expired token')
   }
 
-  console.log('[auth] User authenticated:', user.id)
+  await requireActiveSession(supabase, user.id, token)
   return { user, token }
 }
 
@@ -43,6 +44,24 @@ export async function requireAuth(req: Request): Promise<{ user: User; token: st
  * by other Edge Functions.
  */
 export async function requireAuthOrServiceKey(req: Request): Promise<AuthResult> {
+  // Current supabase-js sends secret API keys in apikey, without Authorization.
+  // Match only configured server secrets; a prefix alone is not authentication.
+  const apiKey = req.headers.get('apikey')
+  if (apiKey?.startsWith('sb_secret_')) {
+    const configuredKeys: unknown[] = [Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')]
+    try {
+      const keys = JSON.parse(Deno.env.get('SUPABASE_SECRET_KEYS') || '{}')
+      if (keys && typeof keys === 'object' && !Array.isArray(keys)) {
+        configuredKeys.push(...Object.values(keys))
+      }
+    } catch {
+      // Fail closed; legacy service and user authentication remain available.
+    }
+    if (configuredKeys.some(key => typeof key === 'string' && key === apiKey)) {
+      return { user: null, isServiceCall: true }
+    }
+  }
+
   // Méthode 1 : header x-service-key custom
   const serviceKey = req.headers.get('x-service-key')
   const internalKey = Deno.env.get('INTERNAL_SERVICE_KEY')

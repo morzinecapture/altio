@@ -14,17 +14,17 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { COLORS, SPACING, RADIUS, SHADOWS } from '../../../src/theme';
+import { COLORS, SPACING, RADIUS, SHADOWS, getServiceVisual } from '../../../src/theme';
 import { supabase } from '../../../src/lib/supabase';
 
 const CATEGORY_CONFIG: Record<string, { icon: string; color: string; bg: string; labelKey: string }> = {
-  restaurant:   { icon: 'restaurant-outline',  color: '#F97316', bg: '#FFEDD5', labelKey: 'catalogue.category_restaurant' },
-  activite:     { icon: 'bicycle-outline',      color: '#10B981', bg: '#D1FAE5', labelKey: 'catalogue.category_activite' },
-  spa:          { icon: 'sparkles-outline',     color: '#8B5CF6', bg: '#EDE9FE', labelKey: 'catalogue.category_spa' },
-  transport:    { icon: 'car-outline',          color: '#3B82F6', bg: '#EFF6FF', labelKey: 'catalogue.category_transport' },
-  shopping:     { icon: 'bag-outline',          color: '#EC4899', bg: '#FCE7F3', labelKey: 'catalogue.category_shopping' },
-  location:     { icon: 'key-outline',          color: '#EAB308', bg: '#FEF9C3', labelKey: 'catalogue.category_location' },
-  autre:        { icon: 'ellipsis-horizontal-outline', color: '#64748B', bg: '#F1F5F9', labelKey: 'catalogue.category_autre' },
+  restaurant: { ...getServiceVisual('restaurant'), labelKey: 'catalogue.category_restaurant' },
+  activite:   { ...getServiceVisual('activite'),   labelKey: 'catalogue.category_activite' },
+  spa:        { ...getServiceVisual('spa'),        labelKey: 'catalogue.category_spa' },
+  transport:  { ...getServiceVisual('transport'),  labelKey: 'catalogue.category_transport' },
+  shopping:   { ...getServiceVisual('shopping'),   labelKey: 'catalogue.category_shopping' },
+  location:   { ...getServiceVisual('location'),   labelKey: 'catalogue.category_location' },
+  autre:      { ...getServiceVisual('autre'),      labelKey: 'catalogue.category_autre' },
 };
 
 export default function PartnerDetail() {
@@ -71,7 +71,7 @@ export default function PartnerDetail() {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={24} color="#1E3A5F" />
+          <Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} />
         </TouchableOpacity>
         <View style={styles.center}>
           <Text style={styles.errorText}>{t('partner_detail.not_found')}</Text>
@@ -86,7 +86,7 @@ export default function PartnerDetail() {
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       {/* Back */}
       <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-        <Ionicons name="arrow-back" size={24} color="#1E3A5F" />
+        <Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} />
       </TouchableOpacity>
 
       <ScrollView showsVerticalScrollIndicator={false}>
@@ -201,9 +201,9 @@ export default function PartnerDetail() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F8FAFC' },
+  container: { flex: 1, backgroundColor: COLORS.background },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  errorText: { fontFamily: 'Inter_400Regular', fontSize: 15, color: '#94A3B8' },
+  errorText: { fontFamily: 'PlusJakartaSans_400Regular', fontSize: 15, color: '#94A3B8' },
 
   backBtn: {
     position: 'absolute', top: 52, left: SPACING.lg,
@@ -224,19 +224,19 @@ const styles = StyleSheet.create({
   body: { padding: SPACING.lg, gap: SPACING.lg },
 
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, flexWrap: 'wrap' },
-  name: { fontFamily: 'Inter_700Bold', fontSize: 22, color: '#1E3A5F', flex: 1 },
+  name: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 22, color: COLORS.textPrimary, flex: 1 },
   badge: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     paddingHorizontal: 9, paddingVertical: 4, borderRadius: 8,
   },
-  badgeText: { fontFamily: 'Inter_600SemiBold', fontSize: 12 },
+  badgeText: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 12 },
 
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: -SPACING.sm },
-  metaText: { fontFamily: 'Inter_400Regular', fontSize: 13, color: '#94A3B8' },
+  metaText: { fontFamily: 'PlusJakartaSans_400Regular', fontSize: 13, color: '#94A3B8' },
 
   section: { gap: SPACING.sm },
-  sectionTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 13, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: 0.5 },
-  description: { fontFamily: 'Inter_400Regular', fontSize: 15, color: '#334155', lineHeight: 23 },
+  sectionTitle: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 13, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: 0.5 },
+  description: { fontFamily: 'PlusJakartaSans_400Regular', fontSize: 15, color: '#334155', lineHeight: 23 },
 
   infoCards: { gap: SPACING.sm },
   infoCard: {
@@ -248,16 +248,16 @@ const styles = StyleSheet.create({
     width: 40, height: 40, borderRadius: 20,
     justifyContent: 'center', alignItems: 'center',
   },
-  infoLabel: { fontFamily: 'Inter_400Regular', fontSize: 11, color: '#94A3B8' },
-  infoValue: { fontFamily: 'Inter_600SemiBold', fontSize: 14, color: '#1E3A5F' },
+  infoLabel: { fontFamily: 'PlusJakartaSans_400Regular', fontSize: 11, color: '#94A3B8' },
+  infoValue: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 14, color: COLORS.textPrimary },
 
   footer: {
     paddingHorizontal: SPACING.lg, paddingVertical: SPACING.md,
-    backgroundColor: '#F8FAFC', borderTopWidth: 1, borderTopColor: '#E2E8F0',
+    backgroundColor: COLORS.background, borderTopWidth: 1, borderTopColor: '#E2E8F0',
   },
   downloadBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.sm,
-    backgroundColor: '#1E3A5F', borderRadius: RADIUS.lg, padding: SPACING.md,
+    backgroundColor: COLORS.brandPrimary, borderRadius: RADIUS.lg, padding: SPACING.md,
   },
-  downloadBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 15, color: '#FFFFFF' },
+  downloadBtnText: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 15, color: '#FFFFFF' },
 });

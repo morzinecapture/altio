@@ -1,0 +1,39 @@
+{
+  "date": "2026-10-09",
+  "scope": "Données de test dédiées uniquement, autorisation explicite utilisateur",
+  "runId": "7a19240c-384c-4ccf-b5be-48343c99d928",
+  "httpStatus": 200,
+  "firstCall": "passed",
+  "repeatedCall": "same_credit",
+  "creditCount": 1,
+  "amountTtc": -100,
+  "originalTestInvoiceState": "cancelled",
+  "htmlBytes": 5777,
+  "xmlBytes": 3839,
+  "testNumbering": true,
+  "stripeOperations": 0,
+  "cleaned": true,
+  "cleanupErrors": [],
+  "clientInvoicesBeforeAndAfter": 99,
+  "clientInvoicesHashBeforeAndAfter": "3af5c3efd6dbe19d8a308fde3fcd6942",
+  "creditSequenceBeforeAndAfter": {
+    "is_called": false,
+    "last_value": 1
+  },
+  "remainingTestUsers": 0,
+  "remainingTestInvoices": 0,
+  "remainingTestJobs": 0,
+  "refundCronActive": false,
+  "limits": [
+    "Validation de génération des avoirs uniquement, pas une recette de remboursement Stripe Connect",
+    "Remboursements partiels non implémentés",
+    "Révocation Apple non intégrée"
+  ],
+  "temporaryEndpoint": {
+    "version": 2,
+    "state": "inert",
+    "verifyJwt": true,
+    "responseStatus": 410,
+    "note": "Suppression CLI sans réponse ; fonction remplacée par une réponse fixe sans accès aux données."
+  }
+}

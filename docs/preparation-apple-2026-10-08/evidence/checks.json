@@ -1,0 +1,42 @@
+{
+  "checkedAt": "2026-10-08T14:32:41.556Z",
+  "passed": false,
+  "scope": "Local uniquement ; aucun déploiement ou envoi Apple.",
+  "results": [
+    {
+      "name": "typescript",
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "name": "lint",
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "name": "application",
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "name": "server",
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "name": "database",
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "name": "payment-guard",
+      "passed": true,
+      "exitCode": 0
+    },
+    {
+      "name": "app-store",
+      "passed": false,
+      "exitCode": 1
+    }
+  ]
+}

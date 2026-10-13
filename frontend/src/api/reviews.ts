@@ -38,7 +38,7 @@ export const submitReview = async (params: {
 export const getProviderReviews = async (providerId: string) => {
   const { data, error } = await supabase
     .from('reviews')
-    .select('*, owner:users!reviews_owner_id_fkey(name, picture)')
+    .select('*, owner:public_profiles!reviews_owner_id_fkey(name, picture)')
     .eq('provider_id', providerId)
     .order('created_at', { ascending: false })
     .limit(20);

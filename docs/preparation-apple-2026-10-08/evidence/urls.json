@@ -1,0 +1,25 @@
+[
+  {
+    "url": "https://altio.app/confidentialite",
+    "error": "HTTP Error 403: Forbidden",
+    "browserVerification": "Page not found — Netlify ; vérifié le 08/10/2026"
+  },
+  {
+    "url": "https://altio.app/contact",
+    "error": "HTTP Error 403: Forbidden",
+    "browserVerification": "Page not found — Netlify ; vérifié le 08/10/2026"
+  },
+  {
+    "url": "https://altio.app/",
+    "error": "HTTP Error 403: Forbidden"
+  },
+  {
+    "url": "https://vtybccqqbyjbmhkpliyn.supabase.co/functions/v1/legal-page?tab=privacy",
+    "error": "HTTP Error 404: Not Found"
+  },
+  {
+    "url": "https://vtybccqqbyjbmhkpliyn.supabase.co/functions/v1/account-deletion-page",
+    "status": 200,
+    "contentType": "text/plain"
+  }
+]

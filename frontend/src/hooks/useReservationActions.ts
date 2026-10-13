@@ -67,7 +67,7 @@ export function useReservationActions() {
         status: 'pending_provider_approval',
         assigned_provider_id: favoriteProviderId,
         scheduled_date: reservation.check_out,
-        description: `Ménage check-out — ${reservation.guest_name || 'invité'} (${platform})`,
+        description: `Ménage après départ — ${reservation.guest_name || 'invité'} (${platform})`,
         fixed_rate: property.fixed_rate || undefined,
         reservation_id: reservation.id,
         show_address: true,

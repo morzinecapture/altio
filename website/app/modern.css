@@ -1,0 +1,805 @@
+/* Photo-led Altio identity. Shared by the homepage and both audience pages. */
+body {
+  background: #fafbf9;
+}
+h1,
+h2,
+h3 {
+  letter-spacing: -0.045em;
+}
+em {
+  font-family: inherit;
+  font-style: normal;
+  font-weight: 600;
+}
+.site-header {
+  background: #fafbf9;
+  border: 0;
+}
+.main-nav {
+  font-size: 12px;
+}
+.main-nav .nav-cta {
+  border-radius: 50px;
+  font-size: 11px;
+}
+.button {
+  border-radius: 50px;
+  font-size: 13px;
+}
+.eyebrow {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+}
+.mountain-hero {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  margin: 0 16px;
+  min-height: 760px;
+  border-radius: 24px;
+  background: #102936;
+  color: #fff;
+}
+.mountain-backdrop,
+.mountain-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+}
+.mountain-backdrop img {
+  object-fit: cover;
+  object-position: center 63%;
+}
+.mountain-summer {
+  animation: landscape-in 0.7s ease both;
+}
+.mountain-overlay {
+  z-index: -1;
+  background:
+    linear-gradient(90deg, #071b28bd, #071b2870 52%, #071b2814),
+    linear-gradient(0deg, #061a29b3, transparent 45%);
+}
+.mountain-content {
+  padding: 76px 0 60px;
+}
+.mountain-eyebrow {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  font-size: 10px;
+  letter-spacing: 0.15em;
+  font-weight: 600;
+  margin-bottom: 32px;
+}
+.mountain-eyebrow > span {
+  height: 7px;
+  width: 7px;
+  border-radius: 50%;
+  background: #d6f28b;
+}
+.mountain-content h1 {
+  font-size: clamp(60px, 6.5vw, 94px);
+  font-weight: 600;
+  line-height: 1.035;
+  letter-spacing: -0.05em;
+}
+.mountain-content h1 > span {
+  color: #d5f29b;
+}
+.mountain-content > p {
+  max-width: 555px;
+  font-size: 15px;
+  color: #e0e8ea;
+  line-height: 1.85;
+  margin: 30px 0;
+}
+.mountain-content > p strong {
+  font-weight: 400;
+}
+.mountain-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.profile-cta {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  background: #fff;
+  color: #172f3b;
+  border-radius: 12px;
+  padding: 17px 20px;
+  border: 1px solid #fff;
+  transition:
+    transform 0.2s,
+    background 0.2s;
+}
+.profile-cta:hover {
+  transform: translateY(-3px);
+  background: #edf2e3;
+}
+.profile-cta > span {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.profile-cta strong {
+  font-size: 13px;
+  font-weight: 700;
+}
+.profile-cta small {
+  font-size: 10px;
+  color: #617481;
+}
+.profile-cta > svg:last-child {
+  margin-left: 9px;
+}
+.profile-cta-dark {
+  background: #142f4073;
+  backdrop-filter: blur(16px);
+  border-color: #ffffff5c;
+  color: #fff;
+}
+.profile-cta-dark small {
+  color: #dee6e9;
+}
+.profile-cta-dark:hover {
+  background: #234c5ec9;
+}
+.mountain-bottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 25px;
+  padding: 22px 0 28px;
+  border-top: 1px solid #ffffff36;
+}
+.mountain-bottom > a {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 11px;
+}
+.scroll-circle {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid #ffffff52;
+  border-radius: 50%;
+}
+.season-switch {
+  display: flex;
+  background: #0a213b54;
+  border: 1px solid #ffffff36;
+  padding: 4px;
+  border-radius: 30px;
+  backdrop-filter: blur(12px);
+  gap: 3px;
+}
+.season-switch button {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #fff;
+  padding: 10px 16px;
+  border: 0;
+  border-radius: 24px;
+  background: transparent;
+  font-size: 11px;
+}
+.season-switch button[aria-pressed="true"] {
+  background: #fff;
+  color: #203846;
+}
+.landscape-credit {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  font-size: 9px;
+  letter-spacing: 0.06em;
+}
+.service-strip {
+  background: transparent;
+  border: 0;
+}
+.service-strip > .container {
+  padding: 35px 0;
+  border-bottom: 1px solid #e1e6e3;
+}
+.service-strip span {
+  font-size: 12px;
+}
+.benefits-section {
+  padding-top: 80px;
+}
+.benefits-heading {
+  text-align: center;
+  margin-bottom: 50px;
+}
+.benefits-heading h2 {
+  font-size: clamp(40px, 4.5vw, 64px);
+}
+.benefits-heading h2 > span {
+  color: #84958d;
+}
+.benefits-heading > p {
+  font-size: 15px;
+  margin-top: 24px;
+  line-height: 1.85;
+}
+.benefits-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 26px;
+}
+.benefit-profile {
+  border: 1px solid #e0e6e2;
+  border-radius: 22px;
+  overflow: hidden;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+}
+.benefit-photo {
+  position: relative;
+  height: 290px;
+  overflow: hidden;
+  isolation: isolate;
+}
+.benefit-photo > img {
+  object-fit: cover;
+  transition: transform 0.6s;
+}
+.benefit-profile:hover .benefit-photo > img {
+  transform: scale(1.035);
+}
+.benefit-photo:after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: linear-gradient(0deg, #0c242b60, transparent 75%);
+}
+.benefit-photo > span {
+  position: absolute;
+  bottom: 24px;
+  left: 25px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid #ffffff69;
+  background: #0d293657;
+  backdrop-filter: blur(15px);
+  color: #fff;
+  padding: 10px 15px;
+  border-radius: 30px;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+.benefit-photo > .photo-index {
+  left: auto;
+  right: 25px;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  font-size: 31px;
+  font-weight: 400;
+  letter-spacing: -0.06em;
+  backdrop-filter: none;
+}
+.benefit-copy {
+  padding: 35px 35px 32px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.benefit-copy h3 {
+  font-size: 35px;
+  letter-spacing: -0.055em;
+  max-width: 440px;
+  line-height: 1.18;
+}
+.benefit-intro {
+  font-size: 14px;
+  margin: 19px 0 28px;
+  line-height: 1.9;
+}
+.benefit-copy ul {
+  display: grid;
+  gap: 23px;
+  list-style: none;
+  padding: 0;
+  margin: 0 0 35px;
+}
+.benefit-copy li {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+.benefit-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  color: #58724e;
+  background: #f0f4e9;
+}
+.prestataires .benefit-icon {
+  color: #426887;
+  background: #ebf2f7;
+}
+.benefit-copy h4 {
+  font-size: 14px;
+  letter-spacing: -0.02em;
+  line-height: 1.4;
+  font-weight: 700;
+  margin-bottom: 5px;
+}
+.benefit-copy li p {
+  font-size: 12px;
+  line-height: 1.8;
+}
+.benefit-copy .button {
+  margin-top: auto;
+  width: 100%;
+  justify-content: space-between;
+  background: #1b3932;
+}
+.prestataires .benefit-copy .button {
+  background: #275eea;
+}
+.benefits-footnote {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-size: 11px;
+  margin-top: 25px;
+}
+.benefits-footnote svg {
+  color: #63885d;
+}
+.section-heading p {
+  font-size: 14px;
+}
+.workflow-section {
+  background: #eef2ed;
+}
+.steps p {
+  font-size: 14px;
+}
+.steps h3 {
+  font-size: 29px;
+}
+.step-bottom {
+  font-size: 11px;
+}
+.bento {
+  border-radius: 20px;
+}
+.bento p {
+  font-size: 14px;
+}
+.bento h3 {
+  font-size: 29px;
+}
+.bento-calendar {
+  background: #edf2f6;
+}
+.manifesto {
+  margin: 0 16px;
+  border-radius: 24px;
+  overflow: hidden;
+  background: #193f38;
+  color: #fff;
+}
+.manifesto-landscape {
+  min-height: 650px;
+}
+.manifesto-landscape img {
+  filter: none;
+  object-position: 38% center;
+}
+.manifesto-copy {
+  padding: 65px 11%;
+}
+.manifesto-copy .eyebrow {
+  color: #cbe5a1;
+}
+.manifesto-copy h2 {
+  font-size: 47px;
+  line-height: 1.15;
+}
+.manifesto-copy h2 em {
+  color: #cbe5a1;
+}
+.manifesto-copy p {
+  color: #c7d8d1;
+  font-size: 14px;
+}
+.manifesto-copy .text-link {
+  color: #e9f0ed;
+  font-size: 13px;
+}
+.faq-list summary {
+  font-size: 14px;
+}
+.faq-list details p {
+  font-size: 14px;
+}
+.closing-section {
+  padding: 0 16px 16px;
+}
+.closing {
+  border-radius: 24px;
+  padding: 95px 25px;
+  background: #183b4d;
+}
+.closing-mountain {
+  z-index: -3;
+  object-fit: cover;
+  object-position: center 60%;
+}
+.closing:before {
+  inset: 0;
+  background: #0c2539a3;
+  border: 0;
+  border-radius: 0;
+  transform: none;
+  height: auto;
+  width: auto;
+  box-shadow: none;
+}
+.closing:after {
+  display: none;
+}
+.closing h2 {
+  font-size: clamp(40px, 5vw, 68px);
+}
+.closing h2 em {
+  color: #d5f29b;
+}
+.closing p {
+  font-size: 15px;
+}
+.closing .eyebrow {
+  color: #dae5e7;
+}
+.footer-top > div > a:not(:first-child) {
+  font-size: 12px;
+}
+.detail-hero {
+  background: #edf1ec;
+  margin: 0 16px;
+  border-radius: 24px;
+  padding: 55px 0;
+}
+.detail-hero .container {
+  gap: 45px;
+}
+.detail-hero h1 {
+  font-size: clamp(42px, 4.2vw, 68px);
+}
+.detail-hero h1 em {
+  color: #658365;
+}
+.detail-hero p {
+  font-size: 16px;
+}
+.detail-art {
+  border-radius: 20px;
+  min-height: 510px;
+}
+.detail-art > img {
+  filter: none;
+}
+.detail-photo-caption {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: absolute;
+  left: 20px;
+  bottom: 20px;
+  right: 20px;
+  padding: 15px;
+  border-radius: 12px;
+  color: #fff;
+  background: #142f45a3;
+  backdrop-filter: blur(10px);
+  font-size: 12px;
+}
+.detail-steps {
+  row-gap: 45px;
+}
+.detail-steps h3 {
+  font-size: 26px;
+}
+.detail-steps p {
+  font-size: 14px;
+}
+.contact-intro h1 em {
+  color: #658365;
+}
+.contact-form label {
+  font-size: 13px;
+}
+.contact-form input,
+.contact-form select,
+.contact-form textarea {
+  font-size: 14px;
+}
+@keyframes landscape-in {
+  from {
+    opacity: 0;
+    transform: scale(1.035);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@media (max-width: 1050px) {
+  .mountain-content h1 {
+    font-size: 76px;
+  }
+  .landscape-credit {
+    display: none;
+  }
+  .benefit-copy {
+    padding: 28px;
+  }
+  .benefit-copy h3 {
+    font-size: 30px;
+  }
+  .benefit-photo {
+    height: 260px;
+  }
+  .benefit-photo > span {
+    font-size: 8px;
+    left: 18px;
+    padding: 9px 12px;
+  }
+  .manifesto-copy h2 {
+    font-size: 38px;
+  }
+  .detail-art {
+    min-height: 440px;
+  }
+}
+@media (max-width: 760px) {
+  .site-header {
+    height: 72px;
+  }
+  .mountain-hero {
+    margin: 0 10px;
+    border-radius: 20px;
+    min-height: 0;
+  }
+  .mountain-content {
+    padding: 48px 0 42px;
+    width: calc(100% - 40px);
+  }
+  .mountain-content h1 {
+    font-size: clamp(40px, 9.7vw, 68px);
+    letter-spacing: -0.05em;
+    line-height: 1.08;
+  }
+  .mountain-eyebrow {
+    font-size: 7px;
+    letter-spacing: 0.08em;
+    margin-bottom: 26px;
+    gap: 6px;
+  }
+  .mountain-content > p {
+    font-size: 13px;
+    line-height: 1.9;
+    margin: 25px 0;
+  }
+  .mountain-overlay {
+    background:
+      linear-gradient(90deg, #071b28b3, #071b284d),
+      linear-gradient(0deg, #061a29bd, transparent 55%);
+  }
+  .mountain-actions {
+    flex-direction: column;
+    gap: 10px;
+  }
+  .profile-cta {
+    padding: 15px;
+    border-radius: 11px;
+    gap: 13px;
+  }
+  .profile-cta > svg:last-child {
+    margin-left: auto;
+  }
+  .profile-cta strong {
+    font-size: 12px;
+  }
+  .profile-cta small {
+    font-size: 10px;
+  }
+  .mountain-bottom {
+    width: calc(100% - 40px);
+    gap: 15px;
+    padding: 20px 0;
+    flex-wrap: wrap;
+  }
+  .mountain-bottom > a {
+    font-size: 9px;
+    gap: 7px;
+  }
+  .scroll-circle {
+    width: 27px;
+    height: 27px;
+  }
+  .season-switch button {
+    font-size: 9px;
+    padding: 8px 10px;
+    gap: 4px;
+  }
+  .season-switch svg {
+    width: 12px;
+  }
+  .eyebrow {
+    font-size: 9px;
+  }
+  .service-strip span {
+    font-size: 10px;
+  }
+  .service-strip > .container {
+    padding: 27px 0;
+  }
+  .benefits-section {
+    padding-top: 55px;
+  }
+  .benefits-heading {
+    text-align: left;
+    margin-bottom: 32px;
+  }
+  .benefits-heading h2 {
+    font-size: 38px;
+  }
+  .benefits-heading > p {
+    font-size: 13px;
+  }
+  .benefits-grid {
+    grid-template-columns: 1fr;
+    gap: 26px;
+  }
+  .benefit-photo {
+    height: 240px;
+  }
+  .benefit-photo > span {
+    font-size: 8px;
+    bottom: 20px;
+  }
+  .benefit-copy {
+    padding: 26px 24px;
+  }
+  .benefit-copy h3 {
+    font-size: 31px;
+  }
+  .benefit-intro {
+    font-size: 13px;
+  }
+  .benefit-copy h4 {
+    font-size: 13px;
+  }
+  .benefit-copy li p {
+    font-size: 12px;
+  }
+  .benefit-copy li {
+    gap: 11px;
+  }
+  .benefit-icon {
+    width: 35px;
+    height: 35px;
+  }
+  .benefit-copy .button {
+    font-size: 11px;
+    padding: 16px;
+    gap: 10px;
+  }
+  .benefits-footnote {
+    font-size: 10px;
+    align-items: flex-start;
+    line-height: 1.8;
+  }
+  .section-heading h2 {
+    font-size: 37px;
+  }
+  .section-heading p {
+    font-size: 13px;
+  }
+  .steps h3 {
+    font-size: 27px;
+  }
+  .steps p {
+    font-size: 13px;
+  }
+  .step-bottom {
+    font-size: 10px;
+  }
+  .bento h3 {
+    font-size: 27px;
+  }
+  .bento p {
+    font-size: 13px;
+  }
+  .manifesto {
+    margin: 0 10px;
+    border-radius: 20px;
+  }
+  .manifesto-landscape {
+    min-height: 380px;
+  }
+  .manifesto-copy {
+    padding: 40px 25px 45px;
+  }
+  .manifesto-copy h2 {
+    font-size: 38px;
+  }
+  .manifesto-copy p {
+    font-size: 13px;
+  }
+  .faq-list summary {
+    font-size: 12px;
+  }
+  .faq-list details p {
+    font-size: 13px;
+  }
+  .closing-section {
+    padding: 0 10px 10px;
+  }
+  .closing {
+    border-radius: 20px;
+    padding: 65px 20px;
+  }
+  .closing h2 {
+    font-size: 38px;
+  }
+  .closing p {
+    font-size: 13px;
+  }
+  .detail-hero {
+    margin: 0 10px;
+    padding: 42px 0 25px;
+    border-radius: 20px;
+  }
+  .detail-hero h1 {
+    font-size: clamp(35px, 9vw, 52px);
+  }
+  .detail-hero p {
+    font-size: 14px;
+  }
+  .detail-hero .container {
+    width: calc(100% - 36px);
+    gap: 32px;
+  }
+  .detail-art {
+    min-height: 370px;
+    border-radius: 16px;
+  }
+  .detail-steps p {
+    font-size: 13px;
+  }
+  .contact-form input,
+  .contact-form select,
+  .contact-form textarea {
+    font-size: 16px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mountain-summer {
+    animation: none;
+  }
+  .benefit-photo > img {
+    transition: none;
+  }
+}

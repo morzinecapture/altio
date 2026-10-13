@@ -1,0 +1,28 @@
+# Only the mobile application is required by Expo EAS.
+/*
+!/frontend
+!/frontend/**
+!/.easignore
+.git/
+**/node_modules/
+**/.env
+**/.env.*
+**/.expo/
+**/.metro-cache/
+**/.DS_Store
+**/*.log
+**/*.tsbuildinfo
+**/*.p8
+**/*.p12
+**/*.pem
+**/*.key
+**/*.mobileprovision
+/frontend/ios/
+/frontend/android/
+/frontend/dist/
+/frontend/web-build/
+/frontend/coverage/
+/frontend/npm-cache/
+/frontend/.claude/
+/frontend/Simulator Screenshot*
+/frontend/fdc506a749b44b32785ba8afb3bd1399.jpg

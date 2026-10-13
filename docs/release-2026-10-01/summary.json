@@ -1,0 +1,268 @@
+{
+  "date": "2026-10-01",
+  "decision": "NO_GO",
+  "counts": {
+    "PASS": 13,
+    "FAIL": 9,
+    "WARN": 12,
+    "INFO": 7
+  },
+  "preparation_score": 32,
+  "criteria": [
+    [
+      "Configuration Expo & Build",
+      [
+        [
+          "PASS",
+          "Identité du produit",
+          "Altio 1.0.0 ; com.altio.app ; iPhone portrait ; supportsTablet=false. Contrôle du code, pas de validation du binaire soumis."
+        ],
+        [
+          "PASS",
+          "Profils EAS",
+          "Profils production et testflight, distribution store, autoIncrement ; ascAppId renseigné. Les identifiants de signature restent à vérifier dans App Store Connect."
+        ],
+        [
+          "PASS",
+          "Icône native",
+          "L’icône réellement référencée par le catalogue iOS est 1024 × 1024, sans alpha. L’image source Expo a un alpha : ne pas confondre les deux."
+        ],
+        [
+          "PASS",
+          "Compilation iOS locale",
+          "xcodebuild Debug iphonesimulator a terminé avec BUILD SUCCEEDED (SDK 26.5). Le binaire a été installé dans le simulateur iPhone 17. La compilation locale de diagnostic ne remplace pas un test de la version signée distribuée via TestFlight. Le dépôt contient de nombreuses modifications préexistantes non commitées."
+        ]
+      ]
+    ],
+    [
+      "iOS — App Store",
+      [
+        [
+          "PASS",
+          "Manifeste et permissions",
+          "PrivacyInfo.xcprivacy présent ; raisons d’accès aux API système déclarées ; descriptions caméra, photos et localisation présentes. Vérification statique."
+        ],
+        [
+          "PASS",
+          "Connexion Apple",
+          "Bouton natif, nonce et échange de jeton présents dans app/index.tsx. La disponibilité du fournisseur et le relais privé Apple doivent être testés sur iPhone."
+        ],
+        [
+          "WARN",
+          "Permissions superflues",
+          "Info.plist généré contient microphone, localisation permanente et Face ID avec textes anglais génériques. Retirer les permissions inutilisées ou documenter précisément leur usage."
+        ],
+        [
+          "INFO",
+          "SDK, push et Apple Pay",
+          "Xcode/iOS SDK 26 minimum requis par Apple à cette date. Compilation locale avec SDK 26.5. Vérifier le SDK de l’archive EAS, les entitlements signés APNs production et le compte marchand ; le fichier source APNs development ne prouve pas à lui seul un rejet."
+        ]
+      ]
+    ],
+    [
+      "Android — Play Store",
+      [
+        [
+          "INFO",
+          "Hors périmètre du lancement demandé",
+          "Configuration Android et AAB présentes. Aucun test appareil Android, target SDK ni formulaire Play Console validé pendant cet audit iOS."
+        ]
+      ]
+    ],
+    [
+      "Privacy & Data",
+      [
+        [
+          "FAIL",
+          "P0 — Profils accessibles anonymement",
+          "Backend réel : policies SELECT USING(true) sur users et provider_profiles, privilèges SELECT anonymes. Un SELECT count(*) sous rôle anon voit 7 utilisateurs et 5 profils. Le droit de lire google_calendar_refresh_token est également accordé. Aucun jeton ni contenu privé n’a été extrait. Retirer les accès larges ; exposer un annuaire de colonnes publiques et conserver données privées et jetons côté serveur."
+        ],
+        [
+          "FAIL",
+          "P0 — Tables non protégées",
+          "Backend réel : public.payments et public.quotes ont RLS désactivé, SELECT anonyme et UPDATE authentifié autorisés. Elles étaient vides lors du contrôle ; leur configuration reste dangereuse avant insertion de données."
+        ],
+        [
+          "FAIL",
+          "URL de confidentialité",
+          "https://altio.app/confidentialite renvoie HTTP 404 (HEAD, 01/10/2026). La page du dépôt website décrit uniquement le site vitrine, pas les traitements de l’application. Fournir une vraie politique publique mobile et la faire correspondre à App Privacy."
+        ],
+        [
+          "WARN",
+          "Photos de logements et interventions publiques",
+          "Les buckets mission_proofs, emergency-photos et property-photos sont publics sur le backend. Toute personne détenant une URL peut consulter ces images ; vérifier leur caractère confidentiel et passer aux URLs signées si nécessaire. Aucun contenu de photo privé consulté."
+        ],
+        [
+          "WARN",
+          "Diagnostic Supabase",
+          "Les advisors signalent notamment deux vues SECURITY DEFINER (admin_dashboard_stats, public_profiles), 25 fonctions à search_path mutable et des fonctions privilégiées exécutables par anon. Chaque fonction doit être examinée : un avertissement automatique n’est pas une preuve d’exploitation."
+        ],
+        [
+          "INFO",
+          "Déclaration App Privacy",
+          "Préparer identité/contact, identifiant utilisateur, localisation, photos/messages, activité et diagnostics Sentry ; préciser liaison à l’identité et finalité. Déclarer les données effectivement collectées par Stripe et les SDK. La déclaration vide dans un manifeste ne remplace pas le questionnaire App Store Connect."
+        ]
+      ]
+    ],
+    [
+      "UI/UX & Design Guidelines",
+      [
+        [
+          "PASS",
+          "Parcours métier présents",
+          "Logements, réservations, planning, missions, prestataires, favoris, messagerie, factures et parcours prestataire existent dans le code. Cela ne signifie pas qu’ils ont tous été validés visuellement."
+        ],
+        [
+          "WARN",
+          "Constats visuels sur simulateur",
+          "Accueil, connexion, récupération et inscription ouverts sur iPhone 17. Formulaire de connexion vide : alerte Champs requis correcte. Barre d’état blanche sur fond clair dans les écrans auth ; choix de rôle ouvert sans profil affiche Bienvenue, !. Un avertissement Keychain expo-notifications apparaît avec ce build non signé : à retester dans TestFlight, pas classé comme panne de production."
+        ],
+        [
+          "WARN",
+          "Promesses à étayer",
+          "L’accueil annonce Prestataires assurés et Urgences en moins de 2h ; le tutoriel affiche 5.0 et une disponibilité 24/7. Ces assertions ne sont pas démontrées par les tests. Les justifier opérationnellement ou remplacer par des formulations descriptives avant les captures finales."
+        ],
+        [
+          "WARN",
+          "Hors ligne limité",
+          "Le cache React Query est en mémoire (gcTime 30 min), sans persistance disque des requêtes. La file offline n’est appelée par aucun parcours métier : enqueue/registerAction n’apparaissent qu’au service et dans ses tests. Ne pas annoncer la création/fin de mission hors ligne."
+        ],
+        [
+          "WARN",
+          "Connectivité et reprise",
+          "isOnline se base sur isConnected, sans tenir compte d’isInternetReachable=false : Wi-Fi sans Internet peut être considéré comme disponible. La reprise au premier plan et les états de refus des permissions restent à tester."
+        ],
+        [
+          "INFO",
+          "Parcours visuels complets",
+          "Comptes de démonstration propriétaire et prestataire demandés. Aucun contournement d’authentification ni création de compte de production effectué."
+        ]
+      ]
+    ],
+    [
+      "Authentification & Sécurité",
+      [
+        [
+          "FAIL",
+          "P0 — Colonne administrateur modifiable",
+          "Backend : UPDATE sur users.is_admin autorisé au rôle authenticated ; policies de mise à jour de sa propre ligne ; aucun trigger utilisateur protégeant les colonnes privilégiées. Cela permet selon la configuration inspectée une élévation via son profil. Aucun changement de privilège n’a été tenté. Protéger aussi INSERT/upsert, suspended et les champs Stripe/validation professionnelle."
+        ],
+        [
+          "PASS",
+          "Cache séparé entre sessions — corrigé localement",
+          "AuthProvider purge QueryClient à chaque changement d’identité et invalide les réponses de profil obsolètes. Quatre tests couvrent déconnexion, passage A→B, renouvellement de jeton et requête en vol. Ces corrections ne sont pas encore dans la version publiée."
+        ],
+        [
+          "WARN",
+          "Stockage des sessions",
+          "Le client natif se replie silencieusement vers AsyncStorage en cas d’erreur SecureStore. getItem/removeItem ne nettoient pas systématiquement les deux supports. Établir un stockage natif sécurisé sans retour en clair en production et une migration contrôlée."
+        ],
+        [
+          "WARN",
+          "Profil indisponible sur réseau lent",
+          "Un timeout de profil produit un utilisateur sans rôle, pouvant renvoyer un compte existant vers le choix de rôle. La correction de cet audit évite un ancien profil après logout et l’email de bienvenue sur erreur SQL, mais ne refond pas la reprise réseau."
+        ],
+        [
+          "PASS",
+          "Suppression accessible dans le code",
+          "Les deux profils proposent la suppression avec confirmation et une Edge Function dédiée. Son exécution effective, nettoyage Storage, conservation comptable et révocation des accès doivent être testés sur un compte jetable."
+        ]
+      ]
+    ],
+    [
+      "Paiements & Monétisation",
+      [
+        [
+          "PASS",
+          "Services physiques et Stripe",
+          "Le modèle décrit concerne des prestations réalisées dans des logements. Il relève des moyens de paiement externes pour services physiques (Apple 3.1.3(e)), sous réserve de conserver ce périmètre."
+        ],
+        [
+          "FAIL",
+          "P0 — Montant et objet non vérifiés côté serveur",
+          "create-payment-intent déployée v19 accepte amount du client, sans recalcul du tarif ni exigence d’existence/propriété du dossier. Reproduction locale du code déployé : mission inexistante, montant 50 centimes, lookup en erreur → HTTP 200 et création Stripe simulée. Aucun débit réel. Recalculer et autoriser côté serveur, lier le PaymentIntent au dossier, vérifier montant/devise/payer dans le webhook."
+        ],
+        [
+          "FAIL",
+          "Webhook Stripe non opérationnel",
+          "Liste des noms des secrets du projet réel : STRIPE_WEBHOOK_SECRET absent. stripe-webhook v7 dépend de ce secret pour valider les signatures. Sa présence et la livraison effective d’un événement signé sont indispensables."
+        ],
+        [
+          "FAIL",
+          "Configuration locale de production en mode test",
+          "frontend/.env.production contient une clé publique Stripe pk_test_. Ce constat ne prouve pas le contenu des variables EAS distantes : inspecter l’environnement de la build réellement soumise, puis valider la concordance client/serveur/webhook en live."
+        ],
+        [
+          "WARN",
+          "Reprise webhook et divergence du dépôt",
+          "Le webhook marque un événement traité avant les effets métier et traite toute erreur d’insertion comme doublon ; les erreurs renvoyées par functions.invoke peuvent être ignorées. Le déployé comprend interventionId, absent de certaines versions locales : réconcilier avant déploiement et tester un retry après panne."
+        ],
+        [
+          "INFO",
+          "Cycle financier complet",
+          "À tester en environnement Stripe test : 3DS, annulation de feuille, refus, double appui, capture, 3 factures, remboursement/avoir et prestataire non onboardé. Pas de débit, remboursement ou virement effectué pendant cet audit."
+        ]
+      ]
+    ],
+    [
+      "Contenu & Metadata Store",
+      [
+        [
+          "PASS",
+          "Textes préparés",
+          "Nom, sous-titre, texte promotionnel, description, mots-clés, nouveautés et notes reviewer dans marketing/app-store/fr-FR. Contrôle automatique des longueurs ; validation fonctionnelle préalable à publication."
+        ],
+        [
+          "FAIL",
+          "URL de support proposée indisponible",
+          "https://altio.app/contact renvoie HTTP 404 (HEAD, 01/10/2026). Mettre une page publique fonctionnelle avant la soumission."
+        ],
+        [
+          "WARN",
+          "Blocage des utilisateurs incomplet côté serveur",
+          "UI de blocage et signalement présente. La policy INSERT messages ne vérifie que sender_id=auth.uid() ; le trigger ne fait qu’envoyer une notification. Le blocage peut être contourné via API. Ajouter le contrôle relationnel côté serveur, le filtrage et le processus de réponse aux signalements."
+        ],
+        [
+          "INFO",
+          "Captures et accès reviewer",
+          "Six accroches rédigées. La série finale doit montrer les écrans réels avec comptes de démonstration, sans données privées. Ajouter deux comptes reviewer, un contact et les scénarios nécessaires ; compléter questionnaire d’âge et statut de professionnel dans App Store Connect."
+        ]
+      ]
+    ],
+    [
+      "Performance & Stabilité",
+      [
+        [
+          "PASS",
+          "Tests automatisés",
+          "247 tests / 11 suites réussis après correction (243 / 10 initialement). Les suites nommées e2e utilisent Supabase mocké : elles ne sont pas des tests de bout en bout sur l’appareil."
+        ],
+        [
+          "PASS",
+          "TypeScript",
+          "tsc --noEmit réussi après la première correction ; recontrôle final conservé dans evidence/typescript.log."
+        ],
+        [
+          "WARN",
+          "Lint et couverture native",
+          "Lint initial : 0 erreur / 152 avertissements. Tests sur appareil réel, temps de démarrage, consommation mémoire, longue session, caméra, push et mode avion encore nécessaires. Aucun chiffre de performance inventé."
+        ]
+      ]
+    ],
+    [
+      "Aspects légaux",
+      [
+        [
+          "FAIL",
+          "Informations éditeur incomplètes",
+          "L’écran legal.tsx contient « SIREN : en cours d’immatriculation » et des exemples contractuels xxx/yyy. Renseigner l’identité, adresse et informations définitives de l’éditeur ; vérifier les engagements de médiation et les liens avant diffusion."
+        ],
+        [
+          "INFO",
+          "Validation juridique et données",
+          "Faire vérifier CGU/CGV, mandat de facturation, durées de conservation, suppression avec mission active et sous-traitants. Supabase indique eu-west-1 pour le projet ; la politique effectivement affichée dans le simulateur indique Frankfurt (EU-WEST-1) : corriger cette incohérence géographique. Cet audit technique n’est pas une certification juridique."
+        ]
+      ]
+    ]
+  ]
+}

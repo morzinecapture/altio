@@ -114,7 +114,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontFamily: 'PlusJakartaSans_600SemiBold',
     fontSize: 17,
-    color: '#1E3A5F',
+    color: COLORS.textPrimary,
     textAlign: 'center',
     marginHorizontal: SPACING.md,
   },

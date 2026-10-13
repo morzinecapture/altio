@@ -1,0 +1,50 @@
+[
+  {
+    "slug": "support",
+    "title": "Comment pouvons-nous vous aider ? — Altio",
+    "headings": 3,
+    "hasEmail": true,
+    "overflow": false,
+    "unresolved": false
+  },
+  {
+    "slug": "mentions-legales",
+    "title": "Mentions légales — Altio",
+    "headings": 7,
+    "hasEmail": true,
+    "overflow": false,
+    "unresolved": false
+  },
+  {
+    "slug": "confidentialite",
+    "title": "Confidentialité et données personnelles — Altio",
+    "headings": 12,
+    "hasEmail": true,
+    "overflow": false,
+    "unresolved": false
+  },
+  {
+    "slug": "cgu",
+    "title": "Conditions générales d’utilisation — Altio",
+    "headings": 18,
+    "hasEmail": true,
+    "overflow": false,
+    "unresolved": false
+  },
+  {
+    "slug": "cgv",
+    "title": "Conditions générales de vente — Altio",
+    "headings": 11,
+    "hasEmail": true,
+    "overflow": false,
+    "unresolved": false
+  },
+  {
+    "slug": "mediation",
+    "title": "Médiation de la consommation — Altio",
+    "headings": 5,
+    "hasEmail": true,
+    "overflow": false,
+    "unresolved": false
+  }
+]

@@ -1,0 +1,76 @@
+{
+  "submitted": false,
+  "descriptionSaved": true,
+  "reviewNotesSaved": true,
+  "ownerCredentialsCorrectedAndSaved": true,
+  "supportURL": "https://altio-iota.vercel.app/support",
+  "marketingURL": "https://altio-iota.vercel.app",
+  "privacyURL": "https://altio-iota.vercel.app/confidentialite",
+  "screenshotsUploaded": 2,
+  "screenshotsPrepared": 5,
+  "privacyPurchaseHistoryIncomplete": true,
+  "productionStripe": "Only test key configured; connector only exposes test account",
+  "brevo": "Existing secret rejected 401 unauthorized; retry schedule remains inactive",
+  "appleKey": "Creation and installation blocked by automatic review; explicit approval requested",
+  "updatedAt": "2026-10-11T14:44:03.075144+00:00",
+  "localChecks": {
+    "checkedAt": "2026-10-11T14:43:51.601Z",
+    "passed": false,
+    "scope": "Local uniquement ; aucun déploiement ou envoi Apple.",
+    "results": [
+      {
+        "name": "routes",
+        "passed": true,
+        "exitCode": 0
+      },
+      {
+        "name": "typescript",
+        "passed": true,
+        "exitCode": 0
+      },
+      {
+        "name": "lint",
+        "passed": true,
+        "exitCode": 0
+      },
+      {
+        "name": "application",
+        "passed": true,
+        "exitCode": 0
+      },
+      {
+        "name": "database",
+        "passed": true,
+        "exitCode": 0
+      },
+      {
+        "name": "server",
+        "passed": true,
+        "exitCode": 0
+      },
+      {
+        "name": "dependency-guards",
+        "passed": true,
+        "exitCode": 0
+      },
+      {
+        "name": "payment-guard",
+        "passed": true,
+        "exitCode": 0
+      },
+      {
+        "name": "app-store",
+        "passed": false,
+        "exitCode": 1
+      }
+    ]
+  },
+  "testCounts": {
+    "application": 352,
+    "database": 64,
+    "server": 317,
+    "dependency-guards": 1,
+    "payment-guard": 5
+  },
+  "publicLegalPagesVerified": 6
+}

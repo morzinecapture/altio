@@ -1,3 +1,4 @@
+import { PageHeader } from '../../src/components/alpine/AlpineHeader';
 import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, Alert, ActivityIndicator, TextInput, Image, Linking, Switch } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -134,9 +135,13 @@ export default function ProviderProfile() {
     }
   };
 
+  const [loggingOut, setLoggingOut] = useState(false);
   const onLogout = async () => {
-    await handleLogout();
-    setTimeout(() => router.replace('/'), 0);
+    if (loggingOut) return;
+    setLoggingOut(true);
+    try { await handleLogout(); router.replace('/'); }
+    catch { Alert.alert('Déconnexion impossible', 'Vérifiez votre connexion puis réessayez.'); }
+    finally { setLoggingOut(false); }
   };
 
   const { data: profileData, refetch: refetchProfile, isLoading: profileQueryLoading } = useProfile();
@@ -446,7 +451,7 @@ export default function ProviderProfile() {
   return (
     <SafeAreaView style={styles.container} testID="provider-profile">
       <ScrollView showsVerticalScrollIndicator={false}>
-        <View style={styles.header}><Text style={styles.title}>Profil</Text></View>
+        <PageHeader title={t('alpine.account')} subtitle={t('alpine.providerSpace')} />
 
         <View style={styles.userCard}>
           <TouchableOpacity onPress={handlePickAvatar} activeOpacity={0.7} style={styles.avatarWrap}>
@@ -494,12 +499,12 @@ export default function ProviderProfile() {
               </View>
               <Text style={styles.menuLabel}>{item.label}</Text>
               {'badge' in item && item.badge === 'done' && (
-                <View style={{ backgroundColor: '#DCFCE7', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10, marginRight: 6 }}>
-                  <Text style={{ color: '#16A34A', fontSize: 12, fontFamily: 'PlusJakartaSans_600SemiBold' }}>{item.id === 'paiements' ? 'Configuré' : '✓'}</Text>
+                <View style={{ backgroundColor: COLORS.successSoft, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10, marginRight: 6 }}>
+                  <Text style={{ color: COLORS.success, fontSize: 12, fontFamily: 'PlusJakartaSans_600SemiBold' }}>{item.id === 'paiements' ? 'Configuré' : '✓'}</Text>
                 </View>
               )}
               {'badge' in item && item.badge === 'todo' && (
-                <View style={{ backgroundColor: '#FFF7ED', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10, marginRight: 6 }}>
+                <View style={{ backgroundColor: COLORS.coralSoft, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10, marginRight: 6 }}>
                   <Text style={{ color: COLORS.warning, fontSize: 11, fontFamily: 'PlusJakartaSans_600SemiBold' }}>{item.id === 'paiements' ? 'À configurer' : 'À compléter'}</Text>
                 </View>
               )}
@@ -508,9 +513,9 @@ export default function ProviderProfile() {
           ))}
         </View>
 
-        <TouchableOpacity testID="provider-logout-btn" style={styles.logoutBtn} onPress={onLogout}>
+        <TouchableOpacity testID="provider-logout-btn" style={styles.logoutBtn} disabled={loggingOut} onPress={onLogout}>
           <Ionicons name="log-out-outline" size={22} color={COLORS.urgency} />
-          <Text style={styles.logoutText}>Déconnexion</Text>
+          <Text style={styles.logoutText}>{loggingOut ? 'Déconnexion…' : 'Déconnexion'}</Text>
         </TouchableOpacity>
 
 
@@ -747,7 +752,7 @@ export default function ProviderProfile() {
               </View>
               <Text style={styles.deleteWarningTitle}>Action irréversible</Text>
               <Text style={styles.deleteWarningDesc}>
-                Toutes vos missions, votre profil prestataire et vos données seront définitivement supprimés.{'\n\n'}
+                La suppression de votre compte est définitive. Les justificatifs soumis à une obligation légale de conservation seront conservés. Si votre compte est lié à Apple, une confirmation Apple vous sera demandée.{'\n\n'}
                 Tapez <Text style={{ fontWeight: '700', color: COLORS.urgency }}>SUPPRIMER</Text> pour confirmer.
               </Text>
             </View>
@@ -766,10 +771,11 @@ export default function ProviderProfile() {
               onPress={async () => {
                 setDeletingAccount(true);
                 try {
-                  await deleteAccount();
+                  const deletionStatus = await deleteAccount();
                   setUser(null); // flush React state before navigation to avoid race condition
                   await supabase.auth.signOut();
                   router.replace('/');
+                  if (deletionStatus === 'processing') Alert.alert('Demande enregistrée', 'Votre compte est désormais inaccessible. La suppression de vos données est en cours et reprend automatiquement en cas d’interruption. Les justificatifs soumis à une obligation légale sont conservés.');
                 } catch (e: unknown) {
                   Alert.alert('Erreur', e instanceof Error ? e.message : String(e));
                 } finally {
@@ -1152,10 +1158,10 @@ const styles = StyleSheet.create({
   deleteBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.md, marginHorizontal: SPACING.xl, marginTop: SPACING.md, padding: SPACING.md, borderRadius: RADIUS.xl },
   deleteBtnText: { ...FONTS.bodySmall, color: COLORS.urgency, fontWeight: '600' },
   deleteWarningWrap: { alignItems: 'center', paddingVertical: SPACING.lg, marginBottom: SPACING.lg },
-  deleteWarningIcon: { width: 72, height: 72, borderRadius: 20, backgroundColor: '#FEF2F2', justifyContent: 'center', alignItems: 'center', marginBottom: SPACING.md, borderWidth: 1, borderColor: '#FECACA' },
+  deleteWarningIcon: { width: 72, height: 72, borderRadius: 20, backgroundColor: COLORS.urgencySoft, justifyContent: 'center', alignItems: 'center', marginBottom: SPACING.md, borderWidth: 1, borderColor: '#FECACA' },
   deleteWarningTitle: { ...FONTS.h2, color: COLORS.urgency, marginBottom: SPACING.sm },
   deleteWarningDesc: { ...FONTS.body, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 22 },
-  deleteInput: { backgroundColor: '#FEF2F2', borderWidth: 2, borderColor: COLORS.urgency, borderRadius: RADIUS.md, paddingHorizontal: SPACING.lg, paddingVertical: SPACING.lg, ...FONTS.h3, color: COLORS.urgency, textAlign: 'center', letterSpacing: 2, marginBottom: SPACING.lg },
+  deleteInput: { backgroundColor: COLORS.urgencySoft, borderWidth: 2, borderColor: COLORS.urgency, borderRadius: RADIUS.md, paddingHorizontal: SPACING.lg, paddingVertical: SPACING.lg, ...FONTS.h3, color: COLORS.urgency, textAlign: 'center', letterSpacing: 2, marginBottom: SPACING.lg },
   confirmDeleteBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.sm, backgroundColor: COLORS.urgency, paddingVertical: SPACING.lg, borderRadius: RADIUS.xl, ...SHADOWS.float },
   confirmDeleteBtnDisabled: { opacity: 0.4 },
   confirmDeleteBtnText: { ...FONTS.h3, color: COLORS.textInverse },

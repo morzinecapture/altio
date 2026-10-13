@@ -6,6 +6,8 @@ import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { COLORS, FONTS, SPACING, RADIUS, SHADOWS } from '../../src/theme';
+import { SkeletonList } from '../../src/components/Skeleton';
+import { EmptyState } from '../../src/components/ui';
 import { getFavoriteProviders, removeFavoriteProvider } from '../../src/api';
 import type { FavoriteProvider } from '../../src/types/api';
 
@@ -55,23 +57,22 @@ export default function FavoritesScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="arrow-back" size={24} color="#1E3A5F" />
+          <Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.title}>{t('owner.favorites.title')}</Text>
         <View style={{ width: 44 }} />
       </View>
 
       {loading ? (
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color={COLORS.brandPrimary} />
-        </View>
+        <SkeletonList count={4} />
       ) : favorites.length === 0 ? (
         <View style={styles.center}>
-          <View style={styles.emptyIcon}>
-            <Ionicons name="star-outline" size={40} color={COLORS.brandPrimary} />
-          </View>
-          <Text style={styles.emptyTitle}>{t('owner.favorites.empty_title')}</Text>
-          <Text style={styles.emptyDesc}>{t('owner.favorites.empty_desc')}</Text>
+          <EmptyState
+            icon="star-outline"
+            title={t('owner.favorites.empty_title')}
+            subtitle={t('owner.favorites.empty_desc')}
+            testID="owner-favorites-empty"
+          />
         </View>
       ) : (
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
@@ -95,7 +96,7 @@ export default function FavoritesScreen() {
 
                 <View style={styles.cardMain}>
                   <Image
-                    source={{ uri: provider?.picture || `https://ui-avatars.com/api/?name=${provider?.name || 'P'}&background=1E3A5F&color=fff&size=100&rounded=true` }}
+                    source={provider?.picture ? { uri: provider.picture } : require('../../assets/images/icon.png')}
                     style={styles.avatar}
                   />
                   <View style={styles.info}>
@@ -103,7 +104,7 @@ export default function FavoritesScreen() {
 
                     {/* Rating */}
                     <View style={styles.ratingRow}>
-                      <Ionicons name="star" size={13} color="#FBBF24" />
+                      <Ionicons name="star" size={13} color={COLORS.warning} />
                       <Text style={styles.ratingText}>
                         {rating > 0 ? `${rating.toFixed(1)} (${totalReviews})` : t('owner.favorites.no_reviews')}
                       </Text>
@@ -171,11 +172,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.xl, paddingTop: SPACING.xl, paddingBottom: SPACING.lg,
   },
   backBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center' },
-  title: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 20, color: '#1E3A5F' },
+  title: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 20, color: COLORS.textPrimary },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: SPACING.xl },
-  emptyIcon: { width: 80, height: 80, borderRadius: 24, backgroundColor: COLORS.brandPrimary + '15', justifyContent: 'center', alignItems: 'center', marginBottom: SPACING.lg, borderWidth: 1, borderColor: COLORS.brandPrimary + '30' },
-  emptyTitle: { ...FONTS.h2, color: COLORS.textPrimary, textAlign: 'center', marginBottom: SPACING.sm },
-  emptyDesc: { ...FONTS.body, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 22 },
   content: { paddingHorizontal: SPACING.xl, paddingTop: SPACING.md },
   subtitle: { ...FONTS.bodySmall, color: COLORS.textSecondary, marginBottom: SPACING.lg },
   card: {
@@ -185,13 +183,13 @@ const styles = StyleSheet.create({
   priorityBadge: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     backgroundColor: '#FEF3C7', paddingHorizontal: SPACING.md, paddingVertical: 6,
-    borderBottomWidth: 1, borderBottomColor: '#FDE68A',
+    borderBottomWidth: 1, borderBottomColor: COLORS.warningSoft,
   },
   priorityText: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 11, color: '#D97706' },
   cardMain: { flexDirection: 'row', alignItems: 'flex-start', padding: SPACING.lg, gap: SPACING.md },
   avatar: { width: 56, height: 56, borderRadius: 28 },
   info: { flex: 1 },
-  name: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 16, color: '#1E3A5F', marginBottom: 4 },
+  name: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 16, color: COLORS.textPrimary, marginBottom: 4 },
   ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 6 },
   ratingText: { fontFamily: 'PlusJakartaSans_500Medium', fontSize: 12, color: '#64748B' },
   tagsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },

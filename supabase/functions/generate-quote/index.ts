@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { corsHeaders, handleCors } from '../_shared/cors.ts'
+import { getFrenchServiceLabel } from '../_shared/serviceLabels.ts'
 import { assertUUID, ValidationError } from '../_shared/validate.ts'
 import { requireAuth } from '../_shared/auth.ts'
 
@@ -69,7 +70,7 @@ serve(async (req) => {
     const property        = source.property ?? {}
     const propertyName    = esc(property.name || '—')
     const propertyAddress = esc(property.address || '')
-    const serviceType     = esc(mission?.mission_type || emergency?.service_type || 'service')
+    const serviceType     = esc(getFrenchServiceLabel(mission?.mission_type || emergency?.service_type))
 
     // ── 2. Quote number (per-provider sequence) ────────────────────────────────
     const year = new Date().getFullYear()
@@ -352,14 +353,13 @@ serve(async (req) => {
   <div class="conditions-block">
     <div class="conditions-title">Conditions</div>
     <div class="conditions-item"><strong>Modalités de paiement :</strong> Paiement intégral via la plateforme Altio, déclenché à la validation de l'intervention par le client. Aucun acompte requis.</div>
-    <div class="conditions-item"><strong>Pénalités de retard :</strong> En cas de retard de paiement, des pénalités au taux de la Banque Centrale Européenne (BCE) majoré de 10 points seront appliquées (art. L441-10 du Code de commerce).</div>
-    <div class="conditions-item"><strong>Indemnité forfaitaire de recouvrement :</strong> 40 € (art. D441-5 du Code de commerce).</div>
+    <div class="conditions-item"><strong>Clients professionnels uniquement :</strong> Pénalités de retard au taux de la BCE majoré de 10 points et indemnité forfaitaire de recouvrement de 40 € (art. L441-10 et D441-5 du Code de commerce). Ces dispositions ne s'appliquent pas aux consommateurs.</div>
     <div class="conditions-item"><strong>Conditions de révision des prix :</strong> Les prix sont fermes et définitifs pour la durée de validité du devis.</div>
     <div class="conditions-item"><strong>Escompte :</strong> Pas d'escompte pour paiement anticipé.</div>
     <div class="conditions-item"><strong>Caractère gratuit du devis :</strong> Ce devis est établi gratuitement conformément à l'arrêté du 24 janvier 2017.</div>
     <div class="conditions-item"><strong>Durée de validité :</strong> Ce devis est valable ${validityDays} jours à compter de sa date d'émission (jusqu'au ${expiryDate}).</div>
-    <div class="conditions-item"><strong>Droit de rétractation :</strong> Conformément à l'article L221-18 du Code de la consommation, le client dispose d'un délai de 14 jours à compter de l'acceptation du devis pour exercer son droit de rétractation, sauf en cas d'urgence ou de demande expresse du client pour une exécution immédiate (art. L221-28 du Code de la consommation).</div>
-    <div class="conditions-item"><strong>Médiation de la consommation :</strong> En cas de litige, le client peut recourir gratuitement au médiateur de la consommation : CMAP — Centre de Médiation et d'Arbitrage de Paris, 39 avenue Franklin D. Roosevelt, 75008 Paris — Tél. : 01 44 95 11 40 — www.cmap.fr — consommation@cmap.fr</div>
+    <div class="conditions-item"><strong>Droit de rétractation :</strong> Le consommateur dispose en principe de 14 jours à compter de la conclusion du contrat. Une demande de commencement anticipé ne supprime pas à elle seule ce droit. La perte du droit après exécution intégrale requiert les consentements préalables prévus par la loi. L'exception pour réparation urgente à domicile ne couvre que les pièces et travaux strictement nécessaires pour répondre à l'urgence expressément sollicitée (art. L221-18, L221-25 et L221-28 du Code de la consommation).</div>
+    <div class="conditions-item"><strong>Médiation de la consommation :</strong> Le médiateur compétent doit être celui effectivement conventionné par le professionnel concerné ; aucune adhésion n'est présumée par l'utilisation d'Altio.</div>
     <div class="conditions-item"><strong>Acceptation numérique :</strong> L'acceptation du devis et le paiement via la plateforme Altio valent accord du client pour l'exécution des travaux décrits ci-dessus.</div>
   </div>
 
@@ -382,13 +382,8 @@ serve(async (req) => {
     <div style="height:60px;border-bottom:1px dashed #CBD5E1;margin-bottom:12px"></div>
     <br>
     Établi en double exemplaire.<br><br>
-    Altio SAS — Plateforme de mise en relation<br>
-    SIRET : [En cours d'immatriculation] — RCS Paris<br>
-    N° TVA intracommunautaire : [En cours d'attribution]<br>
-    Siège social : [Adresse du siège social]<br>
-    Contact : contact@altio.app<br><br>
-    Médiateur de la consommation : CMAP — Centre de Médiation et d'Arbitrage de Paris,
-    39 avenue Franklin D. Roosevelt, 75008 Paris — Tél. : 01 44 95 11 40 — www.cmap.fr — consommation@cmap.fr
+    Altio — Plateforme de mise en relation<br>
+    Contact : contact@altio.app
   </div>
 </body>
 </html>`

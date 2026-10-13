@@ -1,0 +1,36 @@
+✔ Auth, profile, identities, sessions and simple data delete in one transaction; other account remains (1902.593792ms)
+✔ financial history blocks deletion, preserving invoices and all account data (590.562833ms)
+✔ Auth-linked history is checked before any Auth cascade can remove it (615.807333ms)
+✔ late cleanup failure rolls back profile, Auth, sessions and earlier cleanup; retry succeeds (611.353666ms)
+✔ direct public profile deletion is rejected without affecting Auth (594.720334ms)
+✔ external data prevents deletion: insert into storage.objects(owner,name) values($1,'photo.jpg') (507.601208ms)
+✔ external data prevents deletion: insert into storage.objects(owner_id,name) values($1::text,'photo.jpg') (430.852666ms)
+✔ external data prevents deletion: insert into storage.objects(name) values($1::text || '/nested/photo.jpg') (363.459791ms)
+✔ external data prevents deletion: update provider_profiles set stripe_account_id='acct_fixture' where provider_id=$1 (324.815125ms)
+✔ external data prevents deletion: update users set picture='https://fixture.invalid/photo' where id=$1 (311.266584ms)
+✔ external data prevents deletion: update users set google_calendar_refresh_token='fixture' where id=$1 (305.115625ms)
+✔ a relationship created after preparation is caught by the transaction guard (307.352625ms)
+✔ anonymous and signed-in clients cannot call privileged readiness or trigger helpers (291.766875ms)
+✔ missing profile fails preparation instead of claiming the account is ready (290.624083ms)
+✔ refused repairs close only after an undisputed paid diagnostic (1885.150291ms)
+✔ completion window: ownership, deadline, reminders, claims, disputes and settlement (660.208834ms)
+✔ real notification trigger cannot roll back an already captured completion (653.778458ms)
+✔ explicit test fixtures never consume the customer credit-note sequence (1818.550083ms)
+✔ reservation and publication remain idempotent, preserve source phase and cancel source atomically (616.399917ms)
+✔ failed source update rolls back the credit insertion and leaves reservation retryable (602.383ms)
+✔ changed source cannot be credited using obsolete document amounts (607.266542ms)
+✔ existing partial credit blocks a new full credit rather than over-crediting (583.870791ms)
+✔ public callers cannot reserve, finalize or read credit note jobs (518.017041ms)
+✔ atomic iCal import is scoped to property and source; retries do not recreate reservations (1870.659709ms)
+✔ legacy imports are adopted without deleting or duplicating their existing row (607.160583ms)
+✔ cron uses Vault and net.http_post, and supports a non-mutating health check (587.527208ms)
+✔ fixed search paths reject caller and temporary table shadowing without changing function bodies (2083.826834ms)
+✔ refund receipt table is private, deduplicated, and preserves reconciliation on replay (1928.961666ms)
+ℹ tests 28
+ℹ suites 0
+ℹ pass 28
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 7502.658333

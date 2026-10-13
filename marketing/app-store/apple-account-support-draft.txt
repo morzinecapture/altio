@@ -1,0 +1,22 @@
+OBSOLETE — ne pas envoyer. La dernière décision conserve le compte Apple de Maxime ; aucun transfert demandé.
+
+Objet : Altio non publiée — préparation sous le compte de son exploitante
+
+Bonjour,
+
+L’application Altio (Apple ID 6762188482, Bundle ID com.altio.app, SKU altio-001) est actuellement en préparation avant sa première soumission sur mon compte Apple Developer, identifié Maxime Gakiere. Des builds de validation ont été préparés, mais aucune version publique n’a été publiée.
+
+L’exploitante et future vendeuse de l’application est Manon Freuchet, entrepreneur individuel sous le nom commercial Freuchet Services (SIREN 999304736, SIRET 99930473600013). Elle ne dispose pas encore d’un abonnement Apple Developer à son nom et doit procéder à son inscription et à sa vérification d’identité.
+
+Votre documentation précise que le transfert standard d’une application nécessite au moins une version déjà publiée. Nous souhaitons résoudre l’identité du vendeur avant la première publication, sans publier provisoirement sous le mauvais vendeur.
+
+Pouvez-vous nous indiquer la procédure adaptée pour préparer Altio sur le compte de Manon, et confirmer :
+- si la fiche et l’identifiant com.altio.app peuvent être conservés ou déplacés avec votre assistance avant publication ;
+- sinon, quels éléments doivent être recréés et quelles conséquences prévoir pour Sign in with Apple, les profils de signature, les notifications et les builds TestFlight ;
+- quelles démarches doivent être effectuées respectivement par le titulaire actuel et Manon ?
+
+Nous n’avons pas supprimé la fiche actuelle, modifié son identité légale ni lancé de transfert. Nous pouvons fournir les justificatifs nécessaires par vos canaux sécurisés.
+
+Merci.
+
+Maxime Gakiere

@@ -1,0 +1,24 @@
+Vos locations saisonnières demandent de l’attention. Altio réunit propriétaires et prestataires pour organiser les interventions, suivre les missions et garder les informations utiles à portée de main.
+
+POUR LES PROPRIÉTAIRES
+• Regroupez vos logements et leurs informations pratiques.
+• Consultez votre planning et vos réservations.
+• Organisez des missions de ménage ou d’entretien.
+• Consultez les profils des prestataires et retrouvez vos favoris.
+• Suivez l’avancement des interventions et les photos transmises.
+• Échangez dans la messagerie et retrouvez vos factures.
+
+POUR LES PRESTATAIRES
+• Présentez vos services et votre zone d’intervention.
+• Consultez les missions proposées et envoyez vos candidatures.
+• Retrouvez vos interventions et votre planning.
+• Partagez les photos utiles au suivi de votre travail.
+• Consultez vos revenus et vos documents de facturation.
+
+DU PLANNING AU SUIVI
+Centralisez les échanges liés à chaque mission et gardez une vue sur les interventions à venir. Les notifications vous aident à suivre l’activité de votre compte.
+
+DES PRESTATIONS SUR PLACE
+Les paiements proposés dans Altio concernent des services réalisés dans les logements, comme le ménage et la maintenance. Ils sont traités via Stripe. Le prix et les frais applicables sont présentés avant confirmation.
+
+Un compte est nécessaire pour utiliser Altio. La disponibilité des missions et des prestataires dépend de votre zone et de leur activité. Une connexion Internet est nécessaire pour les échanges, les paiements et la mise à jour des informations.

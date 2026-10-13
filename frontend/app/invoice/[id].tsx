@@ -278,7 +278,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     flex: 1, fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 17,
-    color: '#1E3A5F', textAlign: 'center', marginHorizontal: SPACING.md,
+    color: COLORS.textPrimary, textAlign: 'center', marginHorizontal: SPACING.md,
   },
 
   topCard: {
@@ -288,7 +288,7 @@ const styles = StyleSheet.create({
     ...SHADOWS.card,
   },
   topCardRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.sm },
-  invoiceNumber: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 18, color: '#1E3A5F' },
+  invoiceNumber: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 18, color: COLORS.textPrimary },
   invoiceType: { fontFamily: 'PlusJakartaSans_500Medium', fontSize: 14, color: COLORS.textSecondary, marginBottom: 4 },
   invoiceDate: { fontFamily: 'PlusJakartaSans_400Regular', fontSize: 13, color: COLORS.textTertiary },
 
@@ -303,7 +303,7 @@ const styles = StyleSheet.create({
   mandateText: { flex: 1, fontFamily: 'PlusJakartaSans_400Regular', fontSize: 12, color: COLORS.info, lineHeight: 18 },
 
   section: { marginHorizontal: SPACING.xl, marginTop: SPACING.xl },
-  sectionTitle: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 15, color: '#1E3A5F', marginBottom: SPACING.md },
+  sectionTitle: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 15, color: COLORS.textPrimary, marginBottom: SPACING.md },
 
   card: {
     backgroundColor: '#FFFFFF', borderRadius: RADIUS.md, padding: SPACING.lg,
@@ -316,20 +316,20 @@ const styles = StyleSheet.create({
     padding: SPACING.md, borderWidth: 1, borderColor: '#F1F5F9',
   },
   partyLabel: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 11, color: COLORS.textTertiary, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: SPACING.sm },
-  partyName: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 14, color: '#1E3A5F', marginBottom: 4 },
+  partyName: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 14, color: COLORS.textPrimary, marginBottom: 4 },
   partyDetail: { fontFamily: 'PlusJakartaSans_400Regular', fontSize: 12, color: COLORS.textSecondary, marginBottom: 2 },
   vatExemptNote: { fontFamily: 'PlusJakartaSans_400Regular', fontSize: 11, color: COLORS.warning, fontStyle: 'italic', marginTop: 4 },
 
   infoRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingVertical: 6 },
   infoLabel: { fontFamily: 'PlusJakartaSans_400Regular', fontSize: 13, color: COLORS.textSecondary, flex: 1 },
-  infoValue: { fontFamily: 'PlusJakartaSans_500Medium', fontSize: 13, color: '#1E3A5F', flex: 1.5, textAlign: 'right' },
+  infoValue: { fontFamily: 'PlusJakartaSans_500Medium', fontSize: 13, color: COLORS.textPrimary, flex: 1.5, textAlign: 'right' },
 
   amountLine: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6 },
   amountLineLabel: { fontFamily: 'PlusJakartaSans_400Regular', fontSize: 14, color: COLORS.textSecondary },
-  amountLineValue: { fontFamily: 'PlusJakartaSans_500Medium', fontSize: 14, color: '#1E3A5F' },
+  amountLineValue: { fontFamily: 'PlusJakartaSans_500Medium', fontSize: 14, color: COLORS.textPrimary },
   amountDivider: { height: 1, backgroundColor: '#F1F5F9', marginVertical: SPACING.sm },
-  amountTotalLabel: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 16, color: '#1E3A5F' },
-  amountTotalValue: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 20, color: '#1E3A5F' },
+  amountTotalLabel: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 16, color: COLORS.textPrimary },
+  amountTotalValue: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 20, color: COLORS.textPrimary },
 
   legalCard: {
     backgroundColor: COLORS.subtle, borderRadius: RADIUS.md, padding: SPACING.md,

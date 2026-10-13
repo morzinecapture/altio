@@ -1,0 +1,14 @@
+{
+  "tests": {
+    "suites": 11,
+    "passed": 247,
+    "kind": "unit/integration with mocked backend"
+  },
+  "typescript": "pass",
+  "changed_files_lint": "pass, zero warnings",
+  "ios_debug_build": "pass",
+  "native_smoke": "public paths only; see native-smoke-test.txt",
+  "production_changes": false,
+  "store_submission": false,
+  "connected_tests": "awaiting demo accounts"
+}

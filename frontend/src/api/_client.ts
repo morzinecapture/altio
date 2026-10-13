@@ -149,6 +149,7 @@ export interface MissionRow {
 }
 
 export interface EmergencyRow {
+  photos?: string[] | null;
   id: string;
   owner_id: string;
   property_id?: string;

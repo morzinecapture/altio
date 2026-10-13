@@ -1,0 +1,8 @@
+const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),ts=require('../../../frontend/node_modules/typescript');
+function load({admin=true,error=false}={}){let handler;const calls=[];const db={from(table){calls.push(table);const q={select(){return q},eq(field,id){assert.equal(id,'admin-id');return q},single:async()=>({data:{is_admin:admin}}),gte(){return q},lt(){return q},order(){return q},range:async()=>error?{error:{message:'private'}}:{data:[{amount_ht:100,amount_ttc:100,vat_rate:0}]}};return q}};
+const source=fs.readFileSync('supabase/functions/annual-report/index.ts','utf8').replace(/^import .*$/gm,'');
+new Function('serve','createClient','requireAuth','corsHeaders','handleCors','Deno',ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText)(fn=>handler=fn,()=>db,async()=>({user:{id:'admin-id'}}),{},()=>null,{env:{get:()=>''}});
+return {calls,request:()=>handler(new Request('https://fixture.invalid',{method:'POST',body:JSON.stringify({year:2026})}))};}
+test('non-admin cannot export financial data',async()=>{const e=load({admin:false});assert.equal((await e.request()).status,403);assert.deepEqual(e.calls,['users']);});
+test('report preserves actual tax amounts and does not invent exemptions or payouts',async()=>{const e=load();const r=await(await e.request()).json();assert.equal(r.report.tax_filing_ready,false);assert.equal(r.report.documents[0].amount_ttc,100);assert.doesNotMatch(JSON.stringify(r),/exempt_art|net_received|penalty_rate/)});
+test('query failure never produces a partial successful report',async()=>{assert.equal((await load({error:true}).request()).status,503)});

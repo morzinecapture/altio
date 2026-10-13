@@ -1,15 +1,20 @@
 import { Tabs, Redirect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { ActivityIndicator, View } from 'react-native';
+import { ActivityIndicator, View, useWindowDimensions } from 'react-native';
+import { useTranslation } from 'react-i18next';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS } from '../../src/theme';
 import { useAuth } from '../../src/auth';
 
 export default function ProviderTabLayout() {
   const { user, loading } = useAuth();
+  const { t } = useTranslation();
+  const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
 
   if (loading) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F8FAFC' }}>
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.background }}>
         <ActivityIndicator size="large" color={COLORS.brandPrimary} />
       </View>
     );
@@ -23,70 +28,41 @@ export default function ProviderTabLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: '#3B82F6', // Blue accent
-        tabBarInactiveTintColor: '#94A3B8', // Grey
+        tabBarActiveTintColor: COLORS.textPrimary,
+        tabBarInactiveTintColor: COLORS.textSecondary,
         tabBarStyle: {
-          position: 'absolute',
-          backgroundColor: '#FFFFFF', // Pure white
-          borderTopColor: '#F1F5F9', // Light border
-          borderTopWidth: 1,
-          height: 80,
-          paddingBottom: 25,
-          paddingTop: 10,
-          elevation: 10, // Shadow for android
-          shadowColor: '#000', // Shadow for ios
-          shadowOffset: { width: 0, height: -4 },
-          shadowOpacity: 0.05,
-          shadowRadius: 10,
+          position: 'absolute', backgroundColor: COLORS.paper,
+          borderTopColor: COLORS.border, borderTopWidth: 1,
+          height: 62 + Math.max(insets.bottom, 12),
+          paddingBottom: Math.max(insets.bottom, 12), paddingTop: 8,
+          elevation: 0,
         },
-        tabBarLabelStyle: {
-          fontFamily: 'PlusJakartaSans_500Medium',
-          fontSize: 11,
-        },
+        tabBarLabelStyle: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: width < 350 ? 10 : 11, lineHeight: 16, marginHorizontal: 0, letterSpacing: width < 350 ? -0.2 : 0 },
+        tabBarItemStyle: { minWidth: 0 },
+        tabBarAllowFontScaling: true,
       }}
     >
-      <Tabs.Screen
-        name="dashboard"
-        options={{
-          title: 'Missions',
-          tabBarIcon: ({ color, size }) => <Ionicons name="briefcase-outline" size={size} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="my-missions"
-        options={{
-          title: 'Mes missions',
-          tabBarIcon: ({ color, size }) => <Ionicons name="clipboard-outline" size={size} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="revenue"
-        options={{
-          title: 'Revenus',
-          tabBarIcon: ({ color, size }) => <Ionicons name="wallet-outline" size={size} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="planning"
-        options={{
-          title: 'Planning',
-          tabBarIcon: ({ color, size }) => <Ionicons name="calendar-outline" size={size} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="invoices"
-        options={{
-          title: 'Factures',
-          tabBarIcon: ({ color, size }) => <Ionicons name="receipt-outline" size={size} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="profile"
-        options={{
-          title: 'Profil',
-          tabBarIcon: ({ color, size }) => <Ionicons name="person-outline" size={size} color={color} />,
-        }}
-      />
+      <Tabs.Screen name="dashboard" options={{
+        title: 'Accueil',
+        tabBarIcon: ({ color, size, focused }) => <Ionicons name={focused ? 'home' : 'home-outline'} size={size} color={color} />,
+      }} />
+      <Tabs.Screen name="planning" options={{
+        title: 'Planning',
+        tabBarIcon: ({ color, size, focused }) => <Ionicons name={focused ? 'calendar' : 'calendar-outline'} size={size} color={color} />,
+      }} />
+      <Tabs.Screen name="my-missions" options={{
+        title: t('alpine.missions'),
+        tabBarIcon: ({ color, size, focused }) => <Ionicons name={focused ? 'albums' : 'albums-outline'} size={size} color={color} />,
+      }} />
+      <Tabs.Screen name="revenue" options={{
+        title: 'Revenus',
+        tabBarIcon: ({ color, size, focused }) => <Ionicons name={focused ? 'wallet' : 'wallet-outline'} size={size} color={color} />,
+      }} />
+      <Tabs.Screen name="profile" options={{
+        title: t('alpine.account'),
+        tabBarIcon: ({ color, size, focused }) => <Ionicons name={focused ? 'person' : 'person-outline'} size={size} color={color} />,
+      }} />
+      <Tabs.Screen name="invoices" options={{ href: null }} />
     </Tabs>
   );
 }

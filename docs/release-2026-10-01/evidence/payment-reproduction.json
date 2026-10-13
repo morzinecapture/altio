@@ -1,0 +1,10 @@
+{
+  "deployedVersion": 19,
+  "networkUsed": false,
+  "scenario": "Authenticated caller supplies 50 cents and nonexistent mission; database lookup returns an error",
+  "expected": "Reject before Stripe creation",
+  "observedStatus": 200,
+  "stripeCalled": true,
+  "amountAccepted": 50,
+  "verdict": "FAIL: invalid mission accepted and amount trusted"
+}

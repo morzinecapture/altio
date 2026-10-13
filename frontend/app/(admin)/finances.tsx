@@ -84,7 +84,7 @@ export default function AdminFinances() {
           <View style={styles.kpiGrid}>
             {[
               { label: t('admin.finances.commissions_month'), value: `${Math.round(finances?.commissions_this_month ?? 0)}€`, color: COLORS.success, bg: COLORS.successSoft, icon: 'trending-up-outline' },
-              { label: t('admin.finances.volume_month'), value: `${Math.round(finances?.volume_this_month ?? 0)}€`, color: COLORS.brandPrimary, bg: '#EEF2FF', icon: 'cash-outline' },
+              { label: t('admin.finances.volume_month'), value: `${Math.round(finances?.volume_this_month ?? 0)}€`, color: COLORS.brandPrimary, bg: COLORS.infoSoft, icon: 'cash-outline' },
               { label: t('admin.finances.paid_missions'), value: String(finances?.paid_missions_count ?? 0), color: COLORS.info, bg: COLORS.infoSoft, icon: 'checkmark-circle-outline' },
               { label: t('admin.finances.total_volume'), value: `${Math.round(finances?.total_volume ?? 0)}€`, color: COLORS.purple, bg: COLORS.purpleSoft, icon: 'bar-chart-outline' },
             ].map(kpi => (
@@ -222,7 +222,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFFFFF' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: SPACING.xl, paddingTop: SPACING.lg, paddingBottom: SPACING.sm },
-  title: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 24, color: '#1E3A5F' },
+  title: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 24, color: COLORS.textPrimary },
   exportBtn: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, backgroundColor: COLORS.purple, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, borderRadius: RADIUS.md },
   exportBtnText: { ...FONTS.bodySmall, color: COLORS.textInverse, fontWeight: '600' },
   kpiGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: SPACING.lg, gap: SPACING.md, paddingTop: SPACING.sm },
@@ -240,7 +240,7 @@ const styles = StyleSheet.create({
   barLabel: { ...FONTS.caption, fontSize: 8, color: COLORS.textTertiary },
   missionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: SPACING.xl, paddingVertical: SPACING.md, borderBottomWidth: 1, borderBottomColor: COLORS.border },
   missionInfo: { flex: 1, marginRight: SPACING.md },
-  missionTitle: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 14, color: '#1E3A5F' },
+  missionTitle: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 14, color: COLORS.textPrimary },
   missionMeta: { ...FONTS.bodySmall, color: COLORS.textSecondary, marginTop: 2 },
   missionRight: { alignItems: 'flex-end', gap: SPACING.xs },
   missionAmount: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 15, color: COLORS.success },
@@ -248,6 +248,6 @@ const styles = StyleSheet.create({
   chipText: { ...FONTS.caption, fontSize: 9 },
   emptyText: { ...FONTS.bodySmall, color: COLORS.textTertiary, textAlign: 'center', paddingVertical: SPACING.xl },
   facturxCard: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, marginHorizontal: SPACING.xl, backgroundColor: COLORS.infoSoft, borderRadius: RADIUS.md, padding: SPACING.md },
-  facturxTitle: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 14, color: '#1E3A5F' },
+  facturxTitle: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 14, color: COLORS.textPrimary },
   facturxSub: { ...FONTS.bodySmall, color: COLORS.textSecondary, marginTop: 2 },
 });

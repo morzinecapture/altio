@@ -1,0 +1,87 @@
+{
+  "operatorDecisions": {
+    "recordedAt": "2026-10-08",
+    "legalForm": "Entrepreneur individuel (EI), entreprise active créée le 02/01/2026",
+    "identity": "Manon Freuchet (Freuchet Services), SIREN 999304736, SIRET 99930473600013, 61 chemin de la Vieille Ranche, 74110 Montriond ; immatriculation RNE le 28/01/2026. Source officielle fournie par l’utilisateur.",
+    "vat": "Franchise en base de TVA confirmée par l’exploitant le 08/10/2026.",
+    "commercialModel": "Intermédiation avec mandat de facturation côté prestataire",
+    "launchTerritory": "France",
+    "paymentPreference": "Validé : pour chaque étape (visite/diagnostic puis réparation), déclaration de fin par le prestataire ; paiement sur validation du propriétaire ou après 48 h sans réponse, rappel à 24 h ; contestation suspendant l'automatisme, sans suppression des recours ultérieurs.",
+    "providers": "Métiers validés pour le lancement : ménage, plomberie, électricité, serrurerie. Professionnels immatriculés ; qualifications, RC professionnelle et décennale selon les activités à vérifier.",
+    "operatorInsurance": "Pas encore souscrite",
+    "mediator": "CM2C choisi et souscription confirmée par l’exploitant le 08/10/2026 ; coordonnées officielles intégrées à l’application et au serveur.",
+    "stripeLive": "Pas encore activé ; onboarding Connect des prestataires non confirmé",
+    "professionalReview": "Aucun avocat ou expert-comptable engagé",
+    "cancellationPolicy": "Validée comme orientation commerciale : gratuit avant départ (frais Altio inclus) ; déplacement annoncé et justifié après départ, soumis aux droits légaux et examen du support ; remboursement des prestations non réalisées et frais Altio correspondants si annulation/absence prestataire ; devis accepté pour tout supplément. À intégrer aux contrats et au produit.",
+    "identitySource": "https://annuaire-entreprises.data.gouv.fr/entreprise/manon-freuchet-freuchet-services-999304736",
+    "contactEmail": "morzinecapture@gmail.com",
+    "appleSeller": "Dernière décision du 09/10/2026 : conserver le compte Apple existant et Maxime Gakiere comme vendeur App Store. Manon Freuchet / Freuchet Services reste l’exploitante ; aucun transfert ni nouvelle inscription Apple demandés.",
+    "paidPartnerPlacements": "Aucun placement payant, confirmé le 09/10/2026."
+  },
+  "blockingIssues": [
+    {
+      "id": "completion-rollout",
+      "reason": "Parcours urgence 24/48 h et corrections de clôture déployés. La mission bloquée a été reprise sans nouveau débit, clôturée et ses trois factures ont été générées. Recette complète sur appareils, réautorisation après expiration et alignement du parcours classique restant à finaliser."
+    },
+    {
+      "id": "legal-identity",
+      "reason": "Identité officielle, franchise TVA et médiateur CM2C intégrés ; contact morzinecapture@gmail.com inclus dans le build TestFlight 20 envoyé à Apple le 11/10/2026. Vérification visuelle sur iPhone restante. Conserver la convention CM2C dans le dossier juridique de l’entreprise."
+    },
+    {
+      "id": "withdrawal",
+      "reason": "11/10 : déclaration serveur et accusé récupérable vérifiés, doublons évités. Adaptateur Brevo déployé après accord explicite (16 tests passants), mais la clé serveur existante est refusée HTTP 401 unauthorized. Envoi courriel non validé et reprises inactives. Consentements anticipés à finaliser."
+    },
+    {
+      "id": "invoice-emergency-phases",
+      "reason": "Facturation par étape déployée le 08/10/2026. Identité, régime TVA, contact et médiateur CM2C renseignés. Trois documents ont été générés pour l’étape réelle reprise ; recette de leur consultation sur appareils restant à réaliser."
+    },
+    {
+      "id": "provider-evidence",
+      "reason": "Faire confirmer les régimes TVA historiques et conserver les versions acceptées des mandats ; vérifier qualifications et assurances applicables."
+    },
+    {
+      "id": "live-reconciliation",
+      "reason": "Vérifier dans l'environnement cible les comptes Connect, les webhooks, les factures, les remboursements et les avoirs après recette en environnement de test."
+    },
+    {
+      "id": "tax-privacy-review",
+      "reason": "Valider le rôle d'intermédiaire et le traitement comptable avec un professionnel ; terminer la revue DAC7, données personnelles et facturation électronique selon le périmètre réel."
+    },
+    {
+      "id": "refund-credit-notes",
+      "reason": "09/10 : avoirs intégraux déployés et recette documentaire dédiée vérifiée. Extension locale : avoirs partiels cumulés, TVA exacte jusqu’au solde, rapprochement des remboursements proportionnels après confirmation de toutes les branches Stripe. Extension non déployée, planification distante inactive. Recette Stripe complète et allocations non proportionnelles restent à valider."
+    },
+    {
+      "id": "push-device-receipts",
+      "reason": "Doublons et français corrigés localement. Vérifier après déploiement les accusés de réception Expo/APNs, les notifications de sélection sur deux comptes et deux téléphones, le mode arrière-plan et l’ouverture du bon écran."
+    },
+    {
+      "id": "apple-account-deletion",
+      "reason": "11/10 : fonctions et migrations déployées. Suppression réelle du compte jetable réussie, Auth/profil absents, ancien accès refusé, comptes démo intacts et 102 factures inchangées. Révocation Sign in with Apple non configurée (quatre secrets Apple absents), donc parcours Apple non validé. Reprises automatiques des demandes confirmées activées avec autorisation explicite et configuration serveur vérifiée."
+    },
+    {
+      "id": "public-support-privacy",
+      "reason": "11/10 : six pages légales publiées sur https://altio-iota.vercel.app et vérifiées HTTP 200 sans authentification. Support et URL marketing enregistrés dans Apple ; URL confidentialité Apple à finaliser."
+    },
+    {
+      "id": "app-review-assets",
+      "reason": "11/10 : deux comptes démonstration connectés et peuplés, un compte jetable créé. Cinq captures réelles habillées ; deux importées dans Apple, trois restantes (sélecteur Safari bloqué). Identifiants propriétaire sauvegardés dans Apple ; textes longs non saisis. App Privacy incomplet."
+    },
+    {
+      "id": "legal-publication-copy",
+      "reason": "11/10 : textes complétés dans le code et six pages statiques, contrôlés visuellement, publiés uniquement en aperçu Vercel protégé. Nouveau build nécessaire pour les textes embarqués. Vérifications opérationnelles de conservation, rétractation, contrats fournisseurs et fiscalité toujours requises ; remplir les textes ne vaut pas validation de ces procédures."
+    },
+    {
+      "id": "dependency-security",
+      "reason": "09/10 : 45 alertes de dépendances classées production (25 élevées, 20 modérées), aucune critique ; 65 en incluant le développement. Correctifs PostCSS, Handlebars et décodeur appliqués. Les cinq familles restantes sont reliées à l’outillage de compilation/CLI ; analyse détaillée et limites dans le dossier. Aucun audit mobile indépendant ni clôture automatique du risque."
+    },
+    {
+      "id": "security-launch-review",
+      "reason": "09/10 : garde de session préparée pour tables, fichiers, vues et RPC, avec tests SQL/serveur. Les fonctions partageant l’authentification doivent être redéployées après les migrations. Réglages Auth, sauvegardes et revue de l’ensemble du déploiement restent à valider."
+    },
+    {
+      "id": "ical-scheduler",
+      "reason": "09/10 : transport/authentification/import atomique déployés. Évolutions locales testées : dates et annulations explicites, maintien des missions engagées, avis de rétablissement du séjour, aucune annulation déduite d’un calendrier vide. Non déployées ; une mission annulée ne redémarre pas automatiquement. Recette fournisseur sur calendrier dédié nécessaire."
+    }
+  ]
+}

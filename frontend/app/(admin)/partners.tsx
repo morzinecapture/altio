@@ -1,11 +1,12 @@
 import React from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert, Image } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '../../src/theme';
+import { SkeletonList } from '../../src/components/Skeleton';
 import { getPartners, deletePartner, updatePartner } from '../../src/api';
 import { AdminGuard } from '../../src/components/AdminGuard';
 import type { LocalPartner } from '../../src/types/api';
@@ -21,7 +22,7 @@ export default function AdminPartners() {
     spa:          { icon: 'sparkles-outline',     color: '#8B5CF6', label: t('admin.partners.category_spa')           },
     transport:    { icon: 'car-outline',          color: '#3B82F6', label: t('admin.partners.category_transport')     },
     shopping:     { icon: 'bag-outline',          color: '#EC4899', label: t('admin.partners.category_shopping')      },
-    location:     { icon: 'key-outline',          color: '#EAB308', label: t('admin.partners.category_location')      },
+    location:     { icon: 'key-outline',          color: COLORS.warning, label: t('admin.partners.category_location')      },
     autre:        { icon: 'ellipsis-horizontal-outline', color: '#64748B', label: t('admin.partners.category_autre') },
   };
 
@@ -81,7 +82,7 @@ export default function AdminPartners() {
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <View style={styles.header}>
           <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-            <Ionicons name="arrow-back" size={22} color="#1E3A5F" />
+            <Ionicons name="arrow-back" size={22} color={COLORS.textPrimary} />
           </TouchableOpacity>
           <Text style={styles.title}>{t('admin.partners.title')}</Text>
           <TouchableOpacity style={styles.addBtn} onPress={() => router.push('/(admin)/partner-form' as never)}>
@@ -90,7 +91,7 @@ export default function AdminPartners() {
         </View>
         <Text style={styles.count}>{partners.length !== 1 ? t('admin.partners.count_plural', { count: partners.length }) : t('admin.partners.count', { count: partners.length })}</Text>
         {loading ? (
-          <ActivityIndicator size="large" color={COLORS.brandPrimary} style={{ marginTop: 40 }} />
+          <SkeletonList count={4} />
         ) : (
           <FlatList
             data={partners}
@@ -112,22 +113,22 @@ export default function AdminPartners() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F8FAFC' },
+  container: { flex: 1, backgroundColor: COLORS.background },
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: SPACING.lg, paddingVertical: SPACING.md, borderBottomWidth: 1, borderBottomColor: '#E2E8F0', backgroundColor: '#FFFFFF', gap: SPACING.md },
   backBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center' },
-  title: { fontFamily: 'Inter_700Bold', fontSize: 18, color: '#1E3A5F', flex: 1 },
-  addBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#1E3A5F', justifyContent: 'center', alignItems: 'center' },
-  count: { fontFamily: 'Inter_400Regular', fontSize: 12, color: '#94A3B8', paddingHorizontal: SPACING.lg, paddingVertical: SPACING.sm },
+  title: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 18, color: COLORS.textPrimary, flex: 1 },
+  addBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: COLORS.brandPrimary, justifyContent: 'center', alignItems: 'center' },
+  count: { fontFamily: 'PlusJakartaSans_400Regular', fontSize: 12, color: '#94A3B8', paddingHorizontal: SPACING.lg, paddingVertical: SPACING.sm },
   list: { padding: SPACING.lg },
   row: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, backgroundColor: '#FFFFFF', borderRadius: RADIUS.lg, padding: SPACING.md, ...SHADOWS.card },
   rowInactive: { opacity: 0.5 },
   rowIcon: { width: 44, height: 44, borderRadius: RADIUS.md, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
   rowLogo: { width: 40, height: 40 },
   rowBody: { flex: 1 },
-  rowName: { fontFamily: 'Inter_600SemiBold', fontSize: 14, color: '#1E3A5F' },
-  rowMeta: { fontFamily: 'Inter_400Regular', fontSize: 12, color: '#94A3B8', marginTop: 2 },
+  rowName: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 14, color: COLORS.textPrimary },
+  rowMeta: { fontFamily: 'PlusJakartaSans_400Regular', fontSize: 12, color: '#94A3B8', marginTop: 2 },
   rowActions: { flexDirection: 'row', gap: 4 },
-  actionBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#F8FAFC', justifyContent: 'center', alignItems: 'center' },
+  actionBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: COLORS.background, justifyContent: 'center', alignItems: 'center' },
   empty: { alignItems: 'center', paddingVertical: 60, gap: SPACING.sm },
-  emptyText: { fontFamily: 'Inter_400Regular', fontSize: 14, color: '#94A3B8', textAlign: 'center' },
+  emptyText: { fontFamily: 'PlusJakartaSans_400Regular', fontSize: 14, color: '#94A3B8', textAlign: 'center' },
 });

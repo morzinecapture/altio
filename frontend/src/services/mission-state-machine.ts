@@ -10,7 +10,7 @@ export const MISSION_TRANSITIONS: Record<MissionStatus, readonly MissionStatus[]
   assigned:                  ['in_progress', 'cancelled'],
   in_progress:               ['awaiting_payment', 'cancelled'],
   awaiting_payment:          ['validated', 'dispute', 'cancelled'],
-  validated:                 ['paid'],
+  validated:                 ['paid', 'dispute'], // dispute only while the payment is unconfirmed
   completed:                 [],
   paid:                      [],
   cancelled:                 [],

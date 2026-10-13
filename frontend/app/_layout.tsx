@@ -22,6 +22,7 @@ import {
 } from '@expo-google-fonts/plus-jakarta-sans';
 import { ActivityIndicator, View } from 'react-native';
 import { initI18n } from '../src/i18n';
+import { COLORS } from '../src/theme';
 
 // Initialize i18n once at app startup (loads persisted language preference)
 initI18n();
@@ -47,8 +48,8 @@ export default Sentry.wrap(function RootLayout() {
 
   if (!fontsLoaded) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F8FAFC' }}>
-        <ActivityIndicator size="large" color="#2563EB" />
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.background }}>
+        <ActivityIndicator size="large" color={COLORS.brandPrimary} />
       </View>
     );
   }
@@ -57,7 +58,7 @@ export default Sentry.wrap(function RootLayout() {
     <QueryClientProvider client={queryClient}>
     <StripeProvider
       publishableKey={process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY!}
-      merchantIdentifier="com.altio.app"
+      merchantIdentifier="merchant.com.altio.app"
     >
       <AuthProvider>
         <NotificationsInit />

@@ -59,5 +59,34 @@ target 'Altio' do
       :mac_catalyst_enabled => false,
       :ccache_enabled => ccache_enabled?(podfile_properties),
     )
+
+    # Workaround: recent Xcode/Clang toolchains reject fmt's consteval-based
+    # format string checks ("call to consteval function ... is not a
+    # constant expression"). Disabling FMT_CONSTEVAL is the documented fix
+    # (https://github.com/fmtlib/fmt/issues/3517) until the pinned fmt
+    # version bundled with React Native catches up.
+    installer.pods_project.targets.each do |target|
+      if target.name == 'fmt'
+        target.build_configurations.each do |config|
+          defs = config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] || ['$(inherited)']
+          defs << 'FMT_CONSTEVAL='
+          config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] = defs
+        end
+      end
+    end
+
+    # Stripe React Native 0.50.3 declares this enum as NSUInteger while the
+    # current Stripe SDK generates it as NSInteger. Newer Xcode versions treat
+    # the mismatch as a compilation error.
+    stripe_interop = File.join(__dir__, '..', 'node_modules', '@stripe', 'stripe-react-native', 'ios', 'StripeSwiftInterop.h')
+    if File.exist?(stripe_interop)
+      File.write(
+        stripe_interop,
+        File.read(stripe_interop).gsub(
+          'typedef NS_ENUM(NSUInteger, STPPaymentStatus);',
+          'typedef NS_ENUM(NSInteger, STPPaymentStatus);'
+        )
+      )
+    end
   end
 end

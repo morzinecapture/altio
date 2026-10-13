@@ -1,24 +1,28 @@
+import { StatusBadge } from '../../src/components/ui';
+import { PageHeader } from '../../src/components/alpine/AlpineHeader';
+import { useTranslation } from 'react-i18next';
 import React, { useState, useMemo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, RefreshControl, ActivityIndicator, Modal, FlatList, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
-import { COLORS, FONTS, SPACING, RADIUS, SHADOWS } from '../../src/theme';
+import { RADIUS, COLORS, SPACING, SHADOWS } from '../../src/theme';
 import { useProperties, useMonthReservations, useMissions } from '../../src/hooks';
 import { useReservationActions } from '../../src/hooks/useReservationActions';
 import { getFavoriteProviders } from '../../src/api/partners';
-import type { MonthReservation } from '../../src/api/properties';
-import type { ReservationMissionStatus, ReservationWithMission } from '../../src/api/properties';
+import type { MonthReservation, ReservationMissionStatus, ReservationWithMission } from '../../src/api/properties';
+import { localDateKey, isUrgentMission } from '../../src/utils/missionPresentation';
+import { getMissionTypeLabel } from '../../src/utils/serviceLabels';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
 const EVENT_COLORS = {
-  checkIn:      { bg: '#EFF6FF', text: '#3B82F6', dot: '#3B82F6' },
-  checkOut:     { bg: '#FEF2F2', text: '#EF4444', dot: '#EF4444' },
-  cleanOk:      { bg: '#F0FDF4', text: '#22C55E', dot: '#22C55E' },
-  cleanMissing: { bg: '#FFFBEB', text: '#F59E0B', dot: '#F59E0B' },
-  mission:      { bg: '#EDE9FE', text: '#7C3AED', dot: '#7C3AED' },
+  checkIn:      { bg: '#FFFFFF', text: '#2563EB', dot: '#2563EB' },
+  checkOut:     { bg: '#FFFFFF', text: '#EF4444', dot: '#EF4444' },
+  cleanOk:      { bg: '#FFFFFF', text: '#059669', dot: '#10B981' },
+  cleanMissing: { bg: '#FFFFFF', text: '#D97706', dot: '#F59E0B' },
+  mission:      { bg: '#FFFFFF', text: '#16233A', dot: '#16233A' },
 } as const;
 
 const MONTH_NAMES = [
@@ -26,16 +30,6 @@ const MONTH_NAMES = [
   'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre',
 ];
 
-const MISSION_STATUS_LABEL: Record<string, string> = {
-  pending: 'En attente',
-  pending_provider_approval: 'Recherche prestataire',
-  assigned: 'Accepté',
-  in_progress: 'En cours',
-  completed: 'Terminé',
-  awaiting_payment: 'À valider',
-  paid: 'Payé',
-  validated: 'Validé',
-};
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -55,6 +49,7 @@ interface PlanningEvent {
   missionId?: string | null;
   missionStatus?: string | null;
   missionProviderName?: string | null;
+  isEmergency?: boolean;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -100,14 +95,13 @@ function buildEvents(reservations: MonthReservation[]): PlanningEvent[] {
     // Cleaning mission (on check_out date)
     if (r.mission_id) {
       const provLabel = r.mission_provider_name || 'prestataire';
-      const statusLabel = MISSION_STATUS_LABEL[r.mission_status || ''] || r.mission_status || '';
       events.push({
         ...base,
         key: `clean-${r.id}`,
         date: r.check_out,
         type: 'cleaning_ok',
         title: `Ménage — ${provLabel}`,
-        subtitle: statusLabel,
+        subtitle: propLabel,
         missionId: r.mission_id,
         missionStatus: r.mission_status,
         missionProviderName: r.mission_provider_name,
@@ -119,7 +113,7 @@ function buildEvents(reservations: MonthReservation[]): PlanningEvent[] {
         date: r.check_out,
         type: 'cleaning_missing',
         title: 'Pas de ménage prévu',
-        subtitle: `après checkout de ${guestLabel}`,
+        subtitle: `après le départ de ${guestLabel}`,
       });
     }
   }
@@ -133,29 +127,26 @@ function buildEvents(reservations: MonthReservation[]): PlanningEvent[] {
   return events;
 }
 
-function buildDirectMissionEvents(missions: Array<{
+function buildDirectMissionEvents(missions: {
   mission_id?: string; id?: string; scheduled_date?: string | null;
   status: string; mission_type?: string; property_name?: string;
-  property_id?: string; assigned_provider_name?: string;
-}>): PlanningEvent[] {
+  property_id?: string; assigned_provider_name?: string; services?: string[]; is_emergency?: boolean; priority?: 'normal' | 'urgent'; raw_status?: string;
+}[]): PlanningEvent[] {
   return missions
     .filter((m) => !!m.scheduled_date)
     .map((m) => {
       const mId = (m.mission_id ?? m.id) as string;
-      const date = (m.scheduled_date as string).substring(0, 10);
+      const date = localDateKey(new Date(m.scheduled_date as string));
       const timeStr = (m.scheduled_date as string).length > 10
         ? new Date(m.scheduled_date as string).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
         : '';
-      const typeLabel = m.mission_type
-        ? m.mission_type.charAt(0).toUpperCase() + m.mission_type.slice(1)
-        : 'Mission';
-      const statusLabel = MISSION_STATUS_LABEL[m.status] || m.status;
+      const typeLabel = m.mission_type ? getMissionTypeLabel(m.mission_type, m.services) : 'Mission';
       return {
         key: `dmission-${mId}`,
         date,
         type: 'direct_mission' as const,
-        title: `${typeLabel}${m.property_name ? ` — ${m.property_name}` : ''}`,
-        subtitle: timeStr ? `${timeStr} · ${statusLabel}` : statusLabel,
+        title: `${isUrgentMission(m) ? 'Urgente · ' : ''}${typeLabel}${m.property_name ? ` — ${m.property_name}` : ''}`,
+        subtitle: timeStr,
         reservationId: mId,
         propertyId: m.property_id || '',
         propertyName: m.property_name || '',
@@ -164,7 +155,8 @@ function buildDirectMissionEvents(missions: Array<{
         checkIn: date,
         checkOut: date,
         missionId: mId,
-        missionStatus: m.status,
+        missionStatus: m.raw_status || m.status,
+        isEmergency: m.is_emergency,
         missionProviderName: m.assigned_provider_name || null,
       };
     });
@@ -177,7 +169,7 @@ function safeDate(raw: string | null | undefined): Date | null {
   return isNaN(d.getTime()) ? null : d;
 }
 
-function groupByDate(events: PlanningEvent[]): Array<{ date: string; label: string; events: PlanningEvent[] }> {
+function groupByDate(events: PlanningEvent[]): { date: string; label: string; events: PlanningEvent[] }[] {
   const map = new Map<string, PlanningEvent[]>();
   for (const e of events) {
     const arr = map.get(e.date) || [];
@@ -201,20 +193,12 @@ function groupByDate(events: PlanningEvent[]): Array<{ date: string; label: stri
   });
 }
 
-function missionStatusColor(status: string): string {
-  switch (status) {
-    case 'completed': case 'paid': case 'validated': return '#22C55E';
-    case 'in_progress': return '#3B82F6';
-    case 'assigned': return '#8B5CF6';
-    case 'awaiting_payment': return '#F59E0B';
-    default: return '#64748B';
-  }
-}
 
 // ── Component ────────────────────────────────────────────────────────────────
 
 export default function PlanningScreen() {
   const router = useRouter();
+  const { t } = useTranslation();
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth());
@@ -247,7 +231,7 @@ export default function PlanningScreen() {
       if (!m.scheduled_date) return false;
       const d = new Date(m.scheduled_date);
       if (d < monthStart || d > monthEnd) return false;
-      if (['cancelled', 'expired', 'rejected'].includes(m.status)) return false;
+      if (['cancelled', 'expired', 'rejected', 'refunded'].includes(m.status)) return false;
       if (reservationMissionIds.has(m.mission_id ?? m.id)) return false;
       if (selectedPropertyId && m.property_id !== selectedPropertyId) return false;
       return true;
@@ -417,8 +401,8 @@ export default function PlanningScreen() {
     const color = source === 'airbnb' ? '#FF585D' : source === 'booking' ? '#003B95' : COLORS.textSecondary;
     const label = source === 'airbnb' ? 'AIRBNB' : source === 'booking' ? 'BOOKING' : source.toUpperCase();
     return (
-      <View style={[s.sourceBadge, { backgroundColor: color + '18' }]}>
-        <Text style={[s.sourceBadgeText, { color }]}>{label}</Text>
+      <View style={[s.sourceBadge, { backgroundColor: color }]}>
+        <Text style={s.sourceBadgeText}>{label}</Text>
       </View>
     );
   };
@@ -470,31 +454,24 @@ export default function PlanningScreen() {
 
   return (
     <SafeAreaView style={s.container}>
-      {/* Header */}
-      <View style={s.header}>
-        <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
-          <Ionicons name="arrow-back" size={22} color="#1E3A5F" />
-        </TouchableOpacity>
-        <Text style={s.headerTitle}>Planning</Text>
-        <View style={{ width: 44 }} />
-      </View>
-
-      {/* Month selector */}
-      <View style={s.monthSelector}>
-        <TouchableOpacity onPress={prevMonth} style={s.monthArrow}>
-          <Ionicons name="chevron-back" size={22} color="#1E3A5F" />
-        </TouchableOpacity>
-        <Text style={s.monthLabel}>{MONTH_NAMES[month]} {year}</Text>
-        <TouchableOpacity onPress={nextMonth} style={s.monthArrow}>
-          <Ionicons name="chevron-forward" size={22} color="#1E3A5F" />
-        </TouchableOpacity>
+      <PageHeader title={t('alpine.planning')} subtitle={t('alpine.planningSubtitle')} />
+      <View style={s.planningHero}>
+        <View style={s.monthSelector}>
+          <TouchableOpacity onPress={prevMonth} style={s.monthArrow}>
+            <Ionicons name="chevron-back" size={21} color={COLORS.textPrimary} />
+          </TouchableOpacity>
+          <Text style={s.monthLabel}>{MONTH_NAMES[month]} {year}</Text>
+          <TouchableOpacity onPress={nextMonth} style={s.monthArrow}>
+            <Ionicons name="chevron-forward" size={21} color={COLORS.textPrimary} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Property filter */}
       <TouchableOpacity style={s.propertyFilter} onPress={() => setShowPropertyPicker(true)}>
-        <Ionicons name="home-outline" size={16} color="#64748B" />
+        <Ionicons name="home-outline" size={16} color="#FFFFFF" />
         <Text style={s.propertyFilterText} numberOfLines={1}>{selectedPropertyName}</Text>
-        <Ionicons name="chevron-down" size={16} color="#64748B" />
+        <Ionicons name="chevron-down" size={16} color="#FFFFFF" />
       </TouchableOpacity>
 
       {/* Content */}
@@ -511,12 +488,12 @@ export default function PlanningScreen() {
         >
           {/* ── Section A: Actions requises ─────────────────────────────── */}
           <View style={s.sectionContainer}>
-            <View style={s.sectionHeader}>
-              <Ionicons name="warning" size={18} color={missingCleaningReservations.length > 0 ? '#F59E0B' : '#22C55E'} />
+            {missingCleaningReservations.length > 0 && (<View style={s.sectionHeader}>
+              <Ionicons name="warning" size={18} color={missingCleaningReservations.length > 0 ? '#F59E0B' : COLORS.success} />
               <Text style={s.sectionTitle}>
-                {missingCleaningReservations.length > 0 ? 'Actions requises' : 'Tous les ménages sont planifiés'}
+                {missingCleaningReservations.length > 0 ? 'Actions requises' : t('alpine.yourDay')}
               </Text>
-            </View>
+            </View>)}
 
             {missingCleaningReservations.length > 0 ? (
               missingCleaningReservations.map((r) => {
@@ -541,7 +518,7 @@ export default function PlanningScreen() {
               })
             ) : (
               <View style={s.allPlannedBanner}>
-                <Ionicons name="checkmark-circle" size={20} color="#22C55E" />
+                <Ionicons name="checkmark-circle" size={20} color={COLORS.success} />
                 <Text style={s.allPlannedText}>Tous les ménages sont planifiés ce mois-ci</Text>
               </View>
             )}
@@ -575,7 +552,7 @@ export default function PlanningScreen() {
                           activeOpacity={0.7}
                           onPress={() => {
                             if (evt.missionId) {
-                              router.push(`/mission/${evt.missionId}`);
+                              router.push(evt.isEmergency ? `/emergency?id=${evt.missionId}` : `/mission/${evt.missionId}`);
                             } else if (!isMissing) {
                               router.push(`/property/${evt.propertyId}`);
                             }
@@ -591,17 +568,11 @@ export default function PlanningScreen() {
                               {isMissing ? evt.propertyName : evt.subtitle}
                             </Text>
                           </View>
-                          {(evt.type === 'cleaning_ok' || isDirect) && evt.missionStatus && (
-                            <View style={[s.statusPill, { backgroundColor: missionStatusColor(evt.missionStatus) + '20' }]}>
-                              <Text style={[s.statusPillText, { color: missionStatusColor(evt.missionStatus) }]}>
-                                {MISSION_STATUS_LABEL[evt.missionStatus] || evt.missionStatus}
-                              </Text>
-                            </View>
-                          )}
                           {((evt.type === 'cleaning_ok' && evt.missionId) || isDirect) && (
                             <Ionicons name="chevron-forward" size={16} color={COLORS.textTertiary} />
                           )}
                         </TouchableOpacity>
+                        {(evt.type === 'cleaning_ok' || isDirect) && evt.missionStatus && <StatusBadge emergency={evt.isEmergency} status={evt.missionStatus} size="sm" style={{ marginTop: SPACING.sm, marginLeft: SPACING.xxxl }} />}
                         {isMissing && renderActionButtons(evt)}
                       </View>
                     );
@@ -625,11 +596,11 @@ export default function PlanningScreen() {
                     <Text style={s.summaryLabel}>Réservations</Text>
                   </View>
                   <View style={s.summaryItem}>
-                    <Text style={[s.summaryNumber, { color: '#22C55E' }]}>{plannedCount}</Text>
+                    <Text style={[s.summaryNumber, { color: COLORS.success }]}>{plannedCount}</Text>
                     <Text style={s.summaryLabel}>Planifiés</Text>
                   </View>
                   <View style={s.summaryItem}>
-                    <Text style={[s.summaryNumber, { color: missingCleaningReservations.length > 0 ? '#F59E0B' : '#22C55E' }]}>
+                    <Text style={[s.summaryNumber, { color: missingCleaningReservations.length > 0 ? '#F59E0B' : COLORS.success }]}>
                       {missingCleaningReservations.length}
                     </Text>
                     <Text style={s.summaryLabel}>Manquants</Text>
@@ -654,7 +625,7 @@ export default function PlanningScreen() {
             <View style={s.modalHeader}>
               <Text style={s.modalTitle}>Filtrer par logement</Text>
               <TouchableOpacity onPress={() => setShowPropertyPicker(false)}>
-                <Ionicons name="close" size={24} color="#1E3A5F" />
+                <Ionicons name="close" size={24} color={COLORS.textPrimary} />
               </TouchableOpacity>
             </View>
             <TouchableOpacity
@@ -692,7 +663,7 @@ export default function PlanningScreen() {
             <View style={s.modalHeader}>
               <Text style={s.modalTitle}>Choisir un prestataire favori</Text>
               <TouchableOpacity onPress={() => { setShowFavoritePicker(false); setSelectedEvent(null); }}>
-                <Ionicons name="close" size={24} color="#1E3A5F" />
+                <Ionicons name="close" size={24} color={COLORS.textPrimary} />
               </TouchableOpacity>
             </View>
             {selectedEvent && (
@@ -739,20 +710,22 @@ export default function PlanningScreen() {
 // ── Styles ───────────────────────────────────────────────────────────────────
 
 const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FFFFFF' },
+  container: { flex: 1, backgroundColor: COLORS.background },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   scrollView: { flex: 1 },
 
-  // Header
+  planningHero: { backgroundColor: COLORS.paper, paddingBottom: SPACING.lg },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: SPACING.xl, paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.xl, paddingTop: SPACING.lg, paddingBottom: SPACING.sm,
   },
   backBtn: {
     width: 44, height: 44, borderRadius: 22,
-    backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center',
+    backgroundColor: '#2563EB', justifyContent: 'center', alignItems: 'center',
   },
-  headerTitle: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 20, color: '#1E3A5F' },
+  headerCopy: { alignItems: 'center' },
+  headerEyebrow: { fontFamily: 'PlusJakartaSans_800ExtraBold', fontSize: 8, letterSpacing: 1, color: '#FFFFFF', opacity: 0.7 },
+  headerTitle: { fontFamily: 'PlusJakartaSans_800ExtraBold', fontSize: 24, color: '#FFFFFF', marginTop: 2 },
 
   // Month selector
   monthSelector: {
@@ -760,19 +733,19 @@ const s = StyleSheet.create({
     paddingVertical: SPACING.sm, gap: SPACING.lg,
   },
   monthArrow: {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center',
+    width: 48, height: 48, borderRadius: RADIUS.full,
+    backgroundColor: COLORS.background, justifyContent: 'center', alignItems: 'center',
   },
-  monthLabel: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 17, color: '#1E3A5F' },
+  monthLabel: { minWidth: 170, textAlign: 'center', fontFamily: 'PlusJakartaSans_700Bold', fontSize: 17, color: COLORS.textPrimary },
 
   // Property filter
   propertyFilter: {
     flexDirection: 'row', alignItems: 'center', alignSelf: 'center',
-    backgroundColor: '#F8FAFC', paddingHorizontal: 14, paddingVertical: 8,
-    borderRadius: 99, gap: 6, marginBottom: SPACING.md,
-    borderWidth: 1, borderColor: '#E2E8F0', maxWidth: '80%',
+    backgroundColor: '#2563EB', paddingHorizontal: 16, paddingVertical: 10,
+    borderRadius: 99, gap: 6, marginTop: SPACING.md, marginBottom: SPACING.md,
+    maxWidth: '84%',
   },
-  propertyFilterText: { fontFamily: 'PlusJakartaSans_500Medium', fontSize: 13, color: '#475569', flexShrink: 1 },
+  propertyFilterText: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 12, color: '#FFFFFF', flexShrink: 1 },
 
   // Sections
   sectionContainer: { paddingHorizontal: SPACING.xl, marginBottom: SPACING.lg },
@@ -780,16 +753,16 @@ const s = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: SPACING.sm,
     marginBottom: SPACING.md,
   },
-  sectionTitle: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 16, color: '#1E3A5F' },
+  sectionTitle: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 16, color: COLORS.textPrimary },
 
   // Action required cards
   actionCard: {
     backgroundColor: '#FFFFFF', borderRadius: 14, padding: SPACING.lg,
-    marginBottom: SPACING.sm, borderWidth: 1, borderColor: '#FDE68A',
+    marginBottom: SPACING.sm, borderWidth: 1, borderColor: '#F59E0B',
     ...SHADOWS.card,
   },
   actionCardHeader: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: SPACING.sm },
-  actionCardGuest: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 15, color: '#1E3A5F' },
+  actionCardGuest: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 15, color: COLORS.textPrimary },
   actionCardProp: { fontFamily: 'PlusJakartaSans_400Regular', fontSize: 13, color: COLORS.textSecondary, marginTop: 2 },
   actionCardDates: {
     flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: SPACING.md,
@@ -803,17 +776,16 @@ const s = StyleSheet.create({
   // All planned banner
   allPlannedBanner: {
     flexDirection: 'row', alignItems: 'center', gap: SPACING.sm,
-    backgroundColor: '#F0FDF4', borderRadius: 12, padding: SPACING.lg,
-    borderWidth: 1, borderColor: '#BBF7D0',
+    backgroundColor: COLORS.successSoft, borderRadius: RADIUS.lg, padding: SPACING.lg,
   },
-  allPlannedText: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 14, color: '#16A34A', flex: 1 },
+  allPlannedText: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 13, color: COLORS.success, flex: 1 },
 
   // Action buttons
   actionRow: { flexDirection: 'row', gap: SPACING.sm },
   actionBtnFav: {
     flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: 4, paddingVertical: 8, borderRadius: 10,
-    backgroundColor: '#EFF6FF', borderWidth: 1, borderColor: '#BFDBFE',
+    backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#2563EB',
   },
   actionBtnFavText: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 12, color: COLORS.brandPrimary },
   actionBtnNetwork: {
@@ -838,7 +810,7 @@ const s = StyleSheet.create({
 
   // Event cards
   eventCard: {
-    borderLeftWidth: 3, borderRadius: 12, padding: SPACING.md, marginBottom: SPACING.sm,
+    borderLeftWidth: 4, borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 12, padding: SPACING.md, marginBottom: SPACING.sm,
   },
   eventRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
   eventContent: { flex: 1 },
@@ -846,11 +818,11 @@ const s = StyleSheet.create({
   eventSub: { fontFamily: 'PlusJakartaSans_400Regular', fontSize: 12, color: '#64748B', marginTop: 2 },
 
   statusPill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
-  statusPillText: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 11 },
+  statusPillText: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 10, color: '#FFFFFF' },
 
   // Empty state
   emptyState: { alignItems: 'center', paddingVertical: 60, paddingHorizontal: SPACING.xxl },
-  emptyTitle: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 17, color: '#1E3A5F', marginTop: SPACING.lg },
+  emptyTitle: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 17, color: COLORS.textPrimary, marginTop: SPACING.lg },
   emptySub: { fontFamily: 'PlusJakartaSans_400Regular', fontSize: 14, color: '#64748B', textAlign: 'center', marginTop: SPACING.sm, lineHeight: 20 },
 
   // Summary
@@ -860,12 +832,12 @@ const s = StyleSheet.create({
   },
   summaryRow: { flexDirection: 'row', justifyContent: 'space-around', marginBottom: SPACING.lg },
   summaryItem: { alignItems: 'center' },
-  summaryNumber: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 24, color: '#1E3A5F' },
+  summaryNumber: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 24, color: COLORS.textPrimary },
   summaryLabel: { fontFamily: 'PlusJakartaSans_400Regular', fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
   progressBarBg: {
     height: 8, backgroundColor: '#F1F5F9', borderRadius: 4, overflow: 'hidden', marginBottom: SPACING.sm,
   },
-  progressBarFill: { height: '100%', backgroundColor: '#22C55E', borderRadius: 4 },
+  progressBarFill: { height: '100%', backgroundColor: COLORS.success, borderRadius: 4 },
   progressLabel: { fontFamily: 'PlusJakartaSans_500Medium', fontSize: 12, color: COLORS.textSecondary, textAlign: 'center' },
 
   // Modals
@@ -875,7 +847,7 @@ const s = StyleSheet.create({
     padding: SPACING.xl, maxHeight: '60%',
   },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.lg },
-  modalTitle: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 18, color: '#1E3A5F' },
+  modalTitle: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 18, color: COLORS.textPrimary },
   modalSubtitle: { fontFamily: 'PlusJakartaSans_400Regular', fontSize: 14, color: COLORS.textSecondary, marginBottom: SPACING.lg },
 
   pickerItem: {
@@ -883,7 +855,7 @@ const s = StyleSheet.create({
     paddingVertical: 14, paddingHorizontal: SPACING.md, borderRadius: 12, marginBottom: 4,
   },
   pickerItemActive: { backgroundColor: '#EFF6FF' },
-  pickerItemText: { fontFamily: 'PlusJakartaSans_500Medium', fontSize: 15, color: '#1E3A5F' },
+  pickerItemText: { fontFamily: 'PlusJakartaSans_500Medium', fontSize: 15, color: COLORS.textPrimary },
   pickerItemTextActive: { fontFamily: 'PlusJakartaSans_700Bold', color: '#3B82F6' },
 
   // Favorite picker items
@@ -896,6 +868,6 @@ const s = StyleSheet.create({
     width: 40, height: 40, borderRadius: 20,
     backgroundColor: '#EFF6FF', justifyContent: 'center', alignItems: 'center',
   },
-  favoriteName: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 15, color: '#1E3A5F' },
+  favoriteName: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 15, color: COLORS.textPrimary },
   favoriteRating: { fontFamily: 'PlusJakartaSans_400Regular', fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
 });

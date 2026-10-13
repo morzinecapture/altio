@@ -16,7 +16,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONTS, SPACING, RADIUS, SHADOWS } from '../../src/theme';
-import { providerMultiplier } from '../../src/config/billing';
+import { priceFromCents } from '../../src/utils/commission';
 import { getServiceTypeLabel, getMissionTypeLabel } from '../../src/utils/serviceLabels';
 import { useAuth } from '../../src/auth';
 import { supabase } from '../../src/lib/supabase';
@@ -149,7 +149,7 @@ export default function CreateQuoteScreen() {
           data.property_id
             ? supabase.from('properties').select('name, city').eq('id', data.property_id).single()
             : Promise.resolve({ data: null }),
-          supabase.from('users').select('name').eq('id', data.owner_id).single(),
+          supabase.from('public_profiles').select('name').eq('id', data.owner_id).single(),
         ]);
 
         setMissionData({
@@ -175,7 +175,7 @@ export default function CreateQuoteScreen() {
           data.property_id
             ? supabase.from('properties').select('name, city').eq('id', data.property_id).single()
             : Promise.resolve({ data: null }),
-          supabase.from('users').select('name').eq('id', data.owner_id).single(),
+          supabase.from('public_profiles').select('name').eq('id', data.owner_id).single(),
         ]);
 
         setMissionData({
@@ -570,7 +570,7 @@ export default function CreateQuoteScreen() {
               <View style={styles.totalRow}>
                 <Text style={{ ...FONTS.body, color: COLORS.success, fontWeight: '600' }}>💰 Vous recevrez</Text>
                 <Text style={{ ...FONTS.h3, color: COLORS.success, fontWeight: '700' }}>
-                  {(Math.round(totalTTC * providerMultiplier * 100) / 100).toFixed(2)}€
+                  {priceFromCents(Math.round(totalHT * 100) + Math.round(totalHT * vatRate * 100), Math.round(totalHT * 100)).payout.toFixed(2)}€
                 </Text>
               </View>
             </View>
