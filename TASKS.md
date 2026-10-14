@@ -8,8 +8,8 @@
 
 - [x] **Déployer le correctif de facturation** — déployé le 15 septembre : `capture-payment` v21,
       `validate-intervention` v7 et `mark-intervention-arrived` v5 sont actifs avec `keepAlive`.
-- [ ] **Configurer `STRIPE_WEBHOOK_SECRET`** — absent des secrets : `stripe-webhook` rejette tous les
-      événements Stripe en 400. Le filet de sécurité qui devait rattraper la facturation est donc mort lui aussi.
+- [x] **Configurer `STRIPE_WEBHOOK_SECRET`** — présent dans les secrets (vérifié le 14 octobre), avec
+      `STRIPE_CONNECT_WEBHOOK_SECRET` et `STRIPE_CONNECT_V2_WEBHOOK_SECRET`. À remplacer par les secrets live.
 - [ ] **Passer Stripe en clés live** — `.env.production` déclare `EXPO_PUBLIC_APP_ENV=production` mais porte
       une clé `pk_test_`. Un build de production ne peut encaisser aucun paiement réel.
 - [ ] **Re-tester le cycle complet** urgence → devis → paiement → 3 factures, après les 3 points ci-dessus.
@@ -31,17 +31,19 @@
 - [ ] **Sprint Design/UX** — composants partagés créés (`Button`, `Card`, `EmptyState`, `SectionHeader`,
       `StatusBadge`), hero image sur le dashboard owner, assets du template Expo supprimés.
       **7 écrans migrés sur ~55** : reste à propager aux écrans admin, onboarding, mission, urgence, profil.
-- [ ] **Commiter le travail en cours** — ~108 fichiers modifiés non commités, dernier commit le 22 juillet.
-      Risque de perte et de conflit entre sessions parallèles.
+- [x] **Commiter le travail en cours** — commité et poussé le 13 octobre (`71bcd0b1`,
+      `release/launch-2026-07-22`). `outputs/` (rapports générés, justificatifs) reste hors dépôt.
 
 ## 🟢 Dette technique identifiée (non bloquante)
 
-- [ ] Filtrer la subscription Realtime `missions` par `owner_id`/`provider_id` (`useRealtimeSync.ts` écoute
-      tous les UPDATE de la table, tous utilisateurs confondus)
-- [ ] Retirer les ~19 `console.error` de debug laissés en production (ex. `src/api/properties.ts`)
-- [ ] Créer le skill `flow-guardian` ou le retirer de `CLAUDE.md` — il y est déclaré PRIORITAIRE et
-      obligatoire avant toute modification de flux de paiement, mais **le fichier n'existe pas**
-- [ ] Rendre le patch Stripe du `Podfile` robuste — il réécrit `node_modules`, donc perdu à chaque `npm install`
+- [x] Subscription Realtime `missions` — pas de fuite : toutes les tables publiées ont la RLS active et
+      Realtime l'applique à chaque abonné (vérifié le 14 octobre). Un filtre ne serait qu'une optimisation,
+      et casserait la découverte des missions ouvertes côté prestataire.
+- [x] Retirer les `console.error` de debug — supprimés le 14 octobre dans l'ajout de logement (ils
+      journalisaient l'adresse) ; les autres journalisent de vraies erreurs.
+- [x] Créer le skill `flow-guardian` — `.claude/skills/flow-guardian/SKILL.md` (14 octobre)
+- [x] Patch Stripe du `Podfile` — appliqué dans `post_install`, donc réappliqué à chaque `pod install`
+      (y compris sur EAS, qui lance `pod install` après `npm install`). Rien à faire.
 - [ ] 155 warnings ESLint cosmétiques (0 erreur)
 
 ## Backlog

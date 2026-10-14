@@ -101,3 +101,6 @@ outputs/release-preflight/
 
 .private/
 website-static/.vercel/
+
+# Rapports générés et justificatifs (données personnelles)
+outputs/

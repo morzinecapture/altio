@@ -43,14 +43,11 @@ export default function AddPropertyScreen() {
   };
 
   const handleSave = async () => {
-    console.error('[AddProperty] handleSave called');
     if (!name.trim() || !street.trim() || !postalCode.trim() || !city.trim()) {
-      console.error('[AddProperty] VALIDATION FAILED — name:', !!name.trim(), 'street:', !!street.trim(), 'postal:', !!postalCode.trim(), 'city:', !!city.trim());
       Alert.alert(t('common.error'), t('owner.properties.name_required'));
       return;
     }
     const fullAddress = `${street.trim()}, ${postalCode.trim()} ${city.trim()}`;
-    console.error('[AddProperty] Calling mutateAsync with address:', fullAddress);
     try {
       const coords = await geocodeAddress(fullAddress);
       const prop = await createMut.mutateAsync({
@@ -67,8 +64,6 @@ export default function AddPropertyScreen() {
         latitude: coords?.lat,
         longitude: coords?.lng,
       });
-      console.error('[AddProperty] SUCCESS');
-
       if (prop?.id && photoAssets.length > 0) {
         let photoUrls: string[];
         try {
@@ -76,7 +71,7 @@ export default function AddPropertyScreen() {
             photoAssets.map(asset => uploadPropertyPhoto(prop.id, asset.uri)),
           );
         } catch (e) {
-          console.error('[AddProperty] photo upload error:', e);
+          if (__DEV__) console.error('[AddProperty] photo upload error:', e);
           Alert.alert(
             t('owner.properties.photo_upload_failed_title'),
             t('owner.properties.photo_upload_failed_after_create'),
@@ -88,7 +83,7 @@ export default function AddPropertyScreen() {
 
       Alert.alert(t('owner.properties.added'), '', [{ text: 'OK', onPress: () => router.back() }]);
     } catch (e: unknown) {
-      console.error('[AddProperty] ERROR:', e);
+      if (__DEV__) console.error('[AddProperty] ERROR:', e);
       Alert.alert(t('common.error'), e instanceof Error ? e.message : String(e));
     }
   };

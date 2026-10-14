@@ -62,11 +62,7 @@ export const useCreateProperty = () => {
   return useMutation({
     mutationFn: (data: CreatePropertyPayload) => createProperty(data),
     onSuccess: () => {
-      console.error('[useCreateProperty] onSuccess — invalidating cache');
       qc.invalidateQueries({ queryKey: propertyKeys.all });
-    },
-    onError: (error: Error) => {
-      console.error('[useCreateProperty] onError:', error.message);
     },
   });
 };
